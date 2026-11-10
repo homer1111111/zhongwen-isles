@@ -24,6 +24,9 @@
 html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; height: 100%; background: var(--sky); color: var(--ink); font-family: var(--latin); overflow: hidden; -webkit-tap-highlight-color: transparent; }
+/* on a computer the whole game is one phone-shaped column in the middle of the screen; on a phone it fills the screen */
+html { background: #5C7F6A; }
+body { position: relative; width: 100%; max-width: min(100vw, 520px); margin: 0 auto; transform: translateZ(0); box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--sky); }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
@@ -1426,7 +1429,7 @@ function initRenderer() {
   camera = new THREE.PerspectiveCamera(38, 1, .1, 400); clock = new THREE.Clock(); raycaster = new THREE.Raycaster();
   resize(); window.addEventListener('resize', resize);
 }
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+function resize() { const cv = renderer.domElement, w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 function camOff() { const a = camera.aspect < 1 ? here.camTall : here.cam; return new THREE.Vector3(a[0], a[1], a[2]); }
 function blocked(x, z, fromY) {
   const sp = here;
@@ -1752,7 +1755,7 @@ function tickFishing(dt, t) {
   const tip = new THREE.Vector3(); rod.g.children[0].localToWorld(tip.set(0, 1.7, 0));
   const pos = rod.line.geometry.attributes.position; pos.setXYZ(0, tip.x, tip.y, tip.z); pos.setXYZ(1, rod.bob.position.x, rod.bob.position.y + .2, rod.bob.position.z); pos.needsUpdate = true;
   if (f.state === 'wait') { rod.bob.position.y = .1 + Math.sin(t * 3) * .04; f.t -= dt; if (f.t <= 0) { f.state = 'bite'; f.t = 1.4; Sfx.play('pop'); $('act').innerHTML = '拉！<small class="en-only">Pull!</small>'; $('act').classList.add('pull'); $('bite').classList.remove('hidden'); } }
-  if (f.state === 'bite') { rod.bob.position.y = -.12 + Math.sin(t * 30) * .06; const v = rod.bob.position.clone(); v.y += 1.6; v.project(camera); $('bite').style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; $('bite').style.top = ((1 - v.y) / 2 * innerHeight) + 'px'; f.t -= dt; if (f.t <= 0) { endFishing(); showToast('鱼跑掉了，再试一次！', 'It got away. Try again!'); } }
+  if (f.state === 'bite') { rod.bob.position.y = -.12 + Math.sin(t * 30) * .06; const v = rod.bob.position.clone(); v.y += 1.6; v.project(camera); $('bite').style.left = ((v.x + 1) / 2 * document.body.clientWidth) + 'px'; $('bite').style.top = ((1 - v.y) / 2 * document.body.clientHeight) + 'px'; f.t -= dt; if (f.t <= 0) { endFishing(); showToast('鱼跑掉了，再试一次！', 'It got away. Try again!'); } }
 }
 function endFishing() { const sp = SP.town; UI.fishing = null; $('bite').classList.add('hidden'); $('act').classList.remove('pull'); if (rod) { ME().obj.remove(rod.g); sp.scene.remove(rod.bob); sp.scene.remove(rod.line); } UI.busy = false; }
 async function pull() {
@@ -1963,7 +1966,7 @@ function showPicker(list) {
 }
 /* ---------- the boat ride in 3D: a rolling sea, islands on the horizon, gulls, the ferry with you and the captain on deck ---------- */
 const Boat3D = (() => {
-  let R, S, cam, raf = 0, last = 0, ship, sea, base, me, capt, gulls = [], sail = 0;
+  let R, S, cam, raf = 0, last = 0, ship, sea, base, me, capt, gulls = [], sail = 0, camA = .75;
   function size(cv) { const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; R.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
   function start(cv) {
     R = new THREE.WebGLRenderer({ canvas: cv, antialias: true }); R.setPixelRatio(Math.min(2, devicePixelRatio || 1)); R.outputEncoding = THREE.sRGBEncoding;
@@ -1978,13 +1981,21 @@ const Boat3D = (() => {
       const hill = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: lin('#7FC25A'), flatShading: true })); hill.position.set(x, .2, z); hill.scale.y = .55; S.add(hill);
       for (let k = 0; k < 3; k++) { const tr = new THREE.Mesh(new THREE.SphereGeometry(r * .22, 10, 8), new THREE.MeshStandardMaterial({ color: lin('#4E9A45') })); tr.position.set(x + (k - 1) * r * .4, r * .55 + .4, z + (k % 2) * r * .2); S.add(tr); }
     });
+    // the island you are sailing to, straight ahead: beach, grass, a hill, trees, little houses and its pier
+    { const D = new THREE.Group(); D.position.set(0, 0, -62); S.add(D); const st = c => new THREE.MeshStandardMaterial({ color: lin(c), flatShading: true });
+      const sand = new THREE.Mesh(new THREE.CylinderGeometry(17, 18, .7, 40), st('#F2E2B8')); sand.position.y = 0; D.add(sand);
+      const grass = new THREE.Mesh(new THREE.CylinderGeometry(14.5, 15, .9, 40), st('#86C766')); grass.position.y = .3; D.add(grass);
+      const hill = new THREE.Mesh(new THREE.SphereGeometry(7, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), st('#6FB257')); hill.position.set(-4, .6, -5); hill.scale.y = .6; D.add(hill);
+      [[-9, 3], [8, -6], [-2, -11], [11, 3], [4, -12]].forEach(([x, z]) => { const tr = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8), st('#4E9A45')); tr.position.set(x, 2.6, z); D.add(tr); const tk = new THREE.Mesh(new THREE.CylinderGeometry(.25, .3, 1.6, 6), st('#8A6A4A')); tk.position.set(x, 1.4, z); D.add(tk); });
+      [[3, 1, '#F2E3C6', '#C8453B'], [7, -1, '#FFF4DC', '#4F86C6'], [-1, 4, '#F6E9D2', '#E8843A']].forEach(([x, z, w, r]) => { const h = new THREE.Mesh(new THREE.BoxGeometry(3, 2.2, 3), st(w)); h.position.set(x, 1.8, z); D.add(h); const rf = new THREE.Mesh(new THREE.ConeGeometry(2.5, 1.4, 4), st(r)); rf.position.set(x, 3.6, z); rf.rotation.y = Math.PI / 4; D.add(rf); });
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(3, .3, 8), st('#B98A5A')); pier.position.set(0, .35, 18); D.add(pier); }
     const keep = W.scene; W.scene = S; ship = Isle1.ferry(0, 0); W.scene = keep;   // the cabin windows face the camera; the boat sails away from it, towards the islands
     me = makeKid(G.look); me.obj.position.set(1.0, 1.12, 2.6); me.obj.rotation.y = 1.0; ship.add(me.obj); if (me.play) me.play('idle');
     capt = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
     capt.obj.position.set(-.7, 1.12, 2.3); capt.obj.rotation.y = .9; ship.add(capt.obj); if (capt.play) capt.play('idle');
     const wake = new THREE.Mesh(new THREE.PlaneGeometry(3, 14), new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: .45 })); wake.rotation.x = -Math.PI / 2; wake.position.set(0, .12, 10); ship.add(wake); ship.userData.wake = wake;
     for (let k = 0; k < 4; k++) { const gl = new THREE.Group(); [-1, 1].forEach(s => { const w = new THREE.Mesh(new THREE.BoxGeometry(.7, .05, .18), new THREE.MeshStandardMaterial({ color: lin('#FFFFFF') })); w.position.x = s * .32; gl.add(w); }); S.add(gl); gl.userData.a = k * 1.6; gl.userData.r = 6 + k * 1.5; gulls.push(gl); }
-    sail = 0; last = performance.now(); loop(); addEventListener('resize', onResize);
+    sail = 0; camA = .75; last = performance.now(); loop(); addEventListener('resize', onResize);
   }
   const onResize = () => R && size(R.domElement);
   function loop() {
@@ -1995,9 +2006,10 @@ const Boat3D = (() => {
     ship.userData.wake.material.opacity = .3 + (sail ? .3 : 0) + Math.sin(t * 3) * .05;
     [me, capt].forEach(c => c && c.mixer && c.mixer.update(dt));
     gulls.forEach((gl, k) => { const aa = t * .5 + gl.userData.a; gl.position.set(ship.position.x + Math.cos(aa) * gl.userData.r, 7 + Math.sin(t * 2 + k) * .5, ship.position.z + Math.sin(aa) * gl.userData.r - 2); gl.rotation.y = -aa; gl.children.forEach((w, i) => w.rotation.z = (i ? 1 : -1) * (.35 + Math.sin(t * 6 + k) * .3)); });
-    const ang = Math.sin(t * .15) * .35, p = ship.position;
+    camA += ((sail ? .12 : .75) - camA) * Math.min(1, dt * 1.5);   // once under way, the camera swings round behind the boat so the island ahead is in view
+    const ang = (sail ? 0 : Math.sin(t * .15) * .35), p = ship.position;
     const far = cam.aspect < 1 ? 21 : 14;   // a tall phone screen needs the camera further back to fit the whole boat
-    cam.position.set(p.x + Math.sin(.75 + ang) * far, far * .5, p.z + Math.cos(.75 + ang) * far); cam.lookAt(p.x, 1.4, p.z - .5);
+    cam.position.set(p.x + Math.sin(camA + ang) * far, far * .5, p.z + Math.cos(camA + ang) * far); cam.lookAt(p.x, 1.4, p.z - (sail ? 8 : .5));
     R.render(S, cam);
   }
   function sailAway() { sail = .001; }
@@ -2144,8 +2156,8 @@ const Intro = (() => {
       ['船长，你会唱歌吗？', 'Captain, can you sing?', [['哈哈，我只会唱「呜——呜——」，那是船的歌！', 'Ha ha, I can only sing “toot — toot —”, the boat’s song!']]]
     ], ['我想选岛了！', 'I want to choose an island!']);
     say('capt', '那么，你想先去哪一座岛呢？', 'So, which island would you like to visit first?', false); const isle = await chooseIsle();
-    await say('capt', `${isle[1]}！好，坐稳了，出发啦！`, `${isle[2]} island! Hold on tight — off we go!`);
-    Boat3D.sail(); Sfx.play('whoosh'); await wait(2600);
+    await say('capt', '好，坐稳了，出发啦！', 'Hold on tight — off we go!');
+    Boat3D.sail(); Sfx.play('whoosh'); await wait(3300);   // long enough to sail right up to the island ahead
     G.where = isle[0]; saveG(); Players.update(); await ASSETS_READY; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     startGame({ land: isle[0], first: true, onArrive: () => { Boat3D.stop(); root.remove(); } });
   }
@@ -4612,7 +4624,7 @@ const Ferry = (() => {
     G.where = to; saveG();
     const land = to === 'town' ? [-9, 39.5] : [0, 34], f = (first || !quiet) && SP[to] && SP[to].ferry; let home = null;
     if (f) {   // straight from open water into this island's harbour, already on deck: no fade
-      UI.ride = true; UI.busy = true; home = f.position.clone(); f.position.z = home.z + 55;
+      UI.ride = true; UI.busy = true; home = f.position.clone(); f.position.z = home.z + (first ? 24 : 55);
       here = SP[to]; putIn(ME(), here, f.position.x + DECK.me[0], f.position.z + DECK.me[1], Math.PI); onDeck(f, ME().obj.position, DECK.me); ME().target = null; snapCamera(); onEnter(to);
       if (onArrive) onArrive();
     }
@@ -4626,7 +4638,7 @@ const Ferry = (() => {
     const cap0 = cap && { p: cap.obj.position.clone(), r: cap.obj.rotation.y };
     const follow = () => { onDeck(f, o, DECK.me); if (cap) onDeck(f, cap.obj.position, DECK.cap); };
     follow(); me.obj.rotation.y = Math.PI; me.play('idle'); if (cap) { cap.obj.rotation.y = Math.PI; cap.play('idle'); }
-    await new Promise(r => gsap.to(f.position, { z: home.z, duration: 6, ease: 'power2.out', onUpdate: follow, onComplete: r }));
+    await new Promise(r => gsap.to(f.position, { z: home.z, duration: f.position.z - home.z > 40 ? 6 : 4, ease: 'power2.out', onUpdate: follow, onComplete: r }));
     // the captain steps back onto his pier while you walk off to the land
     if (cap) { cap.play('walk'); const p = cap.obj.position; cap.obj.rotation.y = Math.atan2(cap0.p.x - p.x, cap0.p.z - p.z); gsap.to(p, { x: cap0.p.x, y: cap0.p.y, z: cap0.p.z, duration: 1.8, ease: 'power1.inOut', onComplete: () => { cap.play('idle'); cap.obj.rotation.y = cap0.r; } }); }
     const fy = here.floor(land[0], land[1]), side = f.position.x + (land[0] < f.position.x ? -1.9 : 1.9); me.play('walk');
