@@ -2253,7 +2253,24 @@ function startGame(opts = {}) {
 }
 $('enBtn').onclick = () => { G.en = !G.en; saveG(); document.body.classList.toggle('en', G.en); $('enBtn').setAttribute('aria-pressed', G.en); };
 $('bagBtn').onclick = () => { if (!UI.talking && !UI.fishing) openBag(); };
-$('exitBtn').onclick = () => { if (UI.talking || UI.busy || UI.fishing) return; const a = roomExit(); if (a) { Sfx.play('tap'); if (Sit.sitting) Sit.up(); a.fn(); } };
+/* find a way to the door on a half-metre grid around tables and shelves, then walk it */
+function pathTo(x, z) {
+  const S = .5, b = here.box, o = ME().obj.position, key = (i, j) => i + ',' + j;
+  const s = [Math.round(o.x / S), Math.round(o.z / S)], g = [Math.round(x / S), Math.round(z / S)], prev = new Map([[key(...s), null]]), q = [s];
+  const free = (i, j) => { const px = i * S, pz = j * S; return px > b[0] + .2 && px < b[2] - .2 && pz > b[1] + .2 && pz < b[3] - .1 && !blocked(px, pz, 0); };
+  while (q.length) { const [i, j] = q.shift(); if (i === g[0] && j === g[1]) break;
+    [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([di, dj]) => { const n = [i + di, j + dj], k = key(...n); if (prev.has(k) || !free(...n) || (di && dj && (!free(i + di, j) || !free(i, j + dj)))) return; prev.set(k, [i, j]); q.push(n); }); }
+  if (!prev.has(key(...g))) return null;
+  const pts = []; for (let c = g; c; c = prev.get(key(...c))) pts.unshift([c[0] * S, c[1] * S]);
+  return pts.filter((p, i) => i === pts.length - 1 || i % 2 === 1);
+}
+$('exitBtn').onclick = async () => {
+  if (UI.talking || UI.busy || UI.fishing) return; const a = roomExit(); if (!a) return;
+  Sfx.play('tap'); if (Sit.sitting) Sit.up();
+  const path = pathTo(a.x, a.z);
+  if (path) { UI.busy = true; for (const [x, z] of path) await walkTo(ME(), x, z, 5); UI.busy = false; }
+  a.fn();
+};
 $('voiceBtn').onclick = () => { if (!UI.talking && !UI.fishing) openVoices(); };
 boot();
 
@@ -3678,7 +3695,7 @@ const Isle1 = (() => {
     [[-26, 18, 26, 18], [26, 18, 26, -20], [26, -20, -26, -20], [-26, -20, -26, 18], [0, 30, 0, 18], [0, 18, 0, 6], [18, -20, 18, -16.6], [-20, 18, -20, 12.6], [-14, -20, -14, -18]].forEach(a => path(...a));
     mk(cyl(6, 6, .08, 40), '#E2CDA0', Z.square[0], .1, Z.square[1], null, false);
     // the pier and the ferry back to the Book 5 island
-    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.03, z);   // top at ground level: you walk on the boards, not in them
     [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
     sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]);
     sp.ferry = ferry(4.8, 41.2);
@@ -4745,7 +4762,7 @@ const Isle2 = (() => {
     // pavements in front of the buildings
     [[Z.school[0], Z.school[1] + 7.4, 16, 3], [Z.home[0], Z.home[1] + 6.4, 12, 3], [Z.bookstore[0], Z.bookstore[1] + 5.6, 13, 2.6], [Z.clinic[0], Z.clinic[1] + 5.6, 13, 2.6]].forEach(([x, z, w, d]) => plane(w, d, '#E9D9B4', x, Y.plaza, z));
     // the pier and the ferry
-    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.03, z);   // top at ground level: you walk on the boards, not in them
     [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
     sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]);
     sp.ferry = Isle1.ferry(4.8, 41.2);
@@ -5655,7 +5672,7 @@ const Isle3 = (() => {
     plane(.3, 4.4, '#FFFFFF', cx - 6, Y.stripe, cz); plane(.3, 4.4, '#FFFFFF', cx + 6, Y.stripe, cz);
     [[Z.bookstore[0], Z.bookstore[1] + 5.4], [Z.clinic[0], Z.clinic[1] + 5.4]].forEach(([x, z]) => plane(11, 2.4, '#E9D9B4', x, Y.plaza, z));
     // pier and ferry
-    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.03, z);   // top at ground level: you walk on the boards, not in them
     [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
     sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]); sp.ferry = Isle1.ferry(4.8, 41.2);
     // the places the lessons will fill in
@@ -6507,7 +6524,7 @@ const Isle4 = (() => {
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#8ACB68', Y.grass));
     plane(4, 22, '#E9D9B4', 0, Y.road, 22); plane(56, 3.6, '#E9D9B4', 0, Y.road, 9.2);
     // pier and ferry
-    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.03, z);   // top at ground level: you walk on the boards, not in them
     [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
     sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]); sp.ferry = Isle1.ferry(4.8, 41.2);
     // post office
