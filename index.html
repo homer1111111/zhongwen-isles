@@ -64,6 +64,9 @@ body:not(.playing) .hud { visibility: hidden; }
 
 /* ---------- dialogue ---------- */
 #talk { position: absolute; left: 10px; right: 10px; bottom: 16px; z-index: 7; max-width: 640px; margin: 0 auto; }
+#talk.stage #say { max-height: 30vh; overflow-y: auto; } #talk.stage #sayEn { max-height: 14vh; overflow-y: auto; }
+@media (max-width: 420px) { #exitBtn .en-only { display: none; } }
+.pg-dim { opacity: .35; } .pg-cur { color: #2B2420; }
 #talk .box { position: relative; background: #FFF9EC; color: #3A2E28; border: 4px solid #F1DFB8; border-radius: 30px; padding: 26px 20px 18px; box-shadow: 0 6px 0 rgba(0,0,0,.12); min-height: 116px; }
 #talk .who { position: absolute; left: 22px; top: -18px; background: #F3B23A; color: #fff; border-radius: 14px; padding: 4px 14px 5px; font-family: var(--kai); font-size: 19px; font-weight: 700; transform: rotate(-3deg); }
 #talk .heart { position: absolute; right: 18px; top: -16px; background: #fff; color: #E0475C; border: 2px solid #F1DFB8; border-radius: 12px; padding: 2px 10px; font-size: 14px; font-weight: 700; }
@@ -150,7 +153,7 @@ body:not(.playing) .hud { visibility: hidden; }
   <canvas id="gl" aria-label="中文群岛"></canvas>
   <div class="hud">
     <span class="chip" aria-label="Stars"><span class="star">★</span><span id="stars">0</span></span>
-    <button class="chip hidden" id="exitBtn" aria-label="Go out" style="cursor:pointer;font-size:16px">🚪 出去<span class="en-only" style="font-weight:400;font-size:13px">Out</span></button>
+    <button class="chip hidden" id="exitBtn" aria-label="Go out" style="cursor:pointer;font-size:16px;white-space:nowrap">🚪 出去<span class="en-only" style="font-weight:400;font-size:13px">Out</span></button>
     <span class="sp"></span>
     <button class="rb" id="voiceBtn" aria-label="Voices"><svg><use href="#i-speak"/></svg></button>
     <button class="rb" id="enBtn" aria-pressed="true" aria-label="English help">EN</button>
@@ -774,6 +777,29 @@ const Sit = (() => {
     (SEATS[here.name] || []).forEach(s => add(s.x + Math.sin(s.ry) * .7, s.z + Math.cos(s.ry) * .7, 1.6, '坐下', 'Sit down', () => down(s)));
   }
   return { add, nearby, up, apply: () => cur && apply(), get sitting() { return !!cur; } };
+})();
+const Guide = (() => {
+  let mark = null, host = null, last = -9, tt = 0;
+  const RANGE = { town: [2, 12], isle1: [101, 112], isle2: [201, 212], isle3: [301, 312], isle4: [401, 412] };
+  function pick() {
+    const r = RANGE[here.name]; if (!r || (here.name === 'town' && G.quest < 9)) return null;
+    for (let n = r[0]; n <= r[1]; n++) { const h = B5.HOSTS[n]; if (!h || !PEOPLE[h]) continue; if (!B5.prog(n).done) return PEOPLE[h].space === here.name ? h : null; }
+    return null;
+  }
+  function make() {
+    const g = new THREE.Group(), m = c => new THREE.MeshBasicMaterial({ color: c });
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(.34, 18, 12), m('#F3C24F')));
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(.11, .3, .05), m('#FFFFFF')); bar.position.set(0, .07, .33); g.add(bar);
+    const dot = new THREE.Mesh(new THREE.BoxGeometry(.11, .09, .05), m('#FFFFFF')); dot.position.set(0, -.17, .33); g.add(dot); return g;
+  }
+  function tick(dt) {
+    tt += dt; if (tt - last > 1.2) { last = tt; host = pick(); }
+    if (!host || !PEOPLE[host]) { if (mark) mark.visible = false; return; }
+    if (!mark) mark = make(); if (mark.parent !== here.scene) here.scene.add(mark);
+    const p = PEOPLE[host].obj.position; mark.visible = !UI.talking; mark.position.set(p.x, p.y + 2.5 + Math.sin(tt * 3) * .12, p.z); mark.lookAt(camera.position.x, mark.position.y, camera.position.z);
+  }
+  function nextName() { const h = pick(); return h && NAMES[h] ? NAMES[h] : null; }
+  return { tick, nextName };
 })();
 let STATIC_MARK = false;   // on while an island's fixed scenery is built, so it can be merged afterwards
 function mk(geo, mat, x = 0, y = 0, z = 0, parent, cast = true) {
@@ -1504,13 +1530,13 @@ function loop() {
   const dt = Math.min(.05, clock.getDelta()), t = clock.elapsedTime;
   if (UI.sit && ((stick && stick.drag) || keys.ArrowLeft || keys.ArrowRight || keys.ArrowUp || keys.ArrowDown || keys.w || keys.a || keys.s || keys.d)) Sit.up();
   if (!UI.ride && !UI.sit) moveMe(dt);   // while riding the ferry the boat carries you; while sitting you stay put
-  Object.values(PEOPLE).forEach(c => { if (c.space === here.name) c.mixer.update(dt); }); Sit.apply();
+  Object.values(PEOPLE).forEach(c => { if (c.space === here.name) c.mixer.update(dt); }); Sit.apply(); Guide.tick(dt);
   if (here.mark && here.mark.visible) { here.mark.userData.a.position.y = 3.4 + Math.sin(t * 3) * .3; here.mark.userData.a.rotation.y = t * 1.5; }
   if (here.water) here.water.material.color.setHSL(.56, .55, .42 + Math.sin(t * .8) * .02);
-  const me = ME().obj.position, fo = UI.focus ? UI.focus.position : me, want = fo.clone().add(camOff());
+  const me = ME().obj.position, fo = UI.focus ? UI.focus.position : me, want = UI.talkCam ? UI.talkCam.pos.clone() : fo.clone().add(camOff());
   if (here.box) want.x = Math.max(here.box[0] + 5, Math.min(here.box[2] - 5, want.x));
   camera.position.lerp(want, Math.min(1, dt * 3.5));
-  const la = fo.clone().add(new THREE.Vector3(0, 2.4, -6)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt);
+  const la = UI.talkCam ? UI.talkCam.look.clone() : fo.clone().add(new THREE.Vector3(0, 2.4, -6)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt);
   if (here.sky) here.sky.g.position.copy(camera.position);
   if (here.name === 'town') TREES.forEach(tr => {   // fade trees that hide you from the camera
     const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5;
@@ -1525,7 +1551,7 @@ function snapCamera() { const me = ME().obj.position; camera.position.copy(me).a
 async function goTo(name, x, z, ry = Math.PI) {
   UI.busy = true; Sfx.play('whoosh'); const f = $('fade');
   await new Promise(r => gsap.to(f, { opacity: 1, duration: .35, onComplete: r }));
-  here = SP[name]; putIn(ME(), here, x, z, ry); ME().target = null; snapCamera();
+  here = SP[name]; UI.talkCam = null; putIn(ME(), here, x, z, ry); ME().target = null; snapCamera();
   onEnter(name);
   await new Promise(r => gsap.to(f, { opacity: 0, duration: .35, onComplete: r }));
   UI.busy = false;
@@ -1833,15 +1859,33 @@ function openMuseum() {
 }
 function openBag() {
   $('albumTitle').innerHTML = '我的东西<small class="en-only">My things</small>';
-  $('albumNote').innerHTML = `${G.name}　★ ${G.stars}　妈妈 ♥${G.friend.mom}　爸爸 ♥${G.friend.dad}`;
+  const metHome = G.quest >= 1 || G.friend.mom || G.friend.dad;
+  $('albumNote').innerHTML = metHome ? `${G.name}　★ ${G.stars}　妈妈 ♥${G.friend.mom}　爸爸 ♥${G.friend.dad}` : `${G.name}　★ ${G.stars}`;
   const g = $('albumGrid'); g.innerHTML = '';
-  ITEM_ORDER.forEach(id => { const got = !!G.found[id], it = ITEMS[id], d = document.createElement('div'); d.className = 'cell' + (got ? ' got' : '');
+  if (metHome) ITEM_ORDER.forEach(id => { const got = !!G.found[id], it = ITEMS[id], d = document.createElement('div'); d.className = 'cell' + (got ? ' got' : '');
     d.innerHTML = `<img src="${thumb(id)}" alt="" style="width:64px;height:64px;object-fit:contain;${got ? '' : 'filter:brightness(0);opacity:.15'}"><div class="n">${got ? it.zh : '？'}</div><div class="c">${got ? VOCAB[it.zh][0] : ''}</div>`;
     if (got) d.onclick = () => Voice.speak(it.zh, .6); g.appendChild(d); });
   Life.bagRows(g); storyRows(g);
+  if (!g.children.length) g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:18px 6px;line-height:1.7">背包还是空的。<br>听完故事、做完活动，就会有东西放进来哦！<span class="en-only"><br>Your bag is empty. Finish stories and activities to fill it!</span></div>';
   $('albumVeil').classList.remove('hidden'); UI.busy = true;
 }
 
+const talkPlain = talk;
+talk = async function (who, lines, choices) {
+  const c = PEOPLE[who], me = ME(); let undo = null;
+  if (c && c.obj && c !== me && c.space === here.name && !UI.focus && /^(town|isle\d)$/.test(here.name)) {
+    const s = c.obj.position, p = me.obj.position, d = new THREE.Vector3(s.x - p.x, 0, s.z - p.z), dist = d.length();
+    if (dist > .3 && dist < 6) {
+      d.normalize(); const perp = new THREE.Vector3(-d.z, 0, d.x); if (perp.z < 0) perp.negate();
+      const mid = new THREE.Vector3((s.x + p.x) / 2, p.y, (s.z + p.z) / 2);
+      UI.talkCam = { pos: mid.clone().add(perp.multiplyScalar(5.2)).add(d.clone().multiplyScalar(-2.4)).add(new THREE.Vector3(0, 3.2, 0)), look: new THREE.Vector3(s.x * .7 + p.x * .3, s.y + 1.1, s.z * .7 + p.z * .3) };
+      me.obj.rotation.y = Math.atan2(s.x - p.x, s.z - p.z);
+      let skinned = false; c.obj.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
+      if (skinned) { const r0 = c.obj.rotation.y; c.obj.rotation.y = Math.atan2(p.x - s.x, p.z - s.z); undo = () => { c.obj.rotation.y = r0; }; }
+    }
+  }
+  try { return await talkPlain(who, lines, choices); } finally { UI.talkCam = null; if (undo) undo(); }
+};
 /* ---------- what you can do nearby (the big button) ---------- */
 function nearby() {
   const me = ME().obj.position, list = [];
@@ -1928,8 +1972,8 @@ function exitMat(name) {
   const sp = SP[name]; if (!sp || sp.__exit || /^(town|isle\d|moon4)$/.test(name)) return; sp.__exit = true;
   const [x, z] = ROOM_EXIT[name] || [0, 4.9], keep = W.scene; W.scene = sp.scene;
   mk(rbox(2.4, .04, 1.3, .02), '#8C5B3A', x, .02, z, null, false); mk(rbox(2.1, .05, 1.05, .02), '#E8B86A', x, .03, z, null, false);
-  const ar = mk(new THREE.ConeGeometry(.28, .5, 3), '#FFFFFF', x, .08, z + .05, null, false); ar.rotation.x = Math.PI / 2;
-  const s = signBoard('出口', 1.1, .42, '#5E9A57'); s.position.set(x + 1.6, 1.3, z); sp.scene.add(s);
+  const ar = mk(new THREE.ConeGeometry(.24, .42, 3), '#FFFFFF', x, .08, z + .32, null, false); ar.rotation.x = Math.PI / 2;
+  const s = signBoard('出口', 1.2, .42, '#5E9A57'); s.rotation.x = -Math.PI / 2; s.position.set(x, .1, z - .22); sp.scene.add(s);
   W.scene = keep;
 }
 function roomExit() { nearby.all = []; try { nearby(); } catch (e) { } const a = nearby.all.find(x => x.zh === '出去'); nearby.all = null; return a; }
@@ -1958,7 +2002,7 @@ function lookPal(l) { return kidPal({ hair: HAIRS[l.hair], shirt: SHIRTS[l.shirt
 function buildPreview(look) {
   const cv = $('lookCv'), r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }); r.setPixelRatio(Math.min(2, devicePixelRatio || 1)); r.setSize(cv.clientWidth || 260, cv.clientHeight || 260, false); r.outputEncoding = THREE.sRGBEncoding;
   const s = new THREE.Scene(); s.add(new THREE.HemisphereLight(lin('#FFF6E6'), lin('#B8A07A'), 1.0)); const d = new THREE.DirectionalLight(lin('#FFF1D8'), 1.1); d.position.set(3, 6, 6); s.add(d);
-  const cam = new THREE.PerspectiveCamera(30, 1, .1, 50); cam.position.set(0, 1.6, 6.2); cam.lookAt(0, 1.0, 0);
+  const cam = new THREE.PerspectiveCamera(30, 1, .1, 50); cam.position.set(0, 1.05, 3.7); cam.lookAt(0, .72, 0);
   const ch = makeKid(look); s.add(ch.obj); const ck = new THREE.Clock();
   preview = { r, s, cam, ch, on: true };
   const tick = () => { if (!preview || !preview.on) return; requestAnimationFrame(tick); const dt = ck.getDelta(); preview.ch.mixer.update(dt); preview.ch.obj.rotation.y += dt * .6; r.render(s, cam); };
@@ -2082,6 +2126,10 @@ const Intro = (() => {
   #intro .captBig{position:absolute;left:50%;top:calc(41% + min(70vw,340px) * .37 - 60px);width:64px;transform:translateX(-120%);transition:left 2.4s ease-in;animation:bob 3s ease-in-out infinite}
   @keyframes bob{0%,100%{margin-top:0}50%{margin-top:8px}}
   #intro .stage{position:absolute;left:10px;right:10px;top:12px;bottom:200px;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;z-index:2}
+  #intro.panel .talkI{display:none} #intro.panel .stage{bottom:12px} #intro .okBar{position:sticky;bottom:0;padding-top:8px;background:linear-gradient(transparent,var(--panel) 30%)}
+  #title p { text-align: center; }
+  .pk-grid{display:flex!important;flex-wrap:wrap;justify-content:center} .pk-card{width:130px}
+  @media (min-width: 900px) and (min-height: 700px) { .sheet, #talk, #act, .hud, #intro .talkI, #intro .choicesI, #intro .stage>div, #picker, #title h1 { zoom: 1.3; } .pk-card{width:150px} }
   #intro .stage>div{color:#2B3A33;background:var(--panel);border:2px solid var(--panel-edge);border-radius:22px;padding:14px;width:min(100%,520px)}
   #intro .choicesI{position:absolute;right:max(14px, calc(50% - 320px));bottom:162px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;z-index:3;max-width:80%}
   #intro .choicesI button{color:#2B3A33;background:#FFF9EC;border:3px solid #F1DFB8;border-radius:22px;padding:8px 16px;font:inherit;font-size:18px;text-align:right;box-shadow:0 3px 0 rgba(0,0,0,.1)}
@@ -2146,16 +2194,17 @@ const Intro = (() => {
     try { await Promise.race([ASSETS_READY, wait(20000)]); } catch (e) { console.warn('assets', e); }
     return new Promise(res => {
       const look = Object.assign({}, LOOK0), s = stage(''), box = $('lookBox'); const wrap = document.createElement('div'); s.innerHTML = ''; s.appendChild(wrap); box.classList.remove('hidden'); wrap.appendChild(box);
-      const ok = document.createElement('button'); ok.className = 'pill'; ok.style.marginTop = '10px'; ok.innerHTML = '就是这样！<span class="en-only"> That’s me!</span>'; wrap.appendChild(ok);
+      root.classList.add('panel'); const bar = document.createElement('div'); bar.className = 'okBar'; const ok = document.createElement('button'); ok.className = 'pill'; ok.style.width = '100%'; ok.innerHTML = '就是这样！<span class="en-only"> That’s me!</span>'; bar.appendChild(ok); wrap.appendChild(bar);
       try { if (ASSETS.kid) buildPreview(look); } catch (e) { console.warn('preview', e); }
       try { lookRows(look); } catch (e) { console.warn('looks', e); }
-      ok.onclick = () => { Sfx.play('sparkle'); G.look = look; try { if (preview) { preview.on = false; preview.r.dispose(); } } catch (e) { } box.classList.add('hidden'); $('title').appendChild(box); stage(''); res(); };
+      ok.onclick = () => { Sfx.play('sparkle'); G.look = look; try { if (preview) { preview.on = false; preview.r.dispose(); } } catch (e) { } box.classList.add('hidden'); $('title').appendChild(box); root.classList.remove('panel'); stage(''); res(); };
     });
   }
   function chooseIsle() {
     return new Promise(res => {
       const s = stage(`<h2 style="margin:0 0 8px">去哪一座岛？<small class="en-only">Which island first?</small></h2><div class="isle-grid">${ISLES.map(([id, zh, en, e, d, de]) => `<button class="isle-card" data-id="${id}"><span style="font-size:30px">${e}</span><b>${zh}</b><span class="en-only">${en}<br></span><span>${d}</span><span class="en-only"><br>${de}</span></button>`).join('')}</div>`);
-      s.querySelectorAll('.isle-card').forEach(b => b.onclick = () => { Sfx.play('pop'); const i = ISLES.find(x => x[0] === b.dataset.id); Voice.speak(i[1], .8); stage(''); res(i); });
+      root.classList.add('panel');
+      s.querySelectorAll('.isle-card').forEach(b => b.onclick = () => { Sfx.play('pop'); const i = ISLES.find(x => x[0] === b.dataset.id); Voice.speak(i[1], .8); root.classList.remove('panel'); stage(''); res(i); });
     });
   }
   /* questions the child can ask; each answer is a short chat, and the last option moves on */
@@ -2395,10 +2444,10 @@ const B5 = (() => {
     mk(hg, '#A9764A', 0, 0, 0, boat); mk(box(5.6, .12, 3.4), '#C99A66', 0, .62, 0, boat);
     const lineMat = new THREE.MeshBasicMaterial({ color: '#E8443A' }); P.mark = new THREE.Mesh(box(6.3, .07, 4.1), lineMat); P.mark.visible = false; boat.add(P.mark);
     P.stones = new THREE.Group(); boat.add(P.stones);
-    const pile = new THREE.Group(); pile.position.set(DX - 4.6, 0, 33); S.add(pile); P.pile = pile;
+    const pile = new THREE.Group(); pile.position.set(DX - 6.2, 0, 31.3); S.add(pile); P.pile = pile;
     for (let i = 0; i < 14; i++) mk(new THREE.DodecahedronGeometry(.42, 0), '#9A968C', (i % 4 - 1.5) * .8, .4 + Math.floor(i / 8) * .6, (Math.floor(i / 4) % 2) * .8, pile);
     const ds = signBoard('码头', 1.8, .6, '#4F86C6'); ds.position.set(DX - 2.8, 1.6, 30.6); S.add(ds); mk(cyl(.06, .06, 1.6, 6), '#8A6A4A', DX - 2.8, .8, 30.6);
-    const fs = signBoard('渡船', 1.8, .6, '#3F7F78'); fs.position.set(DX, 1.8, 41.6); S.add(fs);
+    const fs = signBoard('渡船', 1.8, .6, '#3F7F78'); fs.position.set(DX + 2.7, 1.8, 41); S.add(fs);
     P.ferryAt = [DX, 40.6];
     // the elephant and the neighbours
     P.elephant = makeElephant(); P.elephant.position.set(DX + 7.5, 0, 28.6); P.elephant.rotation.y = -Math.PI / 2; S.add(P.elephant);
@@ -2955,6 +3004,8 @@ function openVoices() {
   $('albumTitle').innerHTML = '声音设定<small class="en-only">Voices</small>';
   $('albumNote').innerHTML = list.length ? `这台设备有 ${list.length} 个中文声音。<span class="en-only"> This device has ${list.length} Chinese voices.</span>` : '这台设备没有中文声音。';
   const g = $('albumGrid'); g.innerHTML = ''; g.style.gridTemplateColumns = '1fr';
+  const test = document.createElement('button'); test.className = 'pill'; test.style.width = '100%'; test.innerHTML = '🔊 听一听<span class="en-only"> Test the voice</span>'; test.onclick = () => Voice.speak('你好！欢迎来到中文群岛。', .72); g.appendChild(test);
+  const adv = document.createElement('details'); adv.innerHTML = '<summary style="cursor:pointer;font-weight:700;padding:10px 2px">每个角色的声音（家长设定）<span class="en-only" style="font-weight:400"> · Voice for each character (for parents)</span></summary>'; g.appendChild(adv);
   who.forEach(([k, zh]) => {
     const cur = G.voices[k] || {}, row = document.createElement('div'); row.className = 'cell got'; row.style.textAlign = 'left';
     row.innerHTML = `<div class="n">${zh}</div><select style="width:100%;font-size:15px;margin:4px 0;padding:6px;border-radius:10px"><option value="">自动</option>${list.map(v => `<option ${cur.name === v.name ? 'selected' : ''}>${v.name}</option>`).join('')}</select>
@@ -2962,7 +3013,7 @@ function openVoices() {
     const sel = row.querySelector('select'), rng = row.querySelector('input'), btn = row.querySelector('button');
     const save = () => { G.voices[k] = { name: sel.value || null, pitch: rng.value ? +rng.value : null }; saveG(); };
     sel.onchange = save; rng.oninput = save; btn.onclick = () => Voice.speak(`我是${zh}。你好！`, .72, k);
-    g.appendChild(row);
+    row.style.marginTop = '8px'; adv.appendChild(row);
   });
   $('albumVeil').classList.remove('hidden'); UI.busy = true;
   $('albumVeil').querySelector('[data-close]').addEventListener('click', () => { g.style.gridTemplateColumns = ''; }, { once: true });
@@ -3026,13 +3077,15 @@ const Stage = (() => {
     return lines;
   }
   function show(ln) {
-    const say = $('say'), t = ln.p.zh; say.innerHTML = '';
-    for (let i = ln.a; i < ln.b; i++) {
-      const c = t[i]; if (c === '\n') continue; const py = ln.p.py[i];
-      if (py && HAN.test(c)) { const rb = document.createElement('ruby'); rb.textContent = c; const rt = document.createElement('rt'); rt.textContent = py; rb.appendChild(rt); say.appendChild(rb); }
-      else say.appendChild(document.createTextNode(c));
-    }
+    const say = $('say'), t = ln.p.zh; say.innerHTML = ''; let cur = null;
+    const seg = (a, b, cls) => { const sp = document.createElement('span'); sp.className = cls;
+      for (let i = a; i < b; i++) { const c = t[i]; if (c === '\n') continue; const py = ln.p.py[i];
+        if (py && HAN.test(c)) { const rb = document.createElement('ruby'); rb.textContent = c; const rt = document.createElement('rt'); rt.textContent = py; rb.appendChild(rt); sp.appendChild(rb); }
+        else sp.appendChild(document.createTextNode(c)); }
+      say.appendChild(sp); return sp; };
+    if (ln.a > 0) seg(0, ln.a, 'pg-dim'); cur = seg(ln.a, ln.b, 'pg-cur'); if (ln.b < t.length) seg(ln.b, t.length, 'pg-dim');
     $('sayEn').textContent = ln.p.en; $('who').textContent = nameOf(ln.who)[0];
+    try { cur.scrollIntoView({ block: 'nearest' }); } catch (e) { }
   }
   function pop(obj) {
     const b = obj.userData.base || (obj.userData.base = obj.scale.clone());
@@ -4686,7 +4739,7 @@ const Ferry = (() => {
     if (to === 'isle3' && !SP.isle3) Isle3.build();
     if (to === 'isle4' && !SP.isle4) Isle4.build();
     G.where = to; saveG();
-    const land = to === 'town' ? [-9, 39.5] : [0, 40.6], f = (first || !quiet) && SP[to] && SP[to].ferry; let home = null;
+    const land = to === 'town' ? [-9, 39.5] : [0, 31.4], f = (first || !quiet) && SP[to] && SP[to].ferry; let home = null;
     if (f) {   // straight from open water into this island's harbour, already on deck: no fade
       UI.ride = true; UI.busy = true; home = f.position.clone(); f.position.z = home.z + (first ? 24 : 55);
       here = SP[to]; putIn(ME(), here, f.position.x + DECK.me[0], f.position.z + DECK.me[1], Math.PI); onDeck(f, ME().obj.position, DECK.me); ME().target = null; snapCamera(); onEnter(to);
@@ -4695,7 +4748,7 @@ const Ferry = (() => {
     else { await goTo(to, land[0], land[1], Math.PI); if (onArrive) onArrive(); }
     if (to === 'isle1') Isle1.phase(); if (to === 'isle2') Isle2.phase(); if (to === 'isle3') Isle3.phase(); if (to === 'isle4') Isle4.phase();
     if (f) await arrive(f, home, land);
-    if (first) showToast(`欢迎来到${d[1]}！`, `Welcome to ${d[2]}!`, 2600);
+    if (first) { showToast(`欢迎来到${d[1]}！`, `Welcome to ${d[2]}!`, 2600); setTimeout(() => { const nm = Guide.nextName(); if (nm) showToast(`去找${nm[0]}说说话吧！跟着黄色的「！」走。`, `Go and talk to ${nm[1]}! Follow the yellow “!”.`, 3600); }, 2800); }
   }
   async function arrive(f, home, land) {
     const me = ME(), o = me.obj.position, ck = captainOf(here), cap = ck && PEOPLE[ck]; UI.busy = true; UI.ride = true;
@@ -4705,9 +4758,10 @@ const Ferry = (() => {
     await new Promise(r => gsap.to(f.position, { z: home.z, duration: f.position.z - home.z > 40 ? 6 : 4, ease: 'power2.out', onUpdate: follow, onComplete: r }));
     // the captain steps back onto his pier while you walk off to the land
     if (cap) { cap.play('walk'); const p = cap.obj.position; cap.obj.rotation.y = Math.atan2(cap0.p.x - p.x, cap0.p.z - p.z); gsap.to(p, { x: cap0.p.x, y: cap0.p.y, z: cap0.p.z, duration: 1.8, ease: 'power1.inOut', onComplete: () => { cap.play('idle'); cap.obj.rotation.y = cap0.r; } }); }
-    const fy = here.floor(land[0], land[1]), side = f.position.x + (land[0] < f.position.x ? -1.9 : 1.9); me.play('walk');
-    me.obj.rotation.y = Math.atan2(side - o.x, 0); await new Promise(r => gsap.to(o, { x: side, duration: .7, ease: 'none', onComplete: r }));   // to the side rail first, so you never walk through the cabin
-    me.obj.rotation.y = Math.atan2(land[0] - o.x, land[1] - o.z); await new Promise(r => gsap.to(o, { x: land[0], y: fy, z: land[1], duration: 1.4, ease: 'power1.inOut', onComplete: r }));
+    // over the side onto the pier, then along it to the shore
+    const fy = here.floor(land[0], land[1]), pierX = here.name === 'town' ? land[0] : 1.1; me.play('walk');
+    me.obj.rotation.y = Math.atan2(pierX - o.x, 0); await new Promise(r => gsap.to(o, { x: pierX, y: here.floor(pierX, o.z), duration: .8, ease: 'none', onComplete: r }));
+    me.obj.rotation.y = Math.atan2(land[0] - o.x, land[1] - o.z); await new Promise(r => gsap.to(o, { x: land[0], y: fy, z: land[1], duration: Math.max(1.2, Math.hypot(land[0] - o.x, land[1] - o.z) / 4), ease: 'none', onUpdate: () => { o.y = here.floor(o.x, o.z); }, onComplete: r }));
     me.play('idle'); me.obj.rotation.y = Math.PI; UI.ride = false; UI.busy = false;
   }
 
