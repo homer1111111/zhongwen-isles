@@ -1256,6 +1256,17 @@ function roundTree(x, y, z, s = 1, col = '#6DBF5A') {
 /* One friendly face for every hand-made animal: shiny eyes (a white catch-light in each), rosy cheeks and a small
    smile, placed on the surface of a round head of radius r centred at (x, y, z), looking along the head's local +z
    turned by ry. o.white puts white eyeballs behind dark pupils, for dark-furred animals. */
+/* a little flying bird (beak towards +z): round body, head with a beak, tail, and two wings that flap */
+function makeBird(col, x, y, z, parent) {
+  const g = new THREE.Group(); g.position.set(x, y, z); (parent || W.scene).add(g);
+  const b = mk(sph(.16, 10), col, 0, 0, 0, g, false); b.scale.set(.9, .85, 1.3);
+  mk(sph(.11, 10), col, 0, .1, .2, g, false); mk(new THREE.ConeGeometry(.04, .12, 6), '#F2B233', 0, .09, .34, g, false).rotation.x = Math.PI / 2;
+  [-1, 1].forEach(k => mk(sph(.022, 6), '#1E1A18', k * .06, .14, .28, g, false));
+  const tl = mk(new THREE.ConeGeometry(.08, .2, 4), col, 0, .02, -.26, g, false); tl.rotation.x = -Math.PI / 2; tl.scale.y = .5;
+  g.userData.wings = [-1, 1].map(k => { const piv = new THREE.Group(); piv.position.set(k * .12, .05, 0); g.add(piv); const w = mk(new THREE.BoxGeometry(.34, .03, .22), col, k * .17, 0, 0, piv, false); w.userData.k = k; piv.userData.k = k; return piv; });
+  return g;
+}
+function flyBird(g, t, k, vx) { g.rotation.y = vx >= 0 ? Math.PI / 2 : -Math.PI / 2; g.userData.wings.forEach(w => { w.rotation.z = w.userData.k * Math.sin(t * 14 + k) * .7; }); }
 function cuteFace(parent, x, y, z, r, ry = 0, o = {}) {
   const f = new THREE.Group(); f.position.set(x, y, z); f.rotation.y = ry; parent.add(f);
   const on = (px, py, k = 1) => Math.sqrt(Math.max(0, r * r - px * px - py * py)) * k;
@@ -6665,7 +6676,7 @@ const B4b = (() => {
     [[-5, 3], [5, 3], [-5, 9.4], [5, 9.4]].forEach(([dx, dz], i) => roundTree(vx + dx, 0, vz + dz, .6, '#4E9A45'));
     flowers(vx - 3, vz + 3.4, .03, 8, 511, null, 1.2); flowers(vx + 3, vz + 3.4, .03, 8, 512, null, 1.2);
     Q.boat = new THREE.Group(); Q.boat.position.set(cc[0] - 6.4, .12, cc[1]); S.add(Q.boat); mk(box(1.2, .25, .6), '#FFFFFF', 0, .1, 0, Q.boat); mk(box(1.3, .08, .66), '#C9A24A', 0, .25, 0, Q.boat);
-    Q.birds = [0, 1, 2].map(k => { const b = mk(sph(.12, 8), '#5A6A8A', vx + (k - 1) * 3, 3 + k * .3, vz + 5, null, false); b.scale.x = 1.6; return b; });
+    Q.birds = [0, 1, 2].map(k => { const b = makeBird(['#5A6A8A', '#E8F0F4', '#C9A24A'][k], vx + (k - 1) * 3, 3 + k * .3, vz + 5); return b; });
     const sg = signBoard('凡尔赛宫', 2.4, .6, '#6E7A8A'); sg.position.set(vx, 3, vz - 2.1); S.add(sg);
     buildYard(S);
   }
@@ -6777,7 +6788,7 @@ const B4b = (() => {
     if (Q.s3 === 'windows') Q.windows.forEach(w => { if (!w.open) add(5.6, w.z, 1.4, '打开窗子', 'Open the window', () => openWindow(w), 1); });
     if (Q.s3 === 'paints') Q.paints.forEach(p => { if (!Q.found[p.i]) add(p.x, p.z, 1.6, '看名画', 'Look at the painting', () => paint(p), 1); });
   }
-  function tick(dt, t) { if (Q.birds) Q.birds.forEach((b, k) => { b.position.x = Q.v.x + Math.sin(t * .6 + k * 2) * 5; b.position.y = 3 + Math.sin(t * 3 + k) * .3; }); }
+  function tick(dt, t) { if (Q.birds) Q.birds.forEach((b, k) => { b.position.x = Q.v.x + Math.sin(t * .6 + k * 2) * 5; b.position.y = 3 + Math.sin(t * 3 + k) * .3; flyBird(b, t, k, Math.cos(t * .6 + k * 2)); }); }
   return { build, spawn, nearby, nearbyHall, tick };
 })();
 /* =====================================================================
@@ -6983,7 +6994,7 @@ const B4d = (() => {
     Q.rice = []; for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) { const m = mk(cyl(.03, .03, .55, 5), '#9ACD5A', fx - 3 + i * 1.2, .42, fz - 1.6 + j * 1.05, null, false); Q.rice.push(m); }
     const tr = new THREE.Group(); tr.position.set(fx - 6.4, 0, fz - 1); S.add(tr); mk(cyl(.15, .22, 2, 8), '#8A6A4A', 0, 1, 0, tr); mk(sph(1.1, 12), '#FFB6C9', 0, 2.5, 0, tr); I().solids.push([fx - 6.8, fz - 1.4, fx - 6, fz - .6]);
     Q.petals = [[-7.2, .6], [-5.6, .9], [-6.8, 1.6], [-5.2, -.2], [-7.6, -.4]].map(([dx, dz]) => { const p = mk(new THREE.CircleGeometry(.14, 8), '#FFB6C9', fx + dx, .05, fz + dz, null, false); p.rotation.x = -Math.PI / 2; p.visible = false; return { p, x: fx + dx, z: fz + dz }; });
-    Q.birds = [0, 1, 2, 3].map(k => { const b = mk(sph(.12, 8), '#8A6A4A', fx + (k - 1.5) * 2.5, 2.6, fz - 4, null, false); b.scale.x = 1.5; b.visible = false; return b; });
+    Q.birds = [0, 1, 2, 3].map(k => { const b = makeBird(['#8A6A4A', '#5A6A8A', '#B07040', '#6E7A8A'][k], fx + (k - 1.5) * 2.5, 2.6, fz - 4); b.visible = false; return b; });
     Q.hoe = new THREE.Group(); Q.hoe.visible = false; S.add(Q.hoe); mk(cyl(.03, .03, 1.2, 6), '#8A6A4A', 0, .6, 0, Q.hoe, false); mk(box(.3, .05, .2), '#6E727A', .1, 0, 0, Q.hoe, false);
     Q.bowl = new THREE.Group(); Q.bowl.visible = false; S.add(Q.bowl); mk(cyl(.3, .18, .25, 16), '#FFFFFF', 0, .12, 0, Q.bowl, false); mk(sph(.28, 12), '#FFFBF0', 0, .25, 0, Q.bowl, false).scale.y = .45;
     mk(rbox(1.2, .8, .8, .06), '#B98A5A', fx + 6, .4, fz + 3); I().solids.push([fx + 5.3, fz + 2.5, fx + 6.7, fz + 3.5]); Q.table = { x: fx + 6, z: fz + 3 };
@@ -7068,7 +7079,7 @@ const B4d = (() => {
     if (Q.s8 === 'stone') add(Q.stone.position.x, Q.stone.position.z + .8, 1.6, '搬石头', 'Pick up the stone', takeStone, 1);
     if (Q.s8 === 'smash') add(Q.g.x + .6, Q.g.z - .2, 2, '砸缸', 'Break the vat', smash, 1);
   }
-  function tick(dt, t) { if (Q.birds && Q.birds[0].visible) Q.birds.forEach((b, k) => { b.position.x = Q.f.x + Math.sin(t * .8 + k * 1.6) * 5; b.position.y = 2.6 + Math.sin(t * 4 + k) * .2; }); }
+  function tick(dt, t) { if (Q.birds && Q.birds[0].visible) Q.birds.forEach((b, k) => { b.position.x = Q.f.x + Math.sin(t * .8 + k * 1.6) * 5; b.position.y = 2.6 + Math.sin(t * 4 + k) * .2; flyBird(b, t, k, Math.cos(t * .8 + k * 1.6)); }); }
   return { build, spawn, nearby, tick };
 })();
 /* =====================================================================
@@ -7142,13 +7153,13 @@ const B4e = (() => {
     it.moon = mk(new THREE.PlaneGeometry(3, 3), new THREE.MeshBasicMaterial({ map: canvasTex(128, 128, c => { c.fillStyle = '#FFF0B0'; c.beginPath(); c.arc(64, 64, 54, 0, 7); c.fill(); c.globalCompositeOperation = 'destination-out'; c.beginPath(); c.arc(88, 50, 50, 0, 7); c.fill(); }), transparent: true, fog: false }), bx - 5, 7.5, bz - 20, null, false);
     it.sun = mk(new THREE.CircleGeometry(1.6, 32), new THREE.MeshBasicMaterial({ color: lin('#E8443A'), fog: false }), bx + 5, 7.8, bz - 20, null, false);
     it.boat = new THREE.Group(); it.boat.position.set(bx + 2, .14, 26.4); S.add(it.boat); mk(rbox(1.8, .3, .7, .12), '#B98A5A', 0, .15, 0, it.boat); mk(cyl(.03, .03, 1.2, 6), '#8A6A4A', 0, .9, 0, it.boat); const sail = mk(new THREE.ConeGeometry(.45, 1, 3), '#FFFFFF', .2, .9, 0, it.boat); sail.scale.z = .1;
-    it.carp = new THREE.Group(); it.carp.position.set(bx + 6, .16, 26.6); S.add(it.carp); const cb = mk(sph(.22, 10), '#E8443A', 0, 0, 0, it.carp, false); cb.scale.set(1.6, .7, .6); mk(new THREE.ConeGeometry(.14, .22, 4), '#E8443A', -.4, 0, 0, it.carp, false).rotation.z = Math.PI / 2;
+    it.carp = new THREE.Group(); it.carp.position.set(bx + 5, .16, 26.6); S.add(it.carp); const cb = mk(sph(.22, 10), '#E8443A', 0, 0, 0, it.carp, false); cb.scale.set(1.6, .7, .6); mk(new THREE.ConeGeometry(.14, .22, 4), '#E8443A', -.4, 0, 0, it.carp, false).rotation.z = Math.PI / 2;
     it.brush = new THREE.Group(); it.brush.position.set(bx - 2.4, 0, bz + .6); S.add(it.brush); mk(rbox(1, .7, .6, .05), '#B98A5A', 0, .35, 0, it.brush); const br = mk(cyl(.04, .04, .6, 6), '#8C5B3A', 0, .76, 0, it.brush, false); br.rotation.z = Math.PI / 2; mk(new THREE.ConeGeometry(.05, .16, 8), '#2B2420', .38, .76, 0, it.brush, false).rotation.z = -Math.PI / 2;
     it.rocket = new THREE.Group(); it.rocket.position.set(bx + 7.4, 0, bz + .8); S.add(it.rocket); mk(cyl(.25, .3, 1.6, 12), '#F2F2EE', 0, .8, 0, it.rocket); mk(new THREE.ConeGeometry(.25, .5, 12), '#E8443A', 0, 1.85, 0, it.rocket); [0, 1, 2].forEach(k => { const f = mk(box(.05, .4, .3), '#E8443A', Math.sin(k * 2.1) * .3, .2, Math.cos(k * 2.1) * .3, it.rocket); f.rotation.y = k * 2.1; });
     it.apple = new THREE.Group(); it.apple.position.set(bx - 7.4, 0, bz + .4); S.add(it.apple); mk(cyl(.12, .16, 1.4, 8), '#8A6A4A', 0, .7, 0, it.apple); mk(sph(.9, 12), '#5EA94E', 0, 1.8, 0, it.apple); [[-.4, 1.6, .7], [.4, 1.9, .65], [0, 1.4, .8]].forEach(([x, y, z]) => mk(sph(.13, 8), '#E8443A', x, y, z, it.apple, false));
     it.grape = new THREE.Group(); it.grape.position.set(bx - 10.6, 0, bz + .6); S.add(it.grape); [-.8, .8].forEach(dx => mk(cyl(.05, .05, 1.8, 6), '#8A6A4A', dx, .9, 0, it.grape)); mk(box(1.9, .08, .7), '#4E9A45', 0, 1.8, 0, it.grape); [-.5, .1, .6].forEach(dx => { for (let k = 0; k < 6; k++) mk(sph(.07, 6), '#7A4FA0', dx + (k % 2) * .08, 1.6 - Math.floor(k / 2) * .1, .2, it.grape, false); });
     it.moon.visible = it.sun.visible = false;   // the sky pair only appears while Wenwen is asking
-    Q.it = it; Q.carpX = bx + 6;
+    Q.it = it; Q.carpX = bx + 5;
   }
   const ROUNDS = [['什么弯弯挂天边？什么弯弯停江边？', 'What is curved and hangs at the edge of the sky? What is curved and rests by the river?', ['moon', 'boat'], '弯弯'], ['什么红红水中游？什么红红照满天？', 'What is red and swims in the water? What is red and lights up the whole sky?', ['carp', 'sun'], '红红'], ['什么尖尖手中握？什么尖尖冲上天？', 'What is pointed and held in the hand? What is pointed and shoots up into the sky?', ['brush', 'rocket'], '尖尖'], ['什么圆圆树上挂？什么圆圆一串串？', 'What is round and hangs on the tree? What is round and grows in bunches?', ['apple', 'grape'], '圆圆']];
   const OPT = { moon: ['🌙', '月亮'], boat: ['⛵', '船儿'], carp: ['🐟', '鲤鱼'], sun: ['☀️', '太阳'], brush: ['🖌️', '毛笔'], rocket: ['🚀', '火箭'], apple: ['🍎', '苹果'], grape: ['🍇', '葡萄'] };
@@ -7178,7 +7189,7 @@ const B4e = (() => {
     if (Q.s9 != null) add(Q.c.x + .4, Q.c.z - .6, 3, '数星星', 'Count a star', count, 1);
     add(w.x, w.z, 2.8, '说话', 'Talk', () => B5.lessonTalk(410, 'wenwen', ['你好！我叫问问。', "Hi! I'm Wenwen."], ['我问你答', 'I ask, you answer']));
   }
-  function tick(dt, t) { if (Q.it) { Q.it.carp.position.x = Q.carpX + Math.sin(t * .7) * 2.4; Q.it.carp.rotation.y = Math.cos(t * .7) > 0 ? 0 : Math.PI; Q.it.boat.position.y = .14 + Math.sin(t * 1.4) * .04; } }
+  function tick(dt, t) { if (Q.it) { Q.it.carp.position.x = Q.carpX + Math.sin(t * .7) * 1.8; Q.it.carp.rotation.y = Math.cos(t * .7) > 0 ? 0 : Math.PI; Q.it.boat.position.y = .14 + Math.sin(t * 1.4) * .04; } }
   return { build, spawn, nearby, tick };
 })();
 /* =====================================================================
