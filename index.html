@@ -975,8 +975,8 @@ const ASSETS = {};
 const loadGLB = url => new Promise((res, rej) => new THREE.GLTFLoader().load(url, res, undefined, rej));
 async function loadAssets() {
   const jobs = { props: GLB_PROPS, home: GLB_HOME, fish: GLB_FISH, kid: GLB_KID, mom: GLB_MOM, dad: GLB_DAD, fox: GLB_FOX, wolf: GLB_WOLF };
-  const keys = Object.keys(jobs), got = await Promise.all(keys.map(k => loadGLB(jobs[k])));
-  keys.forEach((k, i) => ASSETS[k] = got[i]);
+  const keys = Object.keys(jobs), got = await Promise.all(keys.map(k => loadGLB(jobs[k]).catch(e => { console.warn('model', k, e); return loadGLB(jobs[k]).catch(() => null); })));
+  keys.forEach((k, i) => { if (got[i]) ASSETS[k] = got[i]; });
 }
 /* ---------- helpers ---------- */
 function propFrom(pack, name, x, y, z, s = 1, ry = 0, parent) {
@@ -1844,7 +1844,7 @@ function openBag() {
 /* ---------- what you can do nearby (the big button) ---------- */
 function nearby() {
   const me = ME().obj.position, list = [];
-  const add = (x, z, r, zh, en, fn, pri = 0) => { const d = Math.hypot(me.x - x, me.z - z); if (d < r) list.push({ d, zh, en, fn, pri }); };
+  const add = (x, z, r, zh, en, fn, pri = 0) => { const d = Math.hypot(me.x - x, me.z - z); if (d < r) list.push({ d, zh, en, fn, pri, x, z }); };
   Sit.nearby(add);
   if (here.name === 'town') {
     const T = SP.town;
@@ -1884,6 +1884,20 @@ function nearby() {
     ['mom', 'dad'].forEach(k => { const c = PEOPLE[k]; if (c.space === 'market') add(c.obj.position.x, c.obj.position.z, 2.6, '说话', 'Talk', () => talk(k, [[G.quest >= 9 ? '东西都买好了！' : '我们分头行动，节约时间！', G.quest >= 9 ? 'We bought everything!' : "Let's split up to save time!"]])); });
     if (sectionActive) SECTIONS[G.sec].items.forEach(id => { if (G.found[id]) return; const g = THINGS[id], p = g.getWorldPosition(new THREE.Vector3()); add(p.x, p.z, 4.6, '看一看', 'Look', () => findThing(id), 1); });   // quest things come before talking
   }
+  // everyone you meet can be talked to: a person with no action of their own close by gets a friendly chat
+  Object.keys(PEOPLE).forEach(k => {
+    const c = PEOPLE[k]; if (!c || !c.obj || c === ME() || c.space !== here.name || !c.obj.visible || !NAMES[k]) return;
+    if (c.__human === undefined) { c.__human = false; c.obj.traverse(o => { if (o.isSkinnedMesh) c.__human = true; }); }
+    if (!c.__human && !(B5.CHATS || {})[k]) return;
+    const p = c.obj.position; if (Math.hypot(me.x - p.x, me.z - p.z) > 2.6 || list.some(a => Math.hypot(a.x - p.x, a.z - p.z) < 1.8)) return;
+    add(p.x, p.z, 2.6, '说话', 'Talk', () => chatWith(k), -1);
+  });
+  // everyone you meet can be talked to: anyone without their own conversation here gets a friendly line
+  Object.keys(PEOPLE).forEach(k => {
+    const c = PEOPLE[k]; if (!c || !c.obj || c === ME() || c.space !== here.name || !c.obj.visible || !NAMES[k]) return;
+    let person = !!(B5.CHATS || {})[k]; if (!person) c.obj.traverse(o => { if (o.isSkinnedMesh) person = true; }); if (!person) return;
+    add(c.obj.position.x, c.obj.position.z, 2.4, '说话', 'Talk', () => chatWith(k), -1);
+  });
   list.sort((a, b) => (b.pri - a.pri) || (a.d - b.d)); return list[0];
 }
 let actFn = null;
@@ -2111,13 +2125,17 @@ const Intro = (() => {
       s.querySelector('#introOk').onclick = go; s.querySelector('#introName').onkeydown = e => { if (e.key === 'Enter') go(); };
     });
   }
+  /* the mirror never blocks the boat ride: it waits for the models with a note on screen, and if anything goes
+     wrong it still offers the choices (or keeps the default look) so the ride carries on */
   async function dressUp() {
-    await ASSETS_READY;
+    stage('<p style="text-align:center;margin:6px 0">正在准备镜子……<span class="en-only"><br>Getting the mirror ready…</span></p>');
+    try { await Promise.race([ASSETS_READY, wait(20000)]); } catch (e) { console.warn('assets', e); }
     return new Promise(res => {
       const look = Object.assign({}, LOOK0), s = stage(''), box = $('lookBox'); const wrap = document.createElement('div'); s.innerHTML = ''; s.appendChild(wrap); box.classList.remove('hidden'); wrap.appendChild(box);
       const ok = document.createElement('button'); ok.className = 'pill'; ok.style.marginTop = '10px'; ok.innerHTML = '就是这样！<span class="en-only"> That’s me!</span>'; wrap.appendChild(ok);
-      buildPreview(look); lookRows(look);
-      ok.onclick = () => { Sfx.play('sparkle'); G.look = look; if (preview) { preview.on = false; preview.r.dispose(); } box.classList.add('hidden'); $('title').appendChild(box); stage(''); res(); };
+      try { if (ASSETS.kid) buildPreview(look); } catch (e) { console.warn('preview', e); }
+      try { lookRows(look); } catch (e) { console.warn('looks', e); }
+      ok.onclick = () => { Sfx.play('sparkle'); G.look = look; try { if (preview) { preview.on = false; preview.r.dispose(); } } catch (e) { } box.classList.add('hidden'); $('title').appendChild(box); stage(''); res(); };
     });
   }
   function chooseIsle() {
