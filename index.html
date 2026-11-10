@@ -150,6 +150,7 @@ body:not(.playing) .hud { visibility: hidden; }
   <canvas id="gl" aria-label="中文群岛"></canvas>
   <div class="hud">
     <span class="chip" aria-label="Stars"><span class="star">★</span><span id="stars">0</span></span>
+    <button class="chip hidden" id="exitBtn" aria-label="Go out" style="cursor:pointer;font-size:16px">🚪 出去<span class="en-only" style="font-weight:400;font-size:13px">Out</span></button>
     <span class="sp"></span>
     <button class="rb" id="voiceBtn" aria-label="Voices"><svg><use href="#i-speak"/></svg></button>
     <button class="rb" id="enBtn" aria-pressed="true" aria-label="English help">EN</button>
@@ -1844,7 +1845,7 @@ function openBag() {
 /* ---------- what you can do nearby (the big button) ---------- */
 function nearby() {
   const me = ME().obj.position, list = [];
-  const add = (x, z, r, zh, en, fn, pri = 0) => { const d = Math.hypot(me.x - x, me.z - z); if (d < r) list.push({ d, zh, en, fn, pri, x, z }); };
+  const add = (x, z, r, zh, en, fn, pri = 0) => { if (nearby.all) nearby.all.push({ x, z, zh, fn }); const d = Math.hypot(me.x - x, me.z - z); if (d < r) list.push({ d, zh, en, fn, pri, x, z }); };
   Sit.nearby(add);
   if (here.name === 'town') {
     const T = SP.town;
@@ -1921,7 +1922,20 @@ function tickGame(dt, t) {
   const n = nearby(); if (n) { actFn = n.fn; $('act').innerHTML = `${n.zh}<small class="en-only">${n.en}</small>`; $('act').classList.remove('hidden'); } else { actFn = null; $('act').classList.add('hidden'); }
   if (here.name === 'market' && G.quest >= 4 && G.quest < 9 && !sectionActive) { const [x, z] = SECTIONS[G.sec].at, me = ME().obj.position; if (Math.hypot(me.x - x, me.z - z) < 2.4) { sectionActive = true; Sfx.play('pop'); markTarget(); const id = want(); Voice.speak(ITEMS[id].zh + '在哪儿？'); } }
 }
+/* every room shows its way out: a doormat with an arrow and an 出口 sign where the 出去 button appears */
+const ROOM_EXIT = { home: [0, 5], market: [0, 7.4], classroom: [0, 4.6] };
+function exitMat(name) {
+  const sp = SP[name]; if (!sp || sp.__exit || /^(town|isle\d|moon4)$/.test(name)) return; sp.__exit = true;
+  const [x, z] = ROOM_EXIT[name] || [0, 4.9], keep = W.scene; W.scene = sp.scene;
+  mk(rbox(2.4, .04, 1.3, .02), '#8C5B3A', x, .02, z, null, false); mk(rbox(2.1, .05, 1.05, .02), '#E8B86A', x, .03, z, null, false);
+  const ar = mk(new THREE.ConeGeometry(.28, .5, 3), '#FFFFFF', x, .08, z + .05, null, false); ar.rotation.x = Math.PI / 2;
+  const s = signBoard('出口', 1.1, .42, '#5E9A57'); s.position.set(x + 1.6, 1.3, z); sp.scene.add(s);
+  W.scene = keep;
+}
+function roomExit() { nearby.all = []; try { nearby(); } catch (e) { } const a = nearby.all.find(x => x.zh === '出去'); nearby.all = null; return a; }
 function onEnter(name) {
+  exitMat(name);
+  $('exitBtn').classList.toggle('hidden', !roomExit());
   if (name === 'town') Mail.check();
   if (name === 'town' && G.quest >= 9 && PEOPLE.mom.space === 'market') { const T = SP.town; putIn(PEOPLE.mom, T, T.home.x + 4, T.home.z + 7.2, 0); putIn(PEOPLE.dad, T, T.home.x + 6, T.home.z + 6.4, -.4); }
   markTarget();
@@ -2239,6 +2253,7 @@ function startGame(opts = {}) {
 }
 $('enBtn').onclick = () => { G.en = !G.en; saveG(); document.body.classList.toggle('en', G.en); $('enBtn').setAttribute('aria-pressed', G.en); };
 $('bagBtn').onclick = () => { if (!UI.talking && !UI.fishing) openBag(); };
+$('exitBtn').onclick = () => { if (UI.talking || UI.busy || UI.fishing) return; const a = roomExit(); if (a) { Sfx.play('tap'); if (Sit.sitting) Sit.up(); a.fn(); } };
 $('voiceBtn').onclick = () => { if (!UI.talking && !UI.fishing) openVoices(); };
 boot();
 
