@@ -24,9 +24,6 @@
 html { height: 100%; scroll-padding-top: env(safe-area-inset-top, 0px); }
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; height: 100%; background: var(--sky); color: var(--ink); font-family: var(--latin); overflow: hidden; -webkit-tap-highlight-color: transparent; }
-/* on a computer the whole game is one phone-shaped column in the middle of the screen; on a phone it fills the screen */
-html { background: #5C7F6A; }
-body { position: relative; width: 100%; max-width: min(100vw, 520px); margin: 0 auto; transform: translateZ(0); box-shadow: 0 0 40px rgba(0, 0, 0, .3); }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--sky); }
 button { font: inherit; color: inherit; cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
