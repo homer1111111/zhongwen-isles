@@ -833,8 +833,83 @@ function groundAt(sp, x, z) {
   const G0 = sp.__ground, key = Math.round(x * 2) + ',' + Math.round(z * 2);
   let y = G0.cells.get(key);
   if (y === undefined) { _gFrom.set(Math.round(x * 2) / 2, .7, Math.round(z * 2) / 2); _gRay.set(_gFrom, _gDown); _gRay.far = 1; const h = _gRay.intersectObjects(G0.list, false)[0]; y = h ? Math.max(0, h.point.y) : 0; G0.cells.set(key, y); }
+  return sp.raised ? Math.max(y, raisedAt(sp, x, z)) : y;
+}
+function raisedAt(sp, x, z) {
+  let y = 0;
+  (sp.raised || []).forEach(r => {
+    if (r.kind === 'rect' && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) y = Math.max(y, r.y);
+    else if (r.kind === 'circle' && Math.hypot(x - r.x, z - r.z) < r.r) y = Math.max(y, r.y);
+    else if (r.kind === 'ramp' && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) y = Math.max(y, r.top + (r.bottom - r.top) * (z - r.z0) / (r.z1 - r.z0));
+  });
   return y;
 }
+const Heights = (() => {
+  // find an empty, flat patch of grass on the island for a w x d footprint (no buildings, trees, roads, water or people)
+  function spot(sp, w, d, avoid) {
+    const b = sp.box, cands = [];
+    for (let x = b[0] + 3 + w / 2; x < b[2] - 3 - w / 2; x += 1) for (let z = b[1] + 3 + d / 2; z < 27 - d / 2; z += 1) {
+      if (Math.abs(x) < 4 + w / 2 && z > 18) continue;
+      if (avoid.some(a => Math.hypot(a[0] - x, a[1] - z) < a[2])) continue;
+      const x0 = x - w / 2 - 1, x1 = x + w / 2 + 1, z0 = z - d / 2 - 1, z1 = z + d / 2 + 1;
+      if (sp.solids.some(([a, c, e, f]) => a < x1 && e > x0 && c < z1 && f > z0)) continue;
+      if (Object.values(PEOPLE).some(p => p && p.obj && p.space === sp.name && p.obj.position.x > x0 - .6 && p.obj.position.x < x1 + .6 && p.obj.position.z > z0 - .6 && p.obj.position.z < z1 + .6)) continue;
+      let flat = true, low = 0, all = 0; for (let i = x0; i <= x1 && flat; i += 1) for (let k = z0; k <= z1; k += 1) { const g = groundAt(sp, i, k); all++; if (g > .052) { flat = false; break; } if (g < .015) low++; }
+      if (low > all * .2) flat = false;
+      if (flat) cands.push([x, z, Math.abs(x) + Math.abs(z - 4) * .5]);
+    }
+    cands.sort((a, b) => a[2] - b[2]); return cands[0] || null;
+  }
+  const st = (c, o) => tm(c, o);
+  function steps(S, cx, zTop, zBot, yTop, w) {
+    const n = Math.max(4, Math.round(yTop / .3)), dz = (zBot - zTop) / n;
+    for (let i = 0; i < n; i++) { const h = yTop * (n - i) / n; mk(box(w, h, dz + .02), i % 2 ? '#D8CBB0' : '#CDBF9F', cx, h / 2, zTop + dz * (i + .5), S); }
+  }
+  function terrace(sp, S, x, z, w = 8, d = 6) {
+    const y = 1.5, z1 = z + d / 2;
+    mk(rbox(w, y, d, .15), '#C9B48C', x, y / 2, z, S); mk(rbox(w - .3, .06, d - .3, .03), '#9BD06E', x, y + .03, z, S, false);
+    steps(S, x, z1, z1 + 2.6, y, 2.4);
+    for (let i = -w / 2 + .4; i <= w / 2 - .4; i += 1.2) { mk(cyl(.07, .07, .6, 6), '#8A6A4A', x + i, y + .3, z - d / 2 + .25, S); if (Math.abs(i) > 1.5) mk(cyl(.07, .07, .6, 6), '#8A6A4A', x + i, y + .3, z1 - .25, S); }
+    mk(box(w - .6, .08, .08), '#8A6A4A', x, y + .58, z - d / 2 + .25, S);
+    const bx = x - 2.5, bz = z - 1.5; mk(rbox(2.4, .12, .7, .05), '#B98A5A', bx, y + .55, bz, S); [-1, 1].forEach(k => mk(box(.12, .5, .6), '#8A6A4A', bx + k * 1, y + .25, bz, S));
+    Sit.add(sp.name, bx - .6, bz, y + .61, 0); Sit.add(sp.name, bx + .6, bz, y + .61, 0);
+    flowers(x + 2.8, z - 1.6, y + .06, 8, 700 + Math.round(x), null, 1.6);
+    const sg = signBoard('高台', 1.4, .5, '#5E9A57'); sg.position.set(x + 2.2, .9, z1 + 1.6); S.add(sg); mk(cyl(.05, .05, .9, 6), '#8A6A4A', x + 2.2, .45, z1 + 1.6, S);
+    sp.raised.push({ kind: 'rect', x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1, y }, { kind: 'ramp', x0: x - 1.2, x1: x + 1.2, z0: z1 - .05, z1: z1 + 2.6, top: y, bottom: .03 });
+    sp.solids.push([x - w / 2 - .3, z - d / 2 - .3, x + w / 2 + .3, z - d / 2 + .05]);
+  }
+  function hill(sp, S, x, z, r = 3.2) {
+    const y = 2.2;
+    mk(new THREE.CylinderGeometry(r, r + 1.3, y, 28), '#7FBF5E', x, y / 2, z, S); mk(new THREE.CylinderGeometry(r - .05, r - .05, .06, 28), '#96D271', x, y + .03, z, S, false);
+    steps(S, x, z + r - .1, z + r + 3.2, y, 2);
+    const tp = new THREE.Group(); tp.position.set(x + .9, y, z - 1.1); S.add(tp);
+    [[-.25, -.2], [.25, -.2], [0, .3]].forEach(([a, c]) => { const l = mk(cyl(.04, .04, 1, 6), '#5A4A3A', a * .6, .45, c * .6, tp); l.rotation.set(c * .5, 0, -a * .5); });
+    const tube = mk(cyl(.12, .08, .9, 12), '#3F5A7A', 0, 1.05, 0, tp); tube.rotation.x = Math.PI / 2.6;
+    const sg = signBoard('观景台', 1.6, .5, '#4F86C6'); sg.position.set(x - 1.6, .9, z + r + 3.6); S.add(sg); mk(cyl(.05, .05, .9, 6), '#8A6A4A', x - 1.6, .45, z + r + 3.6, S);
+    sp.raised.push({ kind: 'circle', x, z, r: r - .25, y }, { kind: 'ramp', x0: x - 1, x1: x + 1, z0: z + r - .4, z1: z + r + 3.2, top: y, bottom: .03 });
+    sp.hillTop = { x: x + .9, z: z - .4 };
+    // the grassy slope all round the hill is not walkable; only the stairs lead up
+    const o = r + 1.3, i = r - .15; sp.solids.push([x - o, z - o, x + o, z - i], [x - o, z - i, x - i, z + o], [x + i, z - i, x + o, z + o], [x - o, z + i, x - 1.05, z + o], [x + 1.05, z + i, x + o, z + o]);
+  }
+  function build(sp) {
+    if (sp.raised) return; sp.raised = []; const keep = W.scene; W.scene = sp.scene;
+    try {
+      // try the full size first, then a smaller one, so every island gets both
+      let t = spot(sp, 9, 9.4, []), tw = 8, td = 6; if (!t) { t = spot(sp, 7.5, 7.8, []); tw = 6.5; td = 4.6; } if (t) terrace(sp, sp.scene, t[0], t[1] - 1.4, tw, td);
+      let h = spot(sp, 9.2, 11, t ? [[t[0], t[1], 12]] : []), hr = 3.2; if (!h) { h = spot(sp, 7.6, 9.6, t ? [[t[0], t[1], 10]] : []); hr = 2.5; } if (h) hill(sp, sp.scene, h[0], h[1] - 1.8, hr);
+    } catch (e) { console.warn('heights', e); }
+    W.scene = keep; sp.__ground = null;
+  }
+  // from the hilltop the telescope shows the whole island from high above
+  function nearby(add) { const h = here.hillTop; if (!h) return; add(h.x, h.z, 1.8, '看望远镜', 'Telescope', look); }
+  async function look() {
+    const h = here.hillTop; UI.busy = true; const f = new THREE.Object3D(); f.position.set(0, 0, 0); here.scene.add(f);
+    const keep = [here.cam, here.camTall]; here.cam = [h.x * -.6, 46, 34]; here.camTall = [h.x * -.6, 52, 40]; UI.focus = f;
+    showToast('从高处看整个岛！', 'The whole island from up high!', 2600); await new Promise(r => setTimeout(r, 3800));
+    here.cam = keep[0]; here.camTall = keep[1]; UI.focus = null; here.scene.remove(f); UI.busy = false;
+  }
+  return { build, nearby };
+})();
 function mergeStatic(sp) {
   sp.__ground = null;   // the scenery changes shape here, so ground heights are found afresh
   const S = sp.scene, shared = new Set(Object.values(MATC)), skip = new Set([...(sp.walk || []), sp.water, ...Object.values(typeof THINGS === 'object' ? THINGS : {})]);
@@ -844,7 +919,7 @@ function mergeStatic(sp) {
   S.traverse(m => {
     if (!m.isMesh || m.isInstancedMesh || m.isSkinnedMesh || !m.userData.st || m.children.length || !shared.has(m.material)) return;
     const g = m.geometry; if (!g.attributes.position || !g.attributes.normal) return;
-    for (let q = m; q && q !== S; q = q.parent) if (!q.visible || skip.has(q) || q.userData.noMerge) return;
+    for (let q = m; q && q !== S; q = q.parent) if (!q.visible || skip.has(q) || q.userData.noMerge || q.userData.fade !== undefined) return;   // nothing on a tree (its fruit) is merged away from it
     const key = m.material.uuid + '|' + m.castShadow + '|' + m.receiveShadow; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(m);
   });
   let removed = 0; groups.forEach(list => { if (list.length < 2) return; bakeMerge(list, S, true).userData.merged = list.length; removed += list.length - 1; });
@@ -999,7 +1074,14 @@ const W = { scene: null };
 const SP = {};
 let here = null, renderer, camera, clock, raycaster, running = false;
 const ASSETS = {};
-const loadGLB = url => new Promise((res, rej) => new THREE.GLTFLoader().load(url, res, undefined, rej));
+const loadGLB = url => new Promise((res, rej) => {
+  try {
+    const bin = atob(url.slice(url.indexOf(',') + 1)), buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    // textures inside the model are read as plain images rather than fetched
+    const keep = window.createImageBitmap; try { window.createImageBitmap = undefined; new THREE.GLTFLoader().parse(buf.buffer, '', res, rej); } finally { window.createImageBitmap = keep; }
+  } catch (e) { rej(e); }
+});
 async function loadAssets() {
   const jobs = { props: GLB_PROPS, home: GLB_HOME, fish: GLB_FISH, kid: GLB_KID, mom: GLB_MOM, dad: GLB_DAD, fox: GLB_FOX, wolf: GLB_WOLF };
   const keys = Object.keys(jobs), got = await Promise.all(keys.map(k => loadGLB(jobs[k]).catch(e => { console.warn('model', k, e); return loadGLB(jobs[k]).catch(() => null); })));
@@ -1477,7 +1559,8 @@ function blocked(x, z, fromY) {
     if (z > STAIR.z0 && z < STAIR.z1 && !onStairs && Math.abs(townFloor(x, z) - fromY) > .6) return true;
     if (z > STAIR.z0 && z < STAIR.z1 && (Math.abs(x - STAIR.x0) < .45 || Math.abs(x - STAIR.x1) < .45)) return true;
     const p = sp.pond; if (Math.hypot(x - p.x, z - p.z) < p.r + .5) return true;
-  } else { const b = sp.box, onPier = /^isle\d$/.test(sp.name) && x > -1.9 && x < 1.9 && z > 28 && z < 44.6; if (!onPier && (x < b[0] || x > b[2] || z < b[1] || z > b[3])) return true; }
+  } else { const b = sp.box, onPier = /^isle\d$/.test(sp.name) && x > -1.9 && x < 1.9 && z > 28 && z < 44.6; if (!onPier && (x < b[0] || x > b[2] || z < b[1] || z > b[3])) return true;
+    if (sp.raised && fromY !== undefined && Math.abs(raisedAt(sp, x, z) - Math.max(0, fromY - .2)) > .55 && Math.abs(raisedAt(sp, x, z) - raisedAt(sp, ME().obj.position.x, ME().obj.position.z)) > .55) return true; }
   return sp.solids.some(([a, b, c, d]) => x > a && x < c && z > b && z < d);
 }
 let stick = null, keys = {};
@@ -1540,7 +1623,7 @@ function loop() {
   if (here.sky) here.sky.g.position.copy(camera.position);
   if (here.name === 'town') TREES.forEach(tr => {   // fade trees that hide you from the camera
     const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5;
-    const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; }
+    const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); }
   });
   const cutList = here === SP.town ? CUT : here.cut;   // buildings on the town and on the Book 1–3 islands step aside the same way
   if (cutList) cutList.forEach(h => { const p = h.g.position, v = !(me.z < p.z - h.d / 2 - .3 && me.z > p.z - 16 && Math.abs(me.x - p.x) < h.w / 2 + 2.5); if (h.g.visible !== v) { h.g.visible = v; (h.extra || []).forEach(o => o.visible = v); } });
@@ -1890,7 +1973,7 @@ talk = async function (who, lines, choices) {
 function nearby() {
   const me = ME().obj.position, list = [];
   const add = (x, z, r, zh, en, fn, pri = 0) => { if (nearby.all) nearby.all.push({ x, z, zh, fn }); const d = Math.hypot(me.x - x, me.z - z); if (d < r) list.push({ d, zh, en, fn, pri, x, z }); };
-  Sit.nearby(add);
+  Sit.nearby(add); Heights.nearby(add);
   if (here.name === 'town') {
     const T = SP.town;
     add(T.homeDoor.x, T.homeDoor.z, 2.6, '进家', 'Go home', () => goTo('home', 0, 3.6));
@@ -2279,6 +2362,9 @@ async function boot() {
 function startGame(opts = {}) {
   Sfx.init(); $('title').classList.add('hidden'); document.body.classList.add('playing');
   initRenderer(); STATIC_MARK = true; buildTown(); STATIC_MARK = false; buildHome(); buildShop();
+  NAMES.captain5 = ['船长', 'Captain'];
+  PEOPLE.captain5 = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
+  putIn(PEOPLE.captain5, SP.town, -10.5, 36.4, 0);
   SP.town.nameSign.material.map = canvasTex(Math.round(256 * 1.6 / .5), 256, (c, w, h) => { c.fillStyle = '#8C5B3A'; P.rr(6, 6, w - 12, h - 12, 40)(c); c.fill(); label(c, G.name + '的家', w / 2, h / 2 + 6, h * .5, '#FFF6E0'); });
   PEOPLE.me = makeKid(G.look); if (G.nyHat) B1f.addHat(PEOPLE.me);
   PEOPLE.mom = makeLook('mom'); PEOPLE.dad = makeLook('dad');
@@ -2296,7 +2382,7 @@ function startGame(opts = {}) {
   mergeStatic(SP.town);
   // land where the player chose on the boat, or where they left off last time
   const land = opts.land || G.where;
-  const greet = () => setTimeout(() => { if (here.name === 'town' && G.quest === 0 && !G.story1) talk('mom', [['{name}，欢迎回家！', 'Welcome home, {name}!'], ['走到我旁边，按「说话」和我聊天吧。', 'Walk up to me and press Talk.']]); }, 900);
+  const greet = () => setTimeout(() => { if (here.name === 'town' && G.quest === 0 && !G.story1) talk('mom', [['{name}，你到小镇啦！我们的家就在这里。', 'You have reached the town, {name}! Our home is right here.'], ['走到我旁边，按「说话」和我聊天吧。', 'Walk up to me and press Talk.']]); }, 900);
   if (land && (land !== 'town' || opts.first)) Ferry.go(land, true, opts.first, opts.onArrive).then(() => { if (land === 'town') greet(); });
   else greet();
 }
@@ -2523,7 +2609,8 @@ const B5 = (() => {
   }
   function finish(n, host, right) {
     const p = prog(n); p.done = true; addFriend(host, 30); setStars(G.stars + 100); saveG(); Mail.check();
-    reward(`第${n}课完成了！`, `答对 ${right} 题。得到 100 颗小星星，${NAMES[host][0]}的好感度 +30。`);
+    const L = Stage.lessonOf(n), book = n > 100 ? '一二三四'[Math.floor(n / 100) - 1] : '五', ln = n > 100 ? n % 100 : n;
+    reward(`第${book}册 第${ln}课《${L ? L.t : ''}》完成了！`, `答对 ${right} 题。得到 100 颗小星星，${NAMES[host][0]}的好感度 +30。`);
   }
   /* ---------- Lesson 4: the leaf shows which way the water flows ---------- */
   const TASKS = {};
@@ -2613,7 +2700,6 @@ const B5 = (() => {
     add(PEOPLE.caochong.obj.position.x, PEOPLE.caochong.obj.position.z, 3, '说话', 'Talk', () => lessonTalk(10, 'caochong', ['你好！我叫曹冲。有人送来了一头大象。', "Hi, I'm Cao Chong. Someone has sent us an elephant."], ['帮曹冲称大象', 'Help weigh the elephant']));
     if (P.w && P.w.stage === 1) add(P.elephant.position.x - 1.6, P.elephant.position.z, 3, '上船', 'Onto the boat', weighStep);
     if (P.w && P.w.stage === 3) add(P.pile.position.x + 2, P.pile.position.z, 3.4, '搬石头', 'Load a stone', weighStep);
-    add(P.ferryAt[0], P.ferryAt[1], 3, '坐渡船', 'Ferry', () => talk('caochong', [['渡船可以去别的岛：第一册到第四册的岛。', 'The ferry goes to the other islands: Books 1 to 4.'], ['那些岛还在建，快开放了！', 'They are still being built and will open soon!']]));
   }
   function blocked(x, z) {
     const s = P.stream; if (s && Math.abs(x - s.x) < s.w / 2 + .3 && z > s.z0 && z < s.z1) return true;
@@ -2669,7 +2755,7 @@ const Life = (() => {
     const list = SEASON_FRUIT[S.season];
     TREES.forEach((tr, i) => { if (i % 3 !== 0) return; const kind = list[(S.fruitTrees.length) % list.length], f = FRUITS[kind];
       const g = new THREE.Group(); tr.add(g); [[0, 3.0, 1.6], [-1.1, 2.6, 1.0], [1.0, 2.7, 1.1], [.4, 4.3, 1.1], [-.6, 3.9, 1.3]].forEach(([x, y, z]) => mk(sph(f.r / tr.scale.x * 1.4, 12), f.col, x, y, z, g));
-      S.fruitTrees.push({ tr, g, kind, i }); });
+      S.fruitTrees.push({ tr, g, kind, i }); tr.userData.fruitG = g; });
     // ideas borrowed from the three-architecture-scene skill: windows glow at night, morning mist, falling snow
     S.glow = [];
     const mask = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#000'; c.fillRect(0, 0, w, h); c.fillStyle = '#FFF'; c.fillRect(0, h * .75, w * .25, h * .25); });   // the window-glass cell of the city atlas
@@ -3130,7 +3216,7 @@ function storyRows(g) {
   const h = document.createElement('div'); h.style.cssText = 'grid-column:1/-1;font-weight:700;margin-top:8px'; h.innerHTML = '故事书 <small class="en-only">Storybook</small>'; g.appendChild(h);
   heard.forEach(n => {
     const L = Stage.lessonOf(n), d = document.createElement('div'); d.className = 'cell got';
-    d.innerHTML = `<div class="n">${n > 400 ? `四册 第${n - 400}课` : n > 300 ? `三册 第${n - 300}课` : n > 200 ? `二册 第${n - 200}课` : n > 100 ? `一册 第${n - 100}课` : `第${n}课`}</div><div class="c zh" style="font-size:15px">${L.t}</div><div class="c en-only">${L.en}</div>`;
+    d.innerHTML = `<div class="n">${n > 400 ? `四册 第${n - 400}课` : n > 300 ? `三册 第${n - 300}课` : n > 200 ? `二册 第${n - 200}课` : n > 100 ? `一册 第${n - 100}课` : `五册 第${n}课`}</div><div class="c zh" style="font-size:15px">${L.t}</div><div class="c en-only">${L.en}</div>`;
     d.onclick = () => { closeVeil('albumVeil'); if (n === 1) openStory(); else openStoryFrom(L); };
     g.appendChild(d);
   });
@@ -3774,7 +3860,7 @@ const Isle1 = (() => {
     PEOPLE.captain = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
     putIn(PEOPLE.captain, sp, -3.4, 27.6, 0);
     STATIC_MARK = false; B1.build(S); B1.spawn(); B1b.build(S); B1b.spawn(); B1c.build(S); B1c.spawn(); B1d.spawn(); B1e.build(S); B1e.spawn(); B1f.build(S); B1f.spawn();
-    mergeStatic(sp); W.scene = SP.town.scene; here_build = SP.town;
+    mergeStatic(sp); Heights.build(sp); W.scene = SP.town.scene; here_build = SP.town;
   }
   function ferry(x, z) {
     const g = new THREE.Group(); g.position.set(x, 0, z); g.userData.noMerge = 1; W.scene.add(g);
@@ -3796,11 +3882,11 @@ const Isle1 = (() => {
     const me = ME().obj.position;
     trees.forEach(tr => {   // fade trees that hide you from the camera, as in the town
       const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x;
-      const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; }
+      const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); }
     });
   }
   const sail = to => Ferry.go(to);
-  function nearbyTown(add) { add(-9, 41.2, 2.4, '坐船', 'Take the ferry', () => Ferry.choose('town'), 1); }
+  function nearbyTown(add) { add(-9, 41.2, 2.4, '坐船', 'Take the ferry', () => Ferry.choose('town'), 1); const c = PEOPLE.captain5; if (c && c.space === 'town') add(c.obj.position.x, c.obj.position.z, 2.6, '说话', 'Talk', () => talk('captain5', [['欢迎来到第五册岛！这里是小镇。', 'Welcome to the Book 5 island — the town!'], ['想去别的岛，就到码头尽头找我。', 'To visit another island, find me at the end of the dock.']])); }
   function nearby(add) {
     add(.6, 41, 2.8, '坐船', 'Take the ferry', () => Ferry.choose('isle1'), 1);
     add(Z.home[0], Z.home[1] + 4.8, 2.2, '进家', 'Go home', () => { UI.back = { space: 'isle1', x: Z.home[0], z: Z.home[1] + 5.4 }; goTo('home', 0, 3.6, Math.PI); });
@@ -4710,7 +4796,7 @@ const Ferry = (() => {
   const DEST = [['town', '第五册岛', 'the Book 5 island'], ['isle1', '第一册岛', 'the Book 1 island'], ['isle2', '第二册岛', 'the Book 2 island'], ['isle3', '第三册岛', 'the Book 3 island'], ['isle4', '第四册岛', 'the Book 4 island']];
   async function choose(from) {
     const opts = DEST.filter(d => d[0] !== from);
-    const c = await talk('captain', [['要坐船去哪个岛？', 'Which island would you like to sail to?']], opts.map(d => [d[1], d[2]]).concat([['不去了', 'Not now']]));
+    const c = await talk(captainOf(SP[from]) || 'captain', [['要坐船去哪个岛？', 'Which island would you like to sail to?']], opts.map(d => [d[1], d[2]]).concat([['不去了', 'Not now']]));
     if (c >= 0 && c < opts.length) go(opts[c][0]);
   }
   /* a real trip: walk aboard with the captain, sail out of this island's harbour, and come in to the next island
@@ -4732,14 +4818,14 @@ const Ferry = (() => {
   }
   async function go(to, quiet, first, onArrive) {
     const d = DEST.find(x => x[0] === to);
-    if (!quiet) { Sfx.play('whoosh'); showToast(`坐船去${d[1]}……`, `Sailing to ${d[2]}…`, 1800); }
+    if (!quiet) Sfx.play('whoosh');
     if (!quiet && !first && here.ferry) await depart(here);
     if (to === 'isle1' && !SP.isle1) Isle1.build();
     if (to === 'isle2' && !SP.isle2) Isle2.build();
     if (to === 'isle3' && !SP.isle3) Isle3.build();
     if (to === 'isle4' && !SP.isle4) Isle4.build();
     G.where = to; saveG();
-    const land = to === 'town' ? [-9, 39.5] : [0, 31.4], f = (first || !quiet) && SP[to] && SP[to].ferry; let home = null;
+    const land = to === 'town' ? [-9, 32.6] : [0, 31.4], f = (first || !quiet) && SP[to] && SP[to].ferry; let home = null;
     if (f) {   // straight from open water into this island's harbour, already on deck: no fade
       UI.ride = true; UI.busy = true; home = f.position.clone(); f.position.z = home.z + (first ? 24 : 55);
       here = SP[to]; putIn(ME(), here, f.position.x + DECK.me[0], f.position.z + DECK.me[1], Math.PI); onDeck(f, ME().obj.position, DECK.me); ME().target = null; snapCamera(); onEnter(to);
@@ -4838,7 +4924,7 @@ const Isle2 = (() => {
     PEOPLE.captain2 = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
     putIn(PEOPLE.captain2, sp, -3.4, 27.6, 0);
     STATIC_MARK = false; B2.build(S); B2.spawn(); B2b.spawn(); B2d.build(S); B2d.spawn(); B2e.build(S); B2e.spawn(); B2f.build(S); B2f.spawn();
-    mergeStatic(sp); W.scene = SP.town.scene; here_build = SP.town;
+    mergeStatic(sp); Heights.build(sp); W.scene = SP.town.scene; here_build = SP.town;
   }
   function phaseNow() {
     if (!sp) return; const ph = Life.current(); if (ph === phase) return; phase = ph; const p = Life.PH[ph], S = sp.scene;
@@ -4850,7 +4936,7 @@ const Isle2 = (() => {
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
     trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x, want = inFront ? 0 : 1;
-      if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; } });
+      if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     B2.tick(dt, t); B2d.tick(dt); B2e.tick(dt); B2f.tick(dt, t);
   }
   function nearby(add) {
@@ -5276,7 +5362,7 @@ const B2c = (() => {
   T[206] = async () => {
     chores(); Q.s6 = true;
     await talk('nainai2', [['你会做什么事？做给奶奶看看吧！', 'What can you do? Show Grandma!'], ['洗衣、收拾、打扫，还有……小猫好像饿了！', 'Washing clothes, tidying up, sweeping, and… the kitten looks hungry!']]);
-    Q.meow = setInterval(() => { if (here.name === 'home2' && !chores().cat) { sayIt('喵！', 1); gsap.fromTo(Q.cat.scale, { y: 1.1 }, { y: 1, duration: .3 }); } }, 6000);
+    let meows = 0; clearInterval(Q.meow); Q.meow = setInterval(() => { if (chores().cat || meows >= 3) { clearInterval(Q.meow); return; } if (here.name === 'home2' && !UI.talking) { meows++; sayIt('喵！', 1); gsap.fromTo(Q.cat.scale, { y: 1.1 }, { y: 1, duration: .3 }); } }, 15000);
   };
   async function wash() { const c = chores(); c.wash = (c.wash || 0) + 1; Sfx.play('pop'); sayIt('洗衣');
     for (let k = 0; k < 6; k++) { const b = mk(sph(.08 + Math.random() * .06, 8), new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: .9 }), -5.8 + (Math.random() - .5) * .8, .55, -1.4 + (Math.random() - .5) * .8, null, false); H().scene.add(b); gsap.to(b.position, { y: 1.4, duration: .9 }); gsap.to(b.material, { opacity: 0, duration: .9, onComplete: () => H().scene.remove(b) }); }
@@ -5751,7 +5837,7 @@ const Isle3 = (() => {
     PEOPLE.captain3 = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
     putIn(PEOPLE.captain3, sp, -3.4, 27.6, 0);
     STATIC_MARK = false; B3.build(S); B3.spawn(); B3b.build(S); B3b.spawn(); B3c.build(S); B3d.build(S); B3d.spawn(); B3e.build(S); B3e.spawn(); B3f.build(S); B3f.spawn();
-    mergeStatic(sp); W.scene = SP.town.scene; here_build = SP.town;
+    mergeStatic(sp); Heights.build(sp); W.scene = SP.town.scene; here_build = SP.town;
   }
   function phaseNow() {
     if (!sp) return; const ph = Life.current(); if (ph === phase) return; phase = ph; const p = Life.PH[ph], S = sp.scene;
@@ -5763,7 +5849,7 @@ const Isle3 = (() => {
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
     trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x, want = inFront ? 0 : 1;
-      if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; } });
+      if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     B3.tick(dt, t); B3b.tick(dt, t); B3c.tick(dt, t); B3d.tick(dt, t); B3e.tick(dt, t); B3f.tick(dt, t);
   }
   function nearby(add) {
@@ -6612,7 +6698,7 @@ const Isle4 = (() => {
     PEOPLE.captain4 = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
     putIn(PEOPLE.captain4, sp, -3.4, 27.6, 0);
     STATIC_MARK = false; B4.build(S); B4.spawn(); B4b.build(S); B4b.spawn(); B4c.build(S); B4d.build(S); B4d.spawn(); B4e.build(S); B4e.spawn(); B4f.build(S); B4f.spawn();
-    mergeStatic(sp); W.scene = SP.town.scene; here_build = SP.town;
+    mergeStatic(sp); Heights.build(sp); W.scene = SP.town.scene; here_build = SP.town;
   }
   const Q = {};
   function phaseNow() {
@@ -6625,7 +6711,7 @@ const Isle4 = (() => {
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
     trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x, want = inFront ? 0 : 1;
-      if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; } });
+      if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     // a hall between the camera and the player is cut away, so the Great Wall and the palace stay in view
     halls.forEach(h => { const p = h.g.position; h.g.visible = !(me.z < p.z - h.d / 2 - .5 && me.z > p.z - 16 && Math.abs(me.x - p.x) < h.w / 2 + 3); });
     B4.tick(dt, t); B4b.tick(dt, t); B4c.tick(dt, t); B4d.tick(dt, t); B4e.tick(dt, t); B4f.tick(dt, t);
