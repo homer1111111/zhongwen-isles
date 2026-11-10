@@ -1267,6 +1267,7 @@ function makeBird(col, x, y, z, parent) {
   return g;
 }
 function flyBird(g, t, k, vx) { g.rotation.y = vx >= 0 ? Math.PI / 2 : -Math.PI / 2; g.userData.wings.forEach(w => { w.rotation.z = w.userData.k * Math.sin(t * 14 + k) * .7; }); }
+function chatWith(k) { const c = (B5.CHATS || {})[k], line = c && c.length ? c[Math.floor(Math.random() * c.length)] : ['你好！', 'Hello!']; return talk(k, [line]); }
 function cuteFace(parent, x, y, z, r, ry = 0, o = {}) {
   const f = new THREE.Group(); f.position.set(x, y, z); f.rotation.y = ry; parent.add(f);
   const on = (px, py, k = 1) => Math.sqrt(Math.max(0, r * r - px * px - py * py)) * k;
@@ -1449,7 +1450,7 @@ function blocked(x, z, fromY) {
     if (z > STAIR.z0 && z < STAIR.z1 && !onStairs && Math.abs(townFloor(x, z) - fromY) > .6) return true;
     if (z > STAIR.z0 && z < STAIR.z1 && (Math.abs(x - STAIR.x0) < .45 || Math.abs(x - STAIR.x1) < .45)) return true;
     const p = sp.pond; if (Math.hypot(x - p.x, z - p.z) < p.r + .5) return true;
-  } else { const b = sp.box; if (x < b[0] || x > b[2] || z < b[1] || z > b[3]) return true; }
+  } else { const b = sp.box, onPier = /^isle\d$/.test(sp.name) && x > -1.9 && x < 1.9 && z > 28 && z < 44.6; if (!onPier && (x < b[0] || x > b[2] || z < b[1] || z > b[3])) return true; }
   return sp.solids.some(([a, b, c, d]) => x > a && x < c && z > b && z < d);
 }
 let stick = null, keys = {};
@@ -3644,10 +3645,10 @@ const Isle1 = (() => {
     [[-26, 18, 26, 18], [26, 18, 26, -20], [26, -20, -26, -20], [-26, -20, -26, 18], [0, 30, 0, 18], [0, 18, 0, 6], [18, -20, 18, -16.6], [-20, 18, -20, 12.6], [-14, -20, -14, -18]].forEach(a => path(...a));
     mk(cyl(6, 6, .08, 40), '#E2CDA0', Z.square[0], .1, Z.square[1], null, false);
     // the pier and the ferry back to the Book 5 island
-    for (let z = 29; z < 38; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
-    [[-2, 31], [2, 31], [-2, 35], [2, 35]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
     sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]);
-    sp.ferry = ferry(4.8, 34.5);
+    sp.ferry = ferry(4.8, 41.2);
     // landmarks
     home(Z.home[0], Z.home[1], '#FFF6E2', '#E8574A', '#8C5B3A'); sign('我的家', Z.home[0] + 5.6, Z.home[1] + 5.2, '#8C5B3A', 1.6);
     home(Z.neighbor[0], Z.neighbor[1], '#E9F0DC', '#4F86C6', '#6E4A2E', Math.PI);
@@ -3698,7 +3699,7 @@ const Isle1 = (() => {
   const sail = to => Ferry.go(to);
   function nearbyTown(add) { add(-9, 41.2, 2.4, '坐船', 'Take the ferry', () => Ferry.choose('town'), 1); }
   function nearby(add) {
-    add(0, 36.6, 2.6, '坐船', 'Take the ferry', () => Ferry.choose('isle1'), 1);
+    add(.6, 41, 2.8, '坐船', 'Take the ferry', () => Ferry.choose('isle1'), 1);
     add(Z.home[0], Z.home[1] + 4.8, 2.2, '进家', 'Go home', () => { UI.back = { space: 'isle1', x: Z.home[0], z: Z.home[1] + 5.4 }; goTo('home', 0, 3.6, Math.PI); });
     const c = PEOPLE.captain.obj.position; add(c.x, c.z, 2.8, '说话', 'Talk', () => talk('captain', [['欢迎来到第一册岛！', 'Welcome to the Book 1 island!'], ['岛上的新朋友，很快就会搬来。', 'New friends are moving to the island soon.']]));
     B1.nearby(add); B1b.nearby(add); B1c.nearby(add); B1d.nearby(add); B1e.nearby(add); B1f.nearby(add);
@@ -4618,8 +4619,10 @@ const Ferry = (() => {
     const f = sp.ferry, me = ME(), o = me.obj.position, home = f.position.clone(), ck = captainOf(sp), cap = ck && PEOPLE[ck];
     UI.busy = true; UI.ride = true; if (Sit.sitting) Sit.up();
     const cap0 = cap && { p: cap.obj.position.clone(), r: cap.obj.rotation.y };
-    const walkOn = (ch, at, dur) => { const p = ch.obj.position, d = new THREE.Vector3(); onDeck(f, d, at); ch.play('walk'); ch.obj.rotation.y = Math.atan2(d.x - p.x, d.z - p.z);
-      return new Promise(r => gsap.to(p, { x: d.x, y: d.y, z: d.z, duration: dur, ease: 'power1.inOut', onComplete: () => { ch.play('idle'); ch.obj.rotation.y = 0; r(); } })); };
+    const walkOn = async (ch, at, dur) => { const p = ch.obj.position, d = new THREE.Vector3(); onDeck(f, d, at); ch.play('walk');
+      if (sp.name !== 'town') { const w = new THREE.Vector3(1.2, sp.floor(1.2, d.z), d.z); ch.obj.rotation.y = Math.atan2(w.x - p.x, w.z - p.z); await new Promise(r => gsap.to(p, { x: w.x, y: w.y, z: w.z, duration: dur * .7, ease: 'power1.inOut', onComplete: r })); }
+      ch.obj.rotation.y = Math.atan2(d.x - p.x, d.z - p.z);
+      return new Promise(r => gsap.to(p, { x: d.x, y: d.y, z: d.z, duration: dur * (sp.name !== 'town' ? .45 : 1), ease: 'power1.inOut', onComplete: () => { ch.play('idle'); ch.obj.rotation.y = 0; r(); } })); };
     await Promise.all([walkOn(me, DECK.me, 1.4), cap ? walkOn(cap, DECK.cap, 1.2) : 0]);
     await new Promise(r => gsap.to(f.position, { z: home.z + 24, duration: 3, ease: 'power2.in', onUpdate: () => { onDeck(f, o, DECK.me); if (cap) onDeck(f, cap.obj.position, DECK.cap); }, onComplete: r }));
     f.position.copy(home); if (cap) { cap.obj.position.copy(cap0.p); cap.obj.rotation.y = cap0.r; }   // the ferry and its captain are back at this pier for next time
@@ -4633,7 +4636,7 @@ const Ferry = (() => {
     if (to === 'isle3' && !SP.isle3) Isle3.build();
     if (to === 'isle4' && !SP.isle4) Isle4.build();
     G.where = to; saveG();
-    const land = to === 'town' ? [-9, 39.5] : [0, 34], f = (first || !quiet) && SP[to] && SP[to].ferry; let home = null;
+    const land = to === 'town' ? [-9, 39.5] : [0, 40.6], f = (first || !quiet) && SP[to] && SP[to].ferry; let home = null;
     if (f) {   // straight from open water into this island's harbour, already on deck: no fade
       UI.ride = true; UI.busy = true; home = f.position.clone(); f.position.z = home.z + (first ? 24 : 55);
       here = SP[to]; putIn(ME(), here, f.position.x + DECK.me[0], f.position.z + DECK.me[1], Math.PI); onDeck(f, ME().obj.position, DECK.me); ME().target = null; snapCamera(); onEnter(to);
@@ -4709,10 +4712,10 @@ const Isle2 = (() => {
     // pavements in front of the buildings
     [[Z.school[0], Z.school[1] + 7.4, 16, 3], [Z.home[0], Z.home[1] + 6.4, 12, 3], [Z.bookstore[0], Z.bookstore[1] + 5.6, 13, 2.6], [Z.clinic[0], Z.clinic[1] + 5.6, 13, 2.6]].forEach(([x, z, w, d]) => plane(w, d, '#E9D9B4', x, Y.plaza, z));
     // the pier and the ferry
-    for (let z = 29; z < 38; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
-    [[-2, 31], [2, 31], [-2, 35], [2, 35]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
     sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]);
-    sp.ferry = Isle1.ferry(4.8, 34.5);
+    sp.ferry = Isle1.ferry(4.8, 41.2);
     // buildings
     building(Z.school[0], Z.school[1], 15, 9, 5.4, '#F6E9CF', '#4F86C6', '中文学校', '#C8453B');
     building(Z.home[0], Z.home[1], 10, 8, 4.6, '#FFF6E2', '#E8574A', '我的家', '#8C5B3A');
@@ -4747,7 +4750,7 @@ const Isle2 = (() => {
     B2.tick(dt, t); B2d.tick(dt); B2e.tick(dt); B2f.tick(dt, t);
   }
   function nearby(add) {
-    add(0, 36.6, 2.6, '坐船', 'Take the ferry', () => Ferry.choose('isle2'), 1);
+    add(.6, 41, 2.8, '坐船', 'Take the ferry', () => Ferry.choose('isle2'), 1);
     const c = PEOPLE.captain2.obj.position; add(c.x, c.z, 2.8, '说话', 'Talk', () => talk('captain2', [['欢迎来到第二册岛！', 'Welcome to the Book 2 island!'], ['这里有学校、书店、医院，还有长江黄河的模型。', 'There is a school, a bookstore, a hospital, and a model of the Yangtze and the Yellow River.']]));
     B2.nearby(add); B2b.nearby(add); B2d.nearby(add); B2e.nearby(add); B2f.nearby(add);
   }
@@ -5458,6 +5461,7 @@ const B2e = (() => {
   }
   function nearbyClinic(add) {
     add(0, 4.9, 2, '出去', 'Go out', leaveClinic, 1);
+    Object.keys(PEOPLE).forEach(k => { const c = PEOPLE[k]; if (c && c.obj && c.space === here.name && NAMES[k] && c !== ME()) add(c.obj.position.x, c.obj.position.z + 1.3, 2.4, '说话', 'Talk', () => chatWith(k)); });
     if (Q.s9 === 'temp') add(Q.nurseDesk.x, Q.nurseDesk.z, 2.2, '量体温', 'Take temperature', temp, 1);
     if (Q.s9 === 'check') add(Q.bed.x, Q.bed.z, 2.4, '让医生检查', 'See the doctor', check, 1);
     if (Q.s9 === 'meds') add(Q.window.x, Q.window.z, 2.2, '拿药', 'Get the medicine', meds, 1);
@@ -5618,9 +5622,9 @@ const Isle3 = (() => {
     plane(.3, 4.4, '#FFFFFF', cx - 6, Y.stripe, cz); plane(.3, 4.4, '#FFFFFF', cx + 6, Y.stripe, cz);
     [[Z.bookstore[0], Z.bookstore[1] + 5.4], [Z.clinic[0], Z.clinic[1] + 5.4]].forEach(([x, z]) => plane(11, 2.4, '#E9D9B4', x, Y.plaza, z));
     // pier and ferry
-    for (let z = 29; z < 38; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
-    [[-2, 31], [2, 31], [-2, 35], [2, 35]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
-    sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]); sp.ferry = Isle1.ferry(4.8, 34.5);
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
+    sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]); sp.ferry = Isle1.ferry(4.8, 41.2);
     // the places the lessons will fill in
     building(Z.bookstore[0], Z.bookstore[1], 10, 7, 4.4, '#F3E8D0', '#3F7F78', '书店', '#3F7F78');
     building(Z.clinic[0], Z.clinic[1], 10, 7, 4.4, '#FFFFFF', '#5E8FB8', '诊所', '#5E8FB8');
@@ -5659,7 +5663,7 @@ const Isle3 = (() => {
     B3.tick(dt, t); B3b.tick(dt, t); B3c.tick(dt, t); B3d.tick(dt, t); B3e.tick(dt, t); B3f.tick(dt, t);
   }
   function nearby(add) {
-    add(0, 36.6, 2.6, '坐船', 'Take the ferry', () => Ferry.choose('isle3'), 1);
+    add(.6, 41, 2.8, '坐船', 'Take the ferry', () => Ferry.choose('isle3'), 1);
     const c = PEOPLE.captain3.obj.position; add(c.x, c.z, 2.8, '说话', 'Talk', () => talk('captain3', [['欢迎来到第三册岛！', 'Welcome to the Book 3 island!'], ['这里有湖、有小河，还有一座古老的楼。', 'There is a lake, a little river, and an old tower here.']]));
     B3.nearby(add); B3b.nearby(add); B3c.nearby(add); B3d.nearby(add); B3e.nearby(add); B3f.nearby(add);
   }
@@ -5929,6 +5933,8 @@ const B3b = (() => {
   }
   function nearbyClinic(add) {
     add(0, 4.9, 2, '出去', 'Go out', leaveClinic, 1);
+    add(Q.desk.x, Q.desk.z, 2.4, '说话', 'Talk', () => talk('hushi3', [['你好！我是护士。看病要先排队，再量体温哦。', "Hello! I'm the nurse. To see the doctor, wait your turn, then take your temperature."]]));
+    const doc = PEOPLE.yisheng3; if (doc && doc.space === 'clinic3') add(doc.obj.position.x, doc.obj.position.z + 1.3, 2.4, '说话', 'Talk', () => B5.lessonTalk(303, 'yisheng3', ['你好，我是医生。', 'Hello, I am the doctor.'], ['去看病', 'See the doctor']));
     const at = { temp: Q.desk, check: Q.bed, meds: Q.window, shot: Q.room }[Q.s3];
     if (at) add(at.x, at.z, 2.2, { temp: '量体温', check: '让医生检查', meds: '拿药', shot: '去打针' }[Q.s3], { temp: 'Take temperature', check: 'Check-up', meds: 'Get medicine', shot: 'Injection' }[Q.s3], step, 1);
   }
@@ -6468,9 +6474,9 @@ const Isle4 = (() => {
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#8ACB68', Y.grass));
     plane(4, 22, '#E9D9B4', 0, Y.road, 22); plane(56, 3.6, '#E9D9B4', 0, Y.road, 9.2);
     // pier and ferry
-    for (let z = 29; z < 38; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
-    [[-2, 31], [2, 31], [-2, 35], [2, 35]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
-    sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]); sp.ferry = Isle1.ferry(4.8, 34.5);
+    for (let z = 29; z < 44.6; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', 0, -.06, z);   // top at ground level: you walk on the boards, not in them
+    [[-2, 38.6], [2, 38.6], [-2, 44.2], [2, 44.2]].forEach(([x, z]) => mk(cyl(.18, .18, 1.4, 8), '#8A6A4A', x, .2, z));
+    sp.solids.push([-40, 33, -2, 50], [2, 33, 40, 50], [2.6, 30.6, 7, 38.4]); sp.ferry = Isle1.ferry(4.8, 41.2);
     // post office
     const po = new THREE.Group(); po.position.set(Z.post[0], 0, Z.post[1]); S.add(po); mk(rbox(8, 4, 6, .3), '#E9F2D8', 0, 2, 0, po); mk(rbox(8.6, .5, 6.6, .12), '#3F7F4A', 0, 4.25, 0, po); mk(rbox(1.8, 2.9, .3, .14), '#8C5B3A', 0, 1.45, 3.05, po);
     const ps = signBoard('邮局', 1.8, .65, '#3F7F4A'); ps.position.set(0, 3.5, 3.2); po.add(ps); sp.solids.push([Z.post[0] - 4.2, Z.post[1] - 3.2, Z.post[0] + 4.2, Z.post[1] + 3.2]);
@@ -6521,7 +6527,7 @@ const Isle4 = (() => {
     B4.tick(dt, t); B4b.tick(dt, t); B4c.tick(dt, t); B4d.tick(dt, t); B4e.tick(dt, t); B4f.tick(dt, t);
   }
   function nearby(add) {
-    add(0, 36.6, 2.6, '坐船', 'Take the ferry', () => Ferry.choose('isle4'), 1);
+    add(.6, 41, 2.8, '坐船', 'Take the ferry', () => Ferry.choose('isle4'), 1);
     const c = PEOPLE.captain4.obj.position; add(c.x, c.z, 2.8, '说话', 'Talk', () => talk('captain4', [['欢迎来到第四册岛！', 'Welcome to the Book 4 island!'], ['这里有长城、故宫、颐和园，还有凡尔赛宫呢！', 'There is the Great Wall, the Forbidden City, the Summer Palace — and even Versailles!']]));
     B4.nearby(add); B4b.nearby(add); B4c.nearby(add); B4d.nearby(add); B4e.nearby(add); B4f.nearby(add);
   }
