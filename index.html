@@ -1471,12 +1471,15 @@ function bindInput() {
     if (h) { ME().target = h.point.clone(); ME().stuck = 0; Sfx.play('tap'); }
   };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', () => { stick = null; st.classList.add('hidden'); });
+  window.addEventListener('pointerup', e => { if (stick && e.pointerId === stick.id && e.target !== cv) { stick = null; st.classList.add('hidden'); } });
+  window.addEventListener('pointercancel', e => { if (stick && e.pointerId === stick.id) { stick = null; st.classList.add('hidden'); } });
+  window.addEventListener('blur', () => { stick = null; keys = {}; st.classList.add('hidden'); });
   window.addEventListener('keydown', e => { keys[e.key] = true; if ((e.key === ' ' || e.key === 'Enter') && !$('act').classList.contains('hidden') && !UI.talking) { e.preventDefault(); $('act').click(); } });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
 }
 function moveMe(dt) {
   const me = ME(); let dx = 0, dz = 0;
-  if (!UI.busy) {
+  if (!UI.busy && !UI.talking) {
     if (stick && stick.drag) { dx = stick.dx; dz = stick.dy; }
     if (keys.ArrowLeft || keys.a) dx -= 1; if (keys.ArrowRight || keys.d) dx += 1; if (keys.ArrowUp || keys.w) dz -= 1; if (keys.ArrowDown || keys.s) dz += 1;
     if ((dx || dz) && me.target) me.target = null;
@@ -1490,7 +1493,7 @@ function moveMe(dt) {
     if (me.target && Math.hypot(o.x - ox, o.z - oz) < sp * .2) { me.stuck = (me.stuck || 0) + dt; if (me.stuck > .5) me.target = null; }
     const want = Math.atan2(dx, dz); let d = want - me.obj.rotation.y; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; me.obj.rotation.y += d * Math.min(1, dt * 12);
     me.play(m > .85 ? 'sprint' : 'walk');
-  } else if (me.cur && /walk|sprint/.test(me.cur.getClip().name)) me.play('idle');
+  } else if (me.cur && /walk|sprint|running/i.test(me.cur.getClip().name)) me.play('idle');   // the clips are named Walking_A and Running_A
   const fy = here.floor(o.x, o.z); o.y += (fy - o.y) * Math.min(1, dt * 14);
 }
 let lookAt = new THREE.Vector3();
