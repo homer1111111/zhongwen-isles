@@ -791,9 +791,9 @@ const Guide = (() => {
   /* everyone here with a lesson still open: '!' = a story or an activity to do, '?' = questions to answer */
   function open() {
     const out = {};
-    Object.keys(B5.HOSTS).map(Number).sort((a, b) => a - b).forEach(n => { const h = B5.HOSTS[n], c = PEOPLE[h]; if (!c || c.space !== here.name || out[h] || (n < 100 && (n < 2 || G.quest < 9))) return; const p = B5.prog(n); if (!p.done) out[h] = p.task ? '?' : '!'; });
-    const DOORS = { 201: ['isle2', 16, -8.4], 202: ['isle2', 16, -8.4], 205: ['isle2', -18, -6.6], 206: ['isle2', -18, -6.6] };   // lessons whose host waits indoors: the mark hangs over that door
-    Object.keys(DOORS).forEach(n => { const [isle, x, z] = DOORS[n], p = B5.prog(+n), k = '@' + x + ',' + z; if (here.name !== isle || p.done || out[k]) return; out[k] = p.task ? '?' : '!'; });
+    const DOORS = { 2: ['town', 14, 28], 201: ['isle2', 16, -8.4], 202: ['isle2', 16, -8.4], 205: ['isle2', -18, -6.6], 206: ['isle2', -18, -6.6] };   // lessons that start at a place rather than at a person (a door, or the camp site): the mark hangs there
+    Object.keys(B5.HOSTS).map(Number).sort((a, b) => a - b).forEach(n => { const h = B5.HOSTS[n], c = PEOPLE[h]; if (DOORS[n] || !c || c.space !== here.name || out[h] || (n < 100 && (n < 2 || G.quest < 9))) return; const p = B5.prog(n); if (!p.done) out[h] = p.task ? '?' : '!'; });
+    Object.keys(DOORS).forEach(n => { const [isle, x, z] = DOORS[n], p = B5.prog(+n), k = '@' + x + ',' + z; if (here.name !== isle || p.done || out[k] || (+n < 100 && G.quest < 9)) return; out[k] = p.task ? '?' : '!'; });
     return out;
   }
   function make(ch) {
@@ -1741,6 +1741,7 @@ const Players = {
   active: () => store.get('zhongwen-town.active', ''),
   list() { let L = store.get('zhongwen-town.players', null); if (!L) { L = []; const old = store.get('zhongwen-town.v1', null); if (old && old.look) L.push({ id: '', name: old.name || '小星', shirt: old.look.shirt }); store.set('zhongwen-town.players', L); } return L; },
   use(id) { store.set('zhongwen-town.active', id); G_KEY = Players.key(id); Object.keys(G).forEach(k => delete G[k]); Object.assign(G, G0(), store.get(G_KEY, {})); document.body.classList.toggle('en', G.en !== false); const b = document.getElementById('enBtn'); if (b) b.setAttribute('aria-pressed', G.en !== false); },
+  remove(id) { store.set('zhongwen-town.players', Players.list().filter(p => p.id !== id)); try { localStorage.removeItem(Players.key(id)); } catch (e) { } if (Players.active() === id) store.set('zhongwen-town.active', ''); },
   add() { const id = 'p' + Date.now().toString(36), L = Players.list(); L.push({ id, name: '', shirt: 0 }); store.set('zhongwen-town.players', L); return id; },
   update() { const L = Players.list(), id = Players.active(); let p = L.find(x => x.id === id); if (!p) { p = { id }; L.push(p); } p.name = G.name; p.shirt = G.look ? G.look.shirt : 0; store.set('zhongwen-town.players', L); }
 };
@@ -1789,6 +1790,16 @@ function addFriend(who, n) { G.friend[who] = Math.min(100, (G.friend[who] || 0) 
 function showToast(zh, en, ms = 2400) { const t = $('toast'); t.innerHTML = `<span class="zh">${zh}</span>${en ? `<span class="en-only"><br>${en}</span>` : ''}`; t.classList.remove('hidden'); clearTimeout(showToast.t); showToast.t = setTimeout(() => t.classList.add('hidden'), ms); }
 
 /* ---------- talking ---------- */
+/* while someone is talking, a tap anywhere on the scene does what a tap on the talk box does: show the whole line, then go on.
+   (When there are answers to choose from, you still have to pick one.) */
+{ let down = null;
+  document.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; }, true);
+  document.addEventListener('pointerup', e => {
+    const d = down; down = null; if (!d || Math.hypot(e.clientX - d[0], e.clientY - d[1]) > 12) return;
+    if (!UI.talking || $('talk').classList.contains('hidden') || $('choices').children.length) return;
+    if (e.target.closest && e.target.closest('#talk, button, .veil, input')) return;
+    const tb = $('talkBox'), say = $('say'); if (tb.onclick) tb.onclick(); else if (say.onclick) say.onclick();
+  }, true); }
 function talk(who, lines, choices) {
   UI.talking = true; UI.busy = true; $('act').classList.add('hidden');
   const box = $('talk'), say = $('say'), en = $('sayEn'), ch = $('choices'), more = $('more');
@@ -2217,8 +2228,21 @@ function showPicker(list) {
   Intro.css();   // the picker shares the opening's styles
   $('title').querySelectorAll('.sub,#lookBox,#nameBox').forEach(e => e.classList.add('hidden'));
   let pk = $('picker'); if (!pk) { pk = document.createElement('div'); pk.id = 'picker'; $('title').appendChild(pk); }
-  pk.innerHTML = `<p class="sub" style="display:block">谁要来玩？<span class="en-only"><br>Who is playing?</span></p><div class="pk-grid">${list.map(p => `<button class="pk-card" data-id="${p.id}"><span class="pk-face" style="background:${SHIRTS[p.shirt || 0] || '#F3C24F'}">${(p.name || '？').slice(0, 1)}</span><span class="pk-name">${p.name || '新朋友'}</span></button>`).join('')}<button class="pk-card pk-new" data-new="1"><span class="pk-face">＋</span><span class="pk-name">新玩家<span class="en-only"><br>New player</span></span></button></div>`;
+  pk.innerHTML = `<p class="sub" style="display:block">谁要来玩？<span class="en-only"><br>Who is playing?</span></p><div class="pk-grid">${list.map(p => `<button class="pk-card" data-id="${p.id}"><span class="pk-face" style="background:${SHIRTS[p.shirt || 0] || '#F3C24F'}">${(p.name || '？').slice(0, 1)}</span><span class="pk-name">${p.name || '新朋友'}</span><span style="display:block;font-size:14px;color:#8A7A5A">★ ${(store.get(Players.key(p.id), {}).stars) || 0}</span></button>`).join('')}<button class="pk-card pk-new" data-new="1"><span class="pk-face">＋</span><span class="pk-name">新玩家<span class="en-only"><br>New player</span></span></button></div>`;
+  // deleting a player: press "Delete a player", tap the card, then tap it once more to confirm
+  const del = document.createElement('button'); del.className = 'pk-del'; del.style.cssText = 'display:block;margin:14px auto 0;padding:6px 14px;border:0;border-radius:999px;background:transparent;color:#5A6E66;font:inherit;font-size:15px;text-decoration:underline;cursor:pointer';
+  const delText = on => { del.innerHTML = on ? '不删除了<span class="en-only"> · Cancel</span>' : '删除玩家<span class="en-only"> · Delete a player</span>'; };
+  let deleting = false, armed = null; delText(false); pk.appendChild(del);
+  const hint = document.createElement('p'); hint.style.cssText = 'margin:6px 0 0;min-height:22px;text-align:center;color:#B8332A;font-size:15px'; pk.appendChild(hint);
+  del.onclick = () => { deleting = !deleting; armed = null; delText(deleting); pk.querySelectorAll('.pk-card[data-id]').forEach(c => { c.style.outline = deleting ? '3px dashed #D9533F' : ''; });
+    hint.innerHTML = deleting ? '点一下要删除的玩家。<span class="en-only"><br>Tap the player to delete.</span>' : ''; };
   pk.querySelectorAll('.pk-card').forEach(b => b.onclick = () => {
+    if (deleting) {
+      if (b.dataset.new) return;
+      if (armed !== b) { armed = b; pk.querySelectorAll('.pk-card[data-id]').forEach(c => { c.style.background = c === b ? '#FBD9D2' : ''; }); const nm = b.querySelector('.pk-name').textContent;
+        hint.innerHTML = `再点一次，就会删除「${nm}」和所有进度。<span class="en-only"><br>Tap once more to delete “${nm}” and all of its progress.</span>`; return; }
+      Players.remove(b.dataset.id); const rest = Players.list().filter(p => p.name); pk.remove(); if (rest.length) showPicker(rest); else Intro.run(); return;
+    }
     Sfx.init(); Sfx.play('pop'); pk.remove();
     if (b.dataset.new) { const id = Players.add(); Players.use(id); Intro.run(); return; }
     Players.use(b.dataset.id); if (G.look && typeof G.look === 'object') readyThen(() => startGame()); else Intro.run();
@@ -2608,7 +2632,7 @@ const B5 = (() => {
     P.grapes = [];
     for (let i = 0; i < 6; i++) { const gx = VX - 2.4 + i * .95, gz = VZ + (i % 2 ? .5 : -.5), g = new THREE.Group(); g.position.set(gx, 3.9, gz); S.add(g); for (let k = 0; k < 9; k++) mk(sph(.13, 8), '#7B4FA8', (k % 3 - 1) * .2, -Math.floor(k / 3) * .22, (k % 2) * .08, g); P.grapes.push(g); }
     sp.solids.push([VX - 3.3, VZ - 1.8, VX - 2.7, VZ + 1.8], [VX + 2.7, VZ - 1.8, VX + 3.3, VZ + 1.8]);
-    const vs = signBoard('葡萄园', 2.2, .6, '#7B4FA8'); vs.position.set(VX, 1.4, VZ + 3.4); S.add(vs); mk(cyl(.06, .06, 1.4, 6), '#8A6A4A', VX, .7, VZ + 3.4);
+    const vs = signBoard('葡萄园', 2.2, .6, '#7B4FA8'); vs.position.set(VX + 4.4, 1.4, VZ + 3.4); S.add(vs); mk(cyl(.06, .06, 1.4, 6), '#8A6A4A', VX + 4.4, .7, VZ + 3.4);   // to one side: it used to stand between the camera and the fox
     // the sea and the dock for Lesson 10 and the ferry
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, 80), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, transparent: true, opacity: .95 }));
     sea.rotation.x = -Math.PI / 2; sea.position.set(0, .03, 72); S.add(sea); P.sea = sea;
@@ -2625,7 +2649,7 @@ const B5 = (() => {
     P.stones = new THREE.Group(); boat.add(P.stones);
     const pile = new THREE.Group(); pile.position.set(DX - 6.2, 0, 31.3); S.add(pile); P.pile = pile;
     for (let i = 0; i < 14; i++) mk(new THREE.DodecahedronGeometry(.42, 0), '#9A968C', (i % 4 - 1.5) * .8, .4 + Math.floor(i / 8) * .6, (Math.floor(i / 4) % 2) * .8, pile);
-    const ds = signBoard('码头', 1.8, .6, '#4F86C6'); ds.position.set(DX - 2.8, 1.6, 30.6); S.add(ds); mk(cyl(.06, .06, 1.6, 6), '#8A6A4A', DX - 2.8, .8, 30.6);
+    const ds = signBoard('码头', 1.8, .6, '#4F86C6'); ds.position.set(DX + 3.2, 1.6, 30.6); S.add(ds); mk(cyl(.06, .06, 1.6, 6), '#8A6A4A', DX + 3.2, .8, 30.6);   // on the other side of the pier: it used to hide Cao Chong, who waits on this side
     const fs = signBoard('渡船', 1.8, .6, '#3F7F78'); fs.position.set(DX + 2.7, 1.8, 41); S.add(fs);
     P.ferryAt = [DX, 40.6];
     // the elephant and the neighbours
@@ -6131,8 +6155,13 @@ const B3 = (() => {
   async function finish() { Q.step = null; await talk('warden', [['人来车往很通畅！你管得真好！', 'People and cars come and go smoothly! You ran it so well!']]); done(301, '跟交通员叔叔说「回答问题」', 'Talk to the traffic warden to answer questions.'); }
   function tick(dt) {
     let left = 0;
+    // cars always give way to a person: they wait at the stop line while you are on the crossing, and brake when you are in the road ahead of them
+    const me = ME().obj.position, mine = ME().space === 'isle3', [kx, kz] = Isle3.Z.cross, onCross = mine && Math.abs(me.x - kx) < 5.4 && Math.abs(me.z - kz) < 2.6;
     Q.cars.forEach(c => { if (c.gone) return; left++; const p = c.g.position, ahead = c.dir > 0 ? p.x < c.stop : p.x > c.stop;
-      if (Q.carGreen || !ahead) { p.x += c.dir * 9 * dt; if (Math.abs(p.x - Isle3.Z.cross[0]) > 26) { c.gone = true; I().scene.remove(c.g); } }
+      c.held = mine && Math.abs(me.z - p.z) < 1.9 && (me.x - p.x) * c.dir > 0 && Math.abs(me.x - p.x) < 5.5   // you are in the road ahead
+        || Q.cars.some(o => o !== c && !o.gone && o.held && Math.abs(o.g.position.z - p.z) < .5 && (o.g.position.x - p.x) * c.dir > 0 && Math.abs(o.g.position.x - p.x) < 4.2);   // or the car in front has stopped for you
+      if (c.held) return;
+      if ((Q.carGreen && !onCross) || !ahead) { p.x += c.dir * 9 * dt; if (Math.abs(p.x - Isle3.Z.cross[0]) > 26) { c.gone = true; I().scene.remove(c.g); } }
       else { const d = c.stop - p.x; if (Math.abs(d) > .05) p.x += Math.sign(d) * Math.min(Math.abs(d), 9 * dt); } });
     if (Q.step != null && REQ[Q.step] && REQ[Q.step][0] === 'cars' && Q.cars.length && Q.cars.every(c => c.gone)) { Q.cars = []; Sfx.play('found'); stepDone(); }
     if (Q.kidsWait && !Q.carGreen && !Q.crossing) crossKids();
