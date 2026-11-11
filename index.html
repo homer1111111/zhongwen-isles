@@ -1310,6 +1310,11 @@ function walkTo(ch, x, z, speed = 3.6) {
     gsap.to(o.position, { x, z, duration: d / speed, ease: 'none', onUpdate: () => { o.position.y = sp.floor(o.position.x, o.position.z); }, onComplete: () => { ch.play('idle'); res(); } });
   });
 }
+/* while two people talk the camera stands to one side: a tree standing between it and them fades as well */
+function treeHides(p, sc) {
+  if (!UI.talkCam) return false; const a = camera.position, b = ME().obj.position, vx = b.x - a.x, vz = b.z - a.z, L = vx * vx + vz * vz || 1;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.z - a.z) * vz) / L)); return Math.hypot(p.x - (a.x + vx * t), p.z - (a.z + vz * t)) < 2.4 * sc;
+}
 function faceTo(ch, x, z) { const o = ch.obj; let d = Math.atan2(x - o.position.x, z - o.position.z) - o.rotation.y; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; gsap.to(o.rotation, { y: o.rotation.y + d, duration: .3 }); }
 
 /* ---------- the town (two levels joined by stairs) ---------- */
@@ -1708,7 +1713,7 @@ function loop() {
   const la = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).look.clone() : fo.clone().add(new THREE.Vector3(0, storyBox ? .2 : 2.4, -6)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt);
   if (here.sky) here.sky.g.position.copy(camera.position);
   if (here.name === 'town') TREES.forEach(tr => {   // fade trees that hide you from the camera
-    const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && (Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5 || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x);
+    const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && (Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5 || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x) || treeHides(p, tr.scale.x);
     const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); }
   });
   const cutList = here === SP.town ? CUT : here.cut;   // buildings on the town and on the Book 1–3 islands step aside the same way
@@ -3971,7 +3976,7 @@ const Isle1 = (() => {
     B1.tick(dt, t); B1b.tick(dt, t); B1c.tick(dt, t); B1f.tick(dt);
     const me = ME().obj.position;
     trees.forEach(tr => {   // fade trees that hide you from the camera, as in the town
-      const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x;
+      const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x || treeHides(p, tr.scale.x);
       const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); }
     });
   }
@@ -5033,7 +5038,7 @@ const Isle2 = (() => {
     if (t - last > 3) { last = t; phaseNow(); }
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
-    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x, want = inFront ? 0 : 1;
+    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x || treeHides(p, tr.scale.x), want = inFront ? 0 : 1;
       if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     B2.tick(dt, t); B2d.tick(dt); B2e.tick(dt); B2f.tick(dt, t);
   }
@@ -6050,7 +6055,7 @@ const Isle3 = (() => {
     if (t - last > 3) { last = t; phaseNow(); }
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
-    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x, want = inFront ? 0 : 1;
+    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x || treeHides(p, tr.scale.x), want = inFront ? 0 : 1;
       if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     B3.tick(dt, t); B3b.tick(dt, t); B3c.tick(dt, t); B3d.tick(dt, t); B3e.tick(dt, t); B3f.tick(dt, t);
   }
@@ -6917,7 +6922,7 @@ const Isle4 = (() => {
     if (t - last > 3) { last = t; phaseNow(); }
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
-    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x, want = inFront ? 0 : 1;
+    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x || treeHides(p, tr.scale.x), want = inFront ? 0 : 1;
       if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     // a hall between the camera and the player is cut away, so the Great Wall and the palace stay in view
     halls.forEach(h => { const p = h.g.position; h.g.visible = !(me.z < p.z - h.d / 2 - .5 && me.z > p.z - 16 && Math.abs(me.x - p.x) < h.w / 2 + 3); });
@@ -7257,8 +7262,8 @@ const B4c = (() => {
     mk(new THREE.PlaneGeometry(24, 3), '#6FB7DA', sx, .1, sz, null, false).rotation.x = -Math.PI / 2; I().solids.push([sx - 12, sz - 1.5, sx + 12, sz + 1.5]);
     [[-1.4, -1.2], [1.2, 1.1], [0, 0]].forEach(([dx, dz]) => mk(sph(.25, 8), '#9A9A92', sx + dx * .3, .14, sz + dz, null, false));
     Q.cow = new THREE.Group(); Q.cow.position.set(sx - 3.4, 0, sz - 2.4); Q.cow.rotation.y = -Math.PI / 3; S.add(Q.cow); cow(Q.cow); prop('laoniu', Q.cow);
-    const tr = new THREE.Group(); tr.position.set(sx + 3.4, 0, sz - 2.6); S.add(tr); mk(cyl(.2, .3, 2.6, 8), '#8A6A4A', 0, 1.3, 0, tr); mk(sph(1.2, 12), '#5EA94E', 0, 3, 0, tr); I().solids.push([sx + 3, sz - 3, sx + 3.8, sz - 2.2]);
-    Q.sq = new THREE.Group(); Q.sq.position.set(sx + 3.4, 2, sz - 1.7); S.add(Q.sq); squirrel(Q.sq); prop('songshu', Q.sq);
+    const tr = new THREE.Group(); tr.position.set(sx + 6.6, 0, sz - 2.6); S.add(tr); mk(cyl(.2, .3, 2.6, 8), '#8A6A4A', 0, 1.3, 0, tr); mk(sph(1.2, 12), '#5EA94E', 0, 3, 0, tr); I().solids.push([sx + 6.2, sz - 3, sx + 7, sz - 2.2]);   // further east: it used to hide the bench where Grandma's family sits in the sun
+    Q.sq = new THREE.Group(); Q.sq.position.set(sx + 6.6, 2, sz - 1.7); S.add(Q.sq); squirrel(Q.sq); prop('songshu', Q.sq);
     Q.colt = new THREE.Group(); Q.colt.position.set(-31, 0, 21); S.add(Q.colt); horse(Q.colt, .7, '#C98A5A'); Q.colt.rotation.y = -.6; prop('xiaoma', Q.colt);
     Q.mare = new THREE.Group(); Q.mare.position.set(-33, 0, 19.6); S.add(Q.mare); horse(Q.mare, 1, '#9A6A3A'); Q.mare.rotation.y = -.6; prop('mama5', Q.mare);
     const st = new THREE.Group(); st.position.set(-33.4, 0, 16.6); S.add(st); mk(rbox(3, 2.2, 2, .1), '#B98A5A', 0, 1.1, 0, st); const rf = mk(new THREE.ConeGeometry(2.4, 1.2, 4), '#8C5B3A', 0, 2.8, 0, st); rf.rotation.y = Math.PI / 4; I().solids.push([-35, 15.5, -31.8, 17.7]);
