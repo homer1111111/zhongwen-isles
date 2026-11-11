@@ -800,15 +800,33 @@ const Guide = (() => {
     const t = canvasTex(96, 96, (c, w, h) => { c.fillStyle = ch === '?' ? '#5EA94E' : '#F3C24F'; c.beginPath(); c.arc(48, 48, 44, 0, 7); c.fill(); c.fillStyle = '#FFFFFF'; c.font = '700 66px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ch, 48, 52); });
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t })); s.scale.set(.8, .8, 1); return s;
   }
+  /* a name tag over every person's head (people only: animals and things carry none); the "!" floats above it */
+  const tags = {};
+  function person(c) { if (c.__person == null) { let skin = false; c.obj.traverse(o => { if (o.isSkinnedMesh) skin = true; }); c.__person = skin; } return c.__person; }
+  const NAME_PY = {"一串水珠": "yí chuàn shuǐzhū", "一群猴子": "yì qún hóuzi", "乌龟": "wūguī", "云云": "Yúnyun", "交通员叔叔": "jiāotōngyuán shūshu", "兔子": "tùzi", "养蜂爷爷": "yǎngfēng yéye", "农夫伯伯": "nóngfū bóbo", "农民伯伯": "nóngmín bóbo", "农民爷爷": "nóngmín yéye", "医生": "yīshēng", "司机叔叔": "sījī shūshu", "司马光": "Sīmǎ Guāng", "同学": "tóngxué", "哥哥": "gēge", "大家": "dàjiā", "大猴子": "dà hóuzi", "奶奶": "nǎinai", "妈妈": "māma", "妹妹": "mèimei", "姐姐": "jiějie", "导游阿姨": "dǎoyóu āyí", "小兔": "xiǎo tù", "小明": "Xiǎomíng", "小朋友": "xiǎopéngyǒu", "小朋友们": "xiǎopéngyǒumen", "小松鼠": "xiǎo sōngshǔ", "小水泡": "xiǎo shuǐpào", "小水滴": "xiǎo shuǐdī", "小狗": "xiǎo gǒu", "小猫": "xiǎo māo", "小猴子": "xiǎo hóuzi", "小瓦特": "Xiǎo Wǎtè", "小芳": "Xiǎofāng", "小草": "xiǎo cǎo", "小蝌蚪": "xiǎo kēdǒu", "小雨": "Xiǎoyǔ", "小马": "xiǎo mǎ", "小鸟": "xiǎo niǎo", "店员": "diànyuán", "弟弟": "dìdi", "张僧繇": "Zhāng Sēngyóu", "张衡": "Zhāng Héng", "护士": "hùshi", "指挥员": "zhǐhuīyuán", "收银员": "shōuyínyuán", "放羊的孩子": "fàng yáng de háizi", "旁白": "pángbái", "曹操": "Cáo Cāo", "有人": "yǒu rén", "李时珍": "Lǐ Shízhēn", "李老师": "Lǐ lǎoshī", "杨利伟": "Yáng Lìwěi", "果树": "guǒshù", "爷爷": "yéye", "爸爸": "bàba", "猫妈妈": "māo māma", "王老师": "Wáng lǎoshī", "王阿姨": "Wáng āyí", "班长": "bānzhǎng", "石匠爷爷": "shíjiang yéye", "禾苗": "hémiáo", "种子": "zhǒngzi", "老爷爷": "lǎo yéye", "老牛": "lǎo niú", "自然老师": "zìrán lǎoshī", "船长": "chuánzhǎng", "花儿": "huār", "蔡伦": "Cài Lún", "警察叔叔": "jǐngchá shūshu", "讲解员": "jiǎngjiěyuán", "贝聿铭": "Bèi Yùmíng", "邮递员叔叔": "yóudìyuán shūshu", "邻居阿姨": "línjū āyí", "问问": "Wènwen", "阿姨": "āyí", "青蛙": "qīngwā", "馆长": "guǎnzhǎng", "马妈妈": "mǎ māma", "黄莺": "huángyīng"};   // pinyin shown over each name
+  function tag(name) {
+    const py = NAME_PY[name] || '', W = Math.max(Math.max(2, name.length) * 56, py.length * 17) + 40, H = py ? 118 : 84;
+    const t = canvasTex(W, H, (c, w, h) => { c.fillStyle = 'rgba(255,250,238,.92)'; const r = 30; c.beginPath(); c.moveTo(r, 4); c.arcTo(w - 4, 4, w - 4, h - 4, r); c.arcTo(w - 4, h - 4, 4, h - 4, r); c.arcTo(4, h - 4, 4, 4, r); c.arcTo(4, 4, w - 4, 4, r); c.closePath(); c.fill(); c.strokeStyle = '#E8D9B8'; c.lineWidth = 4; c.stroke();
+      c.textAlign = 'center'; c.textBaseline = 'middle'; if (py) { c.fillStyle = '#6B5E4A'; c.font = '600 30px sans-serif'; c.fillText(py, w / 2, 26); }
+      c.fillStyle = '#3A3226'; c.font = `700 52px ${KAI}`; c.fillText(name, w / 2, h - 39); });
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t })); sp.scale.set(W / 84 * .56, H / 84 * .56, 1); return sp;
+  }
+  function nameTags() {
+    Object.values(tags).forEach(m => { m.visible = false; });
+    if (UI.talking) return;
+    Object.entries(PEOPLE).forEach(([k, c]) => { if (k === 'me' || !c || !c.obj || !NAMES[k] || c.space !== here.name || !c.obj.visible || !c.obj.parent || !person(c)) return;
+      const m = tags[k] || (tags[k] = tag(NAMES[k][0])); if (m.parent !== here.scene) here.scene.add(m);
+      const p = c.obj.position; m.visible = true; m.position.set(p.x, p.y + 2.95 * c.obj.scale.y, p.z); });
+  }
   function tick(dt) {
     tt += dt; if (tt - last > 1.2) { last = tt; list = open(); }
-    Object.values(marks).forEach(m => { m.visible = false; });
+    Object.values(marks).forEach(m => { m.visible = false; }); nameTags();
     if (UI.talking) return;
     Object.entries(list).forEach(([h, ch]) => {
       if (h[0] === '@') { const [x, z] = h.slice(1).split(',').map(Number), m = marks[h + ch] || (marks[h + ch] = make(ch)); if (m.parent !== here.scene) here.scene.add(m); m.visible = true; m.position.set(x, 4.4 + Math.sin(tt * 3) * .12, z); return; }
       const c = PEOPLE[h]; if (!c || c.space !== here.name || !c.obj.visible) return;
       const m = marks[h + ch] || (marks[h + ch] = make(ch)); if (m.parent !== here.scene) here.scene.add(m);
-      const p = c.obj.position; m.visible = true; m.position.set(p.x, p.y + 2.6 + Math.sin(tt * 3) * .12, p.z); });
+      const p = c.obj.position; m.visible = true; m.position.set(p.x, p.y + (person(c) ? 2.95 * c.obj.scale.y + .95 : 2.6) + Math.sin(tt * 3) * .12, p.z); });
   }
   function nextName() { const h = pick(); return h && NAMES[h] ? NAMES[h] : null; }
   return { tick, nextName };
@@ -5505,18 +5523,29 @@ const B2d = (() => {
     Q.heads = [[-3.4 - 1.2, cz + 3.4 + 1.2], [3.4 + 1.2, cz + 3.4 + 1.2], [3.4 + 1.2, cz - 3.4 - 1.2], [-3.4 - 1.2, cz - 3.4 - 1.2]].map(([x, z]) => {
       mk(cyl(.08, .08, 2.8, 8), '#4C4A5A', cx + x, 1.4, z); mk(rbox(.5, 1, .35, .06), '#2B2420', cx + x, 2.9, z);
       const r = mk(sph(.16, 12), new THREE.MeshBasicMaterial({ color: '#5A1E1E' }), cx + x, 3.15, z + .18, null, false), g = mk(sph(.16, 12), new THREE.MeshBasicMaterial({ color: '#1E4A2A' }), cx + x, 2.68, z + .18, null, false);
+      const pl = signBoard('行人', .8, .3, '#3F7F78'); pl.position.set(cx + x, 2.12, z + .2); S.add(pl);   // these four are the walk signals
       I().solids.push([cx + x - .2, z - .2, cx + x + .2, z + .2]); return { r, g };
+    });
+    // each car lane has its own three-lamp signal, the opposite of the walk signals, so the cars are seen to obey a light too
+    Q.carHeads = [[cx - 8.4, cz - 3.9], [cx + 3.9, cz + 8.4]].map(([x, z]) => {
+      mk(cyl(.1, .1, 3.6, 8), '#4C4A5A', x, 1.8, z); mk(rbox(.62, 1.7, .4, .08), '#2B2420', x, 4.1, z);
+      const L = ['#5A1E1E', '#5A4A1E', '#1E4A2A'].map((c, i) => mk(sph(.2, 12), new THREE.MeshBasicMaterial({ color: c }), x, 4.62 - i * .52, z + .2, null, false));
+      const pl = signBoard('车', .5, .34, '#4C4A5A'); pl.position.set(x, 3, z + .22); S.add(pl);
+      I().solids.push([x - .2, z - .2, x + .2, z + .2]); return { r: L[0], g: L[2] };
     });
     Q.cars = [[-30, cz - 1.1, 'x', '#E8574A'], [cx + 1.1, 25, 'z', '#4F86C6']].map(([x, z, ax, col]) => { const g = new THREE.Group(); g.position.set(x, 0, z); S.add(g); mk(rbox(1.8, .8, 3.2, .3), col, 0, .7, 0, g); mk(rbox(1.5, .6, 1.6, .2), '#9FD0E6', 0, 1.3, -.2, g); [[-.85, -1], [.85, -1], [-.85, 1], [.85, 1]].forEach(([a, b]) => { const w = mk(cyl(.32, .32, .25, 12), '#2B2420', a, .32, b, g); w.rotation.z = Math.PI / 2; }); if (ax === 'x') g.rotation.y = Math.PI / 2; return { g, ax }; });
     setLight(false);
   }
-  function setLight(green) { Q.green = green; Q.t = 0; Q.heads.forEach(h => { h.r.material.color = lin(green ? '#5A1E1E' : '#FF4A3A'); h.g.material.color = lin(green ? '#3AE06A' : '#1E4A2A'); }); }
+  function setLight(green) { Q.green = green; Q.t = 0; Q.heads.forEach(h => { h.r.material.color = lin(green ? '#5A1E1E' : '#FF4A3A'); h.g.material.color = lin(green ? '#3AE06A' : '#1E4A2A'); });
+    (Q.carHeads || []).forEach(h => { h.r.material.color = lin(green ? '#FF4A3A' : '#5A1E1E'); h.g.material.color = lin(green ? '#1E4A2A' : '#3AE06A'); }); }
   function tick(dt) {
     Q.t += dt; if (!Q.hold && Q.t > (Q.green ? 6 : 5)) setLight(!Q.green);
     const [cx, cz] = C(), v = 9 * dt;   // on the walk signal a car drives up to its stop line and waits there; one already in the junction drives on out
+    // cars always give way to a person: they wait at the stop line while you are on a crossing, and brake when you are in the road ahead of them
+    const me = ME().obj.position, mine = ME().space === 'isle2', onCross = mine && Math.abs(me.x - cx) < 5.4 && Math.abs(me.z - cz) < 5.4, wait = Q.green || onCross;
     Q.cars.forEach(c => { const p = c.g.position;
-      if (c.ax === 'x') { let nx = p.x + v; if (Q.green && p.x <= cx - 7 && nx > cx - 7) nx = cx - 7; p.x = nx > 32 ? -32 : nx; }
-      else { let nz = p.z - v; if (Q.green && p.z >= cz + 7 && nz < cz + 7) nz = cz + 7; p.z = nz < -17.5 ? 25 : nz; } });
+      if (c.ax === 'x') { if (mine && Math.abs(me.z - p.z) < 1.9 && me.x - p.x > 0 && me.x - p.x < 5.5) return; let nx = p.x + v; if (wait && p.x <= cx - 7 && nx > cx - 7) nx = cx - 7; p.x = nx > 32 ? -32 : nx; }
+      else { if (mine && Math.abs(me.x - p.x) < 1.9 && p.z - me.z > 0 && p.z - me.z < 5.5) return; let nz = p.z - v; if (wait && p.z >= cz + 7 && nz < cz + 7) nz = cz + 7; p.z = nz < -17.5 ? 25 : nz; } });
     Q.clear = !Q.cars.some(c => c.ax === 'x' ? Math.abs(c.g.position.x - cx) < 6.9 : Math.abs(c.g.position.z - cz) < 6.9);
   }
 
