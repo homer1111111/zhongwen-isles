@@ -64,7 +64,7 @@ body:not(.playing) .hud { visibility: hidden; }
 
 /* ---------- dialogue ---------- */
 #talk { position: absolute; left: 10px; right: 10px; bottom: 16px; z-index: 7; max-width: 640px; margin: 0 auto; }
-#talk.stage #say { max-height: 30vh; overflow-y: auto; } #talk.stage #sayEn { max-height: 14vh; overflow-y: auto; }
+#talk.stage #say { max-height: 22vh; overflow-y: auto; } #talk.stage #sayEn { max-height: 9vh; overflow-y: auto; padding-right: 22px; }
 @media (max-width: 420px) { #exitBtn .en-only { display: none; } }
 .pg-dim { opacity: .35; } .pg-cur { color: #2B2420; }
 #talk .box { position: relative; background: #FFF9EC; color: #3A2E28; border: 4px solid #F1DFB8; border-radius: 30px; padding: 26px 20px 18px; box-shadow: 0 6px 0 rgba(0,0,0,.12); min-height: 116px; }
@@ -759,7 +759,7 @@ const Sit = (() => {
   const SEATS = {}; let cur = null, legs = [];
   const apply = () => legs.forEach(([bn, q]) => bn.quaternion.multiply(q));   // called right after the animation update each frame
   const LEGS = [['upperlegl', -1.5], ['upperlegr', -1.5], ['lowerlegl', 1.55], ['lowerlegr', 1.55]];
-  function add(space, x, z, top, ry = 0) { (SEATS[space] = SEATS[space] || []).push({ x, z, top, ry }); }
+  function add(space, x, z, top, ry = 0, view = false) { (SEATS[space] = SEATS[space] || []).push({ x, z, top, ry, view }); }
   function bones(ch) { const b = {}; ch.obj.traverse(o => { if (o.isBone) b[o.name] = o; }); return b; }
   function down(s) {
     const me = ME(), o = me.obj, b = bones(me), hips = b.hips;
@@ -767,9 +767,10 @@ const Sit = (() => {
     o.position.set(s.x - Math.sin(s.ry) * .18, 0, s.z - Math.cos(s.ry) * .18); o.rotation.y = s.ry; o.updateMatrixWorld(true);
     const hy = hips ? hips.getWorldPosition(new THREE.Vector3()).y : .5; o.position.y = s.top + .06 - hy;
     cur = s; UI.sit = true; Sfx.play('pop');
+    if (s.view) UI.seatCam = { pos: new THREE.Vector3(s.x, s.top + 3.4, s.z - 4.2), look: new THREE.Vector3(s.x * .5, 0, s.z + 26) };
   }
   function up() {
-    if (!cur) return; const me = ME(), s = cur; cur = null; legs = [];
+    if (!cur) return; const me = ME(), s = cur; cur = null; legs = []; UI.seatCam = null;
     me.obj.position.set(s.x + Math.sin(s.ry) * .9, here.floor(s.x, s.z), s.z + Math.cos(s.ry) * .9); UI.sit = false; me.play('idle');
   }
   function nearby(add) {
@@ -779,24 +780,35 @@ const Sit = (() => {
   return { add, nearby, up, apply: () => cur && apply(), get sitting() { return !!cur; } };
 })();
 const Guide = (() => {
-  let mark = null, host = null, last = -9, tt = 0;
+  let last = -9, tt = 0, list = {};
+  const marks = {};
   const RANGE = { town: [2, 12], isle1: [101, 112], isle2: [201, 212], isle3: [301, 312], isle4: [401, 412] };
   function pick() {
     const r = RANGE[here.name]; if (!r || (here.name === 'town' && G.quest < 9)) return null;
     for (let n = r[0]; n <= r[1]; n++) { const h = B5.HOSTS[n]; if (!h || !PEOPLE[h]) continue; if (!B5.prog(n).done) return PEOPLE[h].space === here.name ? h : null; }
     return null;
   }
-  function make() {
-    const g = new THREE.Group(), m = c => new THREE.MeshBasicMaterial({ color: c });
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(.34, 18, 12), m('#F3C24F')));
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(.11, .3, .05), m('#FFFFFF')); bar.position.set(0, .07, .33); g.add(bar);
-    const dot = new THREE.Mesh(new THREE.BoxGeometry(.11, .09, .05), m('#FFFFFF')); dot.position.set(0, -.17, .33); g.add(dot); return g;
+  /* everyone here with a lesson still open: '!' = a story or an activity to do, '?' = questions to answer */
+  function open() {
+    const out = {};
+    Object.keys(B5.HOSTS).map(Number).sort((a, b) => a - b).forEach(n => { const h = B5.HOSTS[n], c = PEOPLE[h]; if (!c || c.space !== here.name || out[h] || (n < 100 && (n < 2 || G.quest < 9))) return; const p = B5.prog(n); if (!p.done) out[h] = p.task ? '?' : '!'; });
+    const DOORS = { 201: ['isle2', 16, -8.4], 202: ['isle2', 16, -8.4], 205: ['isle2', -18, -6.6], 206: ['isle2', -18, -6.6] };   // lessons whose host waits indoors: the mark hangs over that door
+    Object.keys(DOORS).forEach(n => { const [isle, x, z] = DOORS[n], p = B5.prog(+n), k = '@' + x + ',' + z; if (here.name !== isle || p.done || out[k]) return; out[k] = p.task ? '?' : '!'; });
+    return out;
+  }
+  function make(ch) {
+    const t = canvasTex(96, 96, (c, w, h) => { c.fillStyle = ch === '?' ? '#5EA94E' : '#F3C24F'; c.beginPath(); c.arc(48, 48, 44, 0, 7); c.fill(); c.fillStyle = '#FFFFFF'; c.font = '700 66px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(ch, 48, 52); });
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t })); s.scale.set(.8, .8, 1); return s;
   }
   function tick(dt) {
-    tt += dt; if (tt - last > 1.2) { last = tt; host = pick(); }
-    if (!host || !PEOPLE[host]) { if (mark) mark.visible = false; return; }
-    if (!mark) mark = make(); if (mark.parent !== here.scene) here.scene.add(mark);
-    const p = PEOPLE[host].obj.position; mark.visible = !UI.talking; mark.position.set(p.x, p.y + 2.5 + Math.sin(tt * 3) * .12, p.z); mark.lookAt(camera.position.x, mark.position.y, camera.position.z);
+    tt += dt; if (tt - last > 1.2) { last = tt; list = open(); }
+    Object.values(marks).forEach(m => { m.visible = false; });
+    if (UI.talking) return;
+    Object.entries(list).forEach(([h, ch]) => {
+      if (h[0] === '@') { const [x, z] = h.slice(1).split(',').map(Number), m = marks[h + ch] || (marks[h + ch] = make(ch)); if (m.parent !== here.scene) here.scene.add(m); m.visible = true; m.position.set(x, 4.4 + Math.sin(tt * 3) * .12, z); return; }
+      const c = PEOPLE[h]; if (!c || c.space !== here.name || !c.obj.visible) return;
+      const m = marks[h + ch] || (marks[h + ch] = make(ch)); if (m.parent !== here.scene) here.scene.add(m);
+      const p = c.obj.position; m.visible = true; m.position.set(p.x, p.y + 2.6 + Math.sin(tt * 3) * .12, p.z); });
   }
   function nextName() { const h = pick(); return h && NAMES[h] ? NAMES[h] : null; }
   return { tick, nextName };
@@ -838,7 +850,7 @@ function groundAt(sp, x, z) {
 function raisedAt(sp, x, z) {
   let y = 0;
   (sp.raised || []).forEach(r => {
-    if (r.kind === 'rect' && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) y = Math.max(y, r.y);
+    if (r.kind === 'rect' && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1 && !(r.holes && r.holes.some(h => x > h[0] && x < h[2] && z > h[1] && z < h[3]))) y = Math.max(y, r.y);
     else if (r.kind === 'circle' && Math.hypot(x - r.x, z - r.z) < r.r) y = Math.max(y, r.y);
     else if (r.kind === 'ramp' && x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) y = Math.max(y, r.top + (r.bottom - r.top) * (z - r.z0) / (r.z1 - r.z0));
   });
@@ -865,6 +877,44 @@ const Heights = (() => {
     const n = Math.max(4, Math.round(yTop / .3)), dz = (zBot - zTop) / n;
     for (let i = 0; i < n; i++) { const h = yTop * (n - i) / n; mk(box(w, h, dz + .02), i % 2 ? '#D8CBB0' : '#CDBF9F', cx, h / 2, zTop + dz * (i + .5), S); }
   }
+  function stairs(S, cx, zBottom, zTop, yBottom, yTop, w) {
+    const n = Math.max(4, Math.round((yTop - yBottom) / .28)), dz = (zTop - zBottom) / n;
+    for (let i = 1; i <= n; i++) { const h = yBottom + (yTop - yBottom) * i / n, bh = h + 2; mk(box(w, bh, Math.abs(dz) + .02), i % 2 ? '#D8CBB0' : '#CDBF9F', cx, h - bh / 2, zBottom + dz * (i - .5), S); }
+  }
+  /* the island rises in levels to the north, like the town: level 2 behind a stone wall, level 3 above that,
+     each reached by flights of stairs cut into the wall; everything already on the island stays on level 1 */
+  function levels(sp, S) {
+    const b = sp.box, zA = b[1] - .5, zB = zA - 12, zC = zB - 9.5, y2 = 2.4, y3 = 4.6, X2 = 34, X3 = 24;
+    // two places along the north edge where stairs can come down without landing on anything
+    const free = x => !sp.solids.some(([a, c, e, f]) => a < x + 2.2 && e > x - 2.2 && c < zA + 5.5 && f > zA - .5) && groundAt(sp, x, zA + 1.5) > .015 && groundAt(sp, x, zA + 1.5) < .055;
+    const pick = side => { for (let d = 10; d <= 28; d++) { const x = side * d; if (free(x)) return x; } for (let d = 9; d >= 3; d--) { const x = side * d; if (free(x)) return x; } return side * 12; };
+    const s1 = [pick(-1), pick(1)], s2 = [-9, 9], W = 2.6, D = 3.6;
+    // trim anything that used to stick out over the north beach
+    sp.solids.forEach(q => { if (q[1] < zA && q[3] > zA - .5) q[1] = zA; });
+    // level 2: wall and top, built around the stair cuts
+    const slab = (x0, x1, z0, z1, y, col) => { if (x1 - x0 < .05 || z1 - z0 < .05) return; mk(box(x1 - x0, y + 2, z1 - z0), col, (x0 + x1) / 2, y / 2 - 1, (z0 + z1) / 2, S); mk(box(x1 - x0, .06, z1 - z0), '#8FC96A', (x0 + x1) / 2, y + .02, (z0 + z1) / 2, S, false); };
+    const level = (X, zFront, zBack, y, cuts, col) => {
+      const xs = [-X, ...cuts.flatMap(c => [c - W / 2, c + W / 2]), X];
+      for (let i = 0; i < xs.length; i += 2) slab(xs[i], xs[i + 1], zBack, zFront, y, col);
+      cuts.forEach(c => { slab(c - W / 2, c + W / 2, zBack, zFront - D, y, col); });
+      // stone band along the front of the wall, and a wooden rail on top except at the stairs
+      for (let i = 0; i < xs.length; i += 2) { const w = xs[i + 1] - xs[i]; mk(box(w, .25, .1), '#B9A27E', (xs[i] + xs[i + 1]) / 2, y * .5, zFront + .02, S); mk(box(w, .07, .07), '#8A6A4A', (xs[i] + xs[i + 1]) / 2, y + .55, zFront - .2, S); for (let x = xs[i] + .3; x < xs[i + 1]; x += 1.6) mk(cyl(.06, .06, .55, 6), '#8A6A4A', x, y + .28, zFront - .2, S); }
+      sp.raised.push({ kind: 'rect', x0: -X, x1: X, z0: zBack, z1: zFront, y, holes: cuts.map(c => [c - W / 2, zFront - D, c + W / 2, zFront]) });
+    };
+    level(X2, zA, zB, y2, s1, '#C9B48C');
+    level(X3, zB, zC, y3, s2, '#BFA987');
+    s1.forEach(c => { stairs(S, c, zA, zA - D, .03, y2, W - .1); sp.raised.push({ kind: 'ramp', x0: c - W / 2 + .1, x1: c + W / 2 - .1, z0: zA - D, z1: zA, top: y2, bottom: .03 }); });
+    s2.forEach(c => { stairs(S, c, zB, zB - D, y2, y3, W - .1); sp.raised.push({ kind: 'ramp', x0: c - W / 2 + .1, x1: c + W / 2 - .1, z0: zB - D, z1: zB, top: y3, bottom: y2 }); });
+    // level 2: a row of trees at the back, benches looking out over the island, flowers
+    for (let x = -30; x <= 30; x += 10) if (!s2.some(c => Math.abs(c - x) < 3)) roundTree(x, y2, zB + 2.2, .9, '#6DBF5A');
+    [-20, -4, 4, 20].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const bz = zA - 3.2; mk(rbox(2.4, .12, .7, .05), '#B98A5A', x, y2 + .55, bz, S); [-1, 1].forEach(q => mk(box(.12, .5, .6), '#8A6A4A', x + q, y2 + .25, bz, S)); Sit.add(sp.name, x - .6, bz, y2 + .61, 0, true); Sit.add(sp.name, x + .6, bz, y2 + .61, 0, true); flowers(x + (k % 2 ? 2.6 : -2.6), bz - 1.4, y2 + .06, 7, 900 + k, null, 1.6); });
+    // level 3: the hill with the telescope in the middle, flowers either side
+    hill(sp, S, 0, zC + 3.4, 2.6, y3);
+    flowers(-14, zC + 4, y3 + .06, 10, 990, null, 1.6); flowers(14, zC + 4, y3 + .06, 10, 991, null, 1.6);
+    // signs at the foot of the stairs
+    s1.forEach(c => { const sg = signBoard('上楼', 1.2, .45, '#5E9A57'); sg.position.set(c + 2, .95, zA + .9); S.add(sg); mk(cyl(.05, .05, .95, 6), '#8A6A4A', c + 2, .47, zA + .9, S); });
+    sp.box = [b[0], zC + .8, b[2], b[3]];
+  }
   function terrace(sp, S, x, z, w = 8, d = 6) {
     const y = 1.5, z1 = z + d / 2;
     mk(rbox(w, y, d, .15), '#C9B48C', x, y / 2, z, S); mk(rbox(w - .3, .06, d - .3, .03), '#9BD06E', x, y + .03, z, S, false);
@@ -878,15 +928,15 @@ const Heights = (() => {
     sp.raised.push({ kind: 'rect', x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1, y }, { kind: 'ramp', x0: x - 1.2, x1: x + 1.2, z0: z1 - .05, z1: z1 + 2.6, top: y, bottom: .03 });
     sp.solids.push([x - w / 2 - .3, z - d / 2 - .3, x + w / 2 + .3, z - d / 2 + .05]);
   }
-  function hill(sp, S, x, z, r = 3.2) {
-    const y = 2.2;
-    mk(new THREE.CylinderGeometry(r, r + 1.3, y, 28), '#7FBF5E', x, y / 2, z, S); mk(new THREE.CylinderGeometry(r - .05, r - .05, .06, 28), '#96D271', x, y + .03, z, S, false);
-    steps(S, x, z + r - .1, z + r + 3.2, y, 2);
+  function hill(sp, S, x, z, r = 3.2, base = 0, sideSign = true) {
+    const hh = 2.2, y = base + hh;
+    mk(new THREE.CylinderGeometry(r, r + 1.3, hh, 28), '#7FBF5E', x, base + hh / 2, z, S); mk(new THREE.CylinderGeometry(r - .05, r - .05, .06, 28), '#96D271', x, y + .03, z, S, false);
+    stairs(S, x, z + r + 3.2, z + r - .1, base, y, 2);
     const tp = new THREE.Group(); tp.position.set(x + .9, y, z - 1.1); S.add(tp);
     [[-.25, -.2], [.25, -.2], [0, .3]].forEach(([a, c]) => { const l = mk(cyl(.04, .04, 1, 6), '#5A4A3A', a * .6, .45, c * .6, tp); l.rotation.set(c * .5, 0, -a * .5); });
     const tube = mk(cyl(.12, .08, .9, 12), '#3F5A7A', 0, 1.05, 0, tp); tube.rotation.x = Math.PI / 2.6;
-    const sg = signBoard('观景台', 1.6, .5, '#4F86C6'); sg.position.set(x - 1.6, .9, z + r + 3.6); S.add(sg); mk(cyl(.05, .05, .9, 6), '#8A6A4A', x - 1.6, .45, z + r + 3.6, S);
-    sp.raised.push({ kind: 'circle', x, z, r: r - .25, y }, { kind: 'ramp', x0: x - 1, x1: x + 1, z0: z + r - .4, z1: z + r + 3.2, top: y, bottom: .03 });
+    const sg = signBoard('观景台', 1.6, .5, '#4F86C6'); sg.position.set(x - 1.6, base + .9, z + r + 3.6); S.add(sg); mk(cyl(.05, .05, .9, 6), '#8A6A4A', x - 1.6, base + .45, z + r + 3.6, S);
+    sp.raised.push({ kind: 'circle', x, z, r: r - .25, y }, { kind: 'ramp', x0: x - 1, x1: x + 1, z0: z + r - .4, z1: z + r + 3.2, top: y, bottom: base + .03 });
     sp.hillTop = { x: x + .9, z: z - .4 };
     // the grassy slope all round the hill is not walkable; only the stairs lead up
     const o = r + 1.3, i = r - .15; sp.solids.push([x - o, z - o, x + o, z - i], [x - o, z - i, x - i, z + o], [x + i, z - i, x + o, z + o], [x - o, z + i, x - 1.05, z + o], [x + 1.05, z + i, x + o, z + o]);
@@ -894,19 +944,18 @@ const Heights = (() => {
   function build(sp) {
     if (sp.raised) return; sp.raised = []; const keep = W.scene; W.scene = sp.scene;
     try {
-      // try the full size first, then a smaller one, so every island gets both
-      let t = spot(sp, 9, 9.4, []), tw = 8, td = 6; if (!t) { t = spot(sp, 7.5, 7.8, []); tw = 6.5; td = 4.6; } if (t) terrace(sp, sp.scene, t[0], t[1] - 1.4, tw, td);
-      let h = spot(sp, 9.2, 11, t ? [[t[0], t[1], 12]] : []), hr = 3.2; if (!h) { h = spot(sp, 7.6, 9.6, t ? [[t[0], t[1], 10]] : []); hr = 2.5; } if (h) hill(sp, sp.scene, h[0], h[1] - 1.8, hr);
+      levels(sp, sp.scene);
     } catch (e) { console.warn('heights', e); }
     W.scene = keep; sp.__ground = null;
   }
   // from the hilltop the telescope shows the whole island from high above
   function nearby(add) { const h = here.hillTop; if (!h) return; add(h.x, h.z, 1.8, '看望远镜', 'Telescope', look); }
   async function look() {
-    const h = here.hillTop; UI.busy = true; const f = new THREE.Object3D(); f.position.set(0, 0, 0); here.scene.add(f);
-    const keep = [here.cam, here.camTall]; here.cam = [h.x * -.6, 46, 34]; here.camTall = [h.x * -.6, 52, 40]; UI.focus = f;
-    showToast('从高处看整个岛！', 'The whole island from up high!', 2600); await new Promise(r => setTimeout(r, 3800));
-    here.cam = keep[0]; here.camTall = keep[1]; UI.focus = null; here.scene.remove(f); UI.busy = false;
+    const h = here.hillTop, c = here.raised.find(r => r.kind === 'circle'), y = c ? c.y : 2; UI.busy = true;
+    UI.seatCam = { pos: new THREE.Vector3(h.x, y + 9, h.z - 5), look: new THREE.Vector3(0, 0, 8) };
+    camera.position.copy(UI.seatCam.pos); lookAt.copy(UI.seatCam.look); camera.lookAt(lookAt);
+    showToast('从高处看整个岛！', 'The whole island from up high!', 3000); await new Promise(r => setTimeout(r, 4500));
+    UI.seatCam = null; UI.busy = false;
   }
   return { build, nearby };
 })();
@@ -1074,19 +1123,35 @@ const W = { scene: null };
 const SP = {};
 let here = null, renderer, camera, clock, raycaster, running = false;
 const ASSETS = {};
+/* Models are embedded in this page. Hosted viewers (such as claude.ai) forbid the page from fetching anything,
+   including its own data: and blob: addresses, and only allow images from data: addresses. So each model is decoded
+   here, and while models load, the textures inside them are handed over as data: images instead of blob: links. */
 const loadGLB = url => new Promise((res, rej) => {
   try {
     const bin = atob(url.slice(url.indexOf(',') + 1)), buf = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-    // textures inside the model are read as plain images rather than fetched
-    const keep = window.createImageBitmap; try { window.createImageBitmap = undefined; new THREE.GLTFLoader().parse(buf.buffer, '', res, rej); } finally { window.createImageBitmap = keep; }
+    new THREE.GLTFLoader().parse(buf.buffer, '', res, rej);
   } catch (e) { rej(e); }
 });
+function bytesToDataURL(parts, type) {
+  const arrs = parts.map(p => p instanceof ArrayBuffer ? new Uint8Array(p) : ArrayBuffer.isView(p) ? new Uint8Array(p.buffer, p.byteOffset, p.byteLength) : new TextEncoder().encode(String(p)));
+  let s = ''; arrs.forEach(a => { for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); });
+  return `data:${type || 'image/png'};base64,${btoa(s)}`;
+}
 async function loadAssets() {
   const jobs = { props: GLB_PROPS, home: GLB_HOME, fish: GLB_FISH, kid: GLB_KID, mom: GLB_MOM, dad: GLB_DAD, fox: GLB_FOX, wolf: GLB_WOLF };
-  const keys = Object.keys(jobs), got = await Promise.all(keys.map(k => loadGLB(jobs[k]).catch(e => { console.warn('model', k, e); return loadGLB(jobs[k]).catch(() => null); })));
-  keys.forEach((k, i) => { if (got[i]) ASSETS[k] = got[i]; });
+  const RealBlob = window.Blob, realURL = URL.createObjectURL, realBitmap = window.createImageBitmap;
+  window.Blob = class extends RealBlob { constructor(parts = [], opts) { super(parts, opts); this.__parts = parts; this.__type = opts && opts.type; } };
+  URL.createObjectURL = o => (o && o.__parts) ? bytesToDataURL(o.__parts, o.__type) : realURL.call(URL, o);
+  window.createImageBitmap = undefined;   // textures load through plain <img>, which accepts data: images
+  let got;
+  try {
+    const keys = Object.keys(jobs);
+    got = await Promise.all(keys.map(k => loadGLB(jobs[k]).catch(e => { console.warn('model', k, e); return loadGLB(jobs[k]).catch(() => null); })));
+    keys.forEach((k, i) => { if (got[i]) ASSETS[k] = got[i]; });
+  } finally { window.Blob = RealBlob; URL.createObjectURL = realURL; window.createImageBitmap = realBitmap; }
 }
+
 /* ---------- helpers ---------- */
 function propFrom(pack, name, x, y, z, s = 1, ry = 0, parent) {
   const src = ASSETS[pack].scenes.find(sc => sc.name === name); if (!src) return null;
@@ -1233,6 +1298,7 @@ function faceTo(ch, x, z) { const o = ch.obj; let d = Math.atan2(x - o.position.
 const CLIFF_Z = -10, TOP = 3, STAIR = { x0: -2, x1: 2, z0: -10, z1: -4.6, n: 6 };
 function townFloor(x, z) {
   if (z <= CLIFF_Z) return TOP;
+  if (z > 30.7 && z < 42.3 && x > -11 && x < -7) return .43;   // the top of the pier boards
   if (x > STAIR.x0 - .1 && x < STAIR.x1 + .1 && z < STAIR.z1) { const i = Math.floor((z - STAIR.z0) / ((STAIR.z1 - STAIR.z0) / STAIR.n)); return Math.max(0, TOP - (i + 1) * TOP / STAIR.n); }
   return 0;
 }
@@ -1616,13 +1682,15 @@ function loop() {
   Object.values(PEOPLE).forEach(c => { if (c.space === here.name) c.mixer.update(dt); }); Sit.apply(); Guide.tick(dt);
   if (here.mark && here.mark.visible) { here.mark.userData.a.position.y = 3.4 + Math.sin(t * 3) * .3; here.mark.userData.a.rotation.y = t * 1.5; }
   if (here.water) here.water.material.color.setHSL(.56, .55, .42 + Math.sin(t * .8) * .02);
-  const me = ME().obj.position, fo = UI.focus ? UI.focus.position : me, want = UI.talkCam ? UI.talkCam.pos.clone() : fo.clone().add(camOff());
+  const me = ME().obj.position, fo = UI.focus ? UI.focus.position : me, want = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).pos.clone() : fo.clone().add(camOff());
+  const storyBox = UI.talking && !UI.talkCam && !UI.seatCam && $('talk').classList.contains('stage');   // the story box covers the lower screen, so lift the actors above it
+  if (storyBox) want.y += 2.4;
   if (here.box) want.x = Math.max(here.box[0] + 5, Math.min(here.box[2] - 5, want.x));
   camera.position.lerp(want, Math.min(1, dt * 3.5));
-  const la = UI.talkCam ? UI.talkCam.look.clone() : fo.clone().add(new THREE.Vector3(0, 2.4, -6)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt);
+  const la = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).look.clone() : fo.clone().add(new THREE.Vector3(0, storyBox ? .2 : 2.4, -6)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt);
   if (here.sky) here.sky.g.position.copy(camera.position);
   if (here.name === 'town') TREES.forEach(tr => {   // fade trees that hide you from the camera
-    const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5;
+    const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && (Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5 || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x);
     const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); }
   });
   const cutList = here === SP.town ? CUT : here.cut;   // buildings on the town and on the Book 1–3 islands step aside the same way
@@ -1799,7 +1867,7 @@ const nextPageHandler = () => {
 $('pgNext').onclick = nextPageHandler;
 function closeVeil(id) { $(id).classList.add('hidden'); UI.busy = false; Voice.cancel(); if (id === 'storyVeil' && storyDone) { const f = storyDone; storyDone = null; f(); } }   // closing the story early still lets the quest go on
 document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeVeil(b.closest('.veil').id)));
-function reward(title, text) { $('rewardTitle').textContent = title; $('rewardText').textContent = text; $('rewardVeil').classList.remove('hidden'); UI.busy = true; Sfx.play('sparkle'); Voice.speak(title); }
+function reward(title, text) { $('rewardTitle').textContent = ''; title.split(/(?=完成了！)/).forEach((part, i) => { if (i) $('rewardTitle').appendChild(document.createElement('br')); $('rewardTitle').appendChild(document.createTextNode(part)); }); $('rewardText').textContent = text; $('rewardVeil').classList.remove('hidden'); UI.busy = true; Sfx.play('sparkle'); Voice.speak(title); }
 
 /* ---------- the shopping quest ---------- */
 let sectionActive = false;
@@ -1961,7 +2029,8 @@ talk = async function (who, lines, choices) {
     if (dist > .3 && dist < 6) {
       d.normalize(); const perp = new THREE.Vector3(-d.z, 0, d.x); if (perp.z < 0) perp.negate();
       const mid = new THREE.Vector3((s.x + p.x) / 2, p.y, (s.z + p.z) / 2);
-      UI.talkCam = { pos: mid.clone().add(perp.multiplyScalar(5.2)).add(d.clone().multiplyScalar(-2.4)).add(new THREE.Vector3(0, 3.2, 0)), look: new THREE.Vector3(s.x * .7 + p.x * .3, s.y + 1.1, s.z * .7 + p.z * .3) };
+      const back = camera.aspect < 1 ? Math.max(7, dist * 3.3 + 3.5) : 5.6, lk = camera.aspect < 1 && dist > 1.5 ? .5 : .7;   // a tall screen is narrow: step back so both of you fit
+      UI.talkCam = { pos: mid.clone().add(perp.multiplyScalar(back)).add(d.clone().multiplyScalar(-3)).add(new THREE.Vector3(0, 3.6 * Math.max(1, back / 7), 0)), look: new THREE.Vector3(s.x * lk + p.x * (1 - lk), s.y + 1.1, s.z * lk + p.z * (1 - lk)) };
       me.obj.rotation.y = Math.atan2(s.x - p.x, s.z - p.z);
       let skinned = false; c.obj.traverse(o => { if (o.isSkinnedMesh) skinned = true; });
       if (skinned) { const r0 = c.obj.rotation.y; c.obj.rotation.y = Math.atan2(p.x - s.x, p.z - s.z); undo = () => { c.obj.rotation.y = r0; }; }
@@ -1988,6 +2057,7 @@ function nearby() {
     B5.nearby(add); B5b.nearby(add); B5c.nearby(add); Life.nearby(add); Isle1.nearbyTown(add);
     add(T.home.x - 4.6, T.home.z + 5.2, 2.8, Mail.unread().length ? '看信' : '信箱', 'Mail', Mail.open);
   }
+  IHome.nearby(add);
   if (here.name === 'isle1') Isle1.nearby(add);
   if (here.name === 'classroom') B1d.nearbyRoom(add);
   if (here.name === 'isle2') Isle2.nearby(add);
@@ -2085,7 +2155,7 @@ function lookPal(l) { return kidPal({ hair: HAIRS[l.hair], shirt: SHIRTS[l.shirt
 function buildPreview(look) {
   const cv = $('lookCv'), r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }); r.setPixelRatio(Math.min(2, devicePixelRatio || 1)); r.setSize(cv.clientWidth || 260, cv.clientHeight || 260, false); r.outputEncoding = THREE.sRGBEncoding;
   const s = new THREE.Scene(); s.add(new THREE.HemisphereLight(lin('#FFF6E6'), lin('#B8A07A'), 1.0)); const d = new THREE.DirectionalLight(lin('#FFF1D8'), 1.1); d.position.set(3, 6, 6); s.add(d);
-  const cam = new THREE.PerspectiveCamera(30, 1, .1, 50); cam.position.set(0, 1.05, 3.7); cam.lookAt(0, .72, 0);
+  const cam = new THREE.PerspectiveCamera(30, 1, .1, 50); cam.position.set(0, 1.0, 4.3); cam.lookAt(0, .74, 0);
   const ch = makeKid(look); s.add(ch.obj); const ck = new THREE.Clock();
   preview = { r, s, cam, ch, on: true };
   const tick = () => { if (!preview || !preview.on) return; requestAnimationFrame(tick); const dt = ck.getDelta(); preview.ch.mixer.update(dt); preview.ch.obj.rotation.y += dt * .6; r.render(s, cam); };
@@ -2591,6 +2661,8 @@ const B5 = (() => {
   }
   function quiz(n, host) {
     const L = lesson(n), qs = L.quiz.slice(0, 2); let i = 0, right = 0;
+    const ws = Object.entries(L.words || {}).filter(([k, v]) => v && v[1]).shuf();
+    if (ws.length >= 3 && new Set(ws.slice(0, 3).map(w => w[1][1])).size === 3) qs.push({ q: `「${ws[0][0]}」是什么意思？`, a: ws[0][1][1], w: [ws[1][1][1], ws[2][1][1]], qe: `What does “${ws[0][0]}” (${ws[0][1][0]}) mean?`, ae: '', we: [] });
     const next = () => {
       if (i >= qs.length) { closeVeil('qVeil'); finish(n, host, right); return; }
       const q0 = qs[i], E = (BOOK5_QUIZ_EN[n] || [])[i] || (q0.qe ? { q: q0.qe, a: q0.ae, w: q0.we } : null), q = qs[i++]; $('qWho').textContent = `${NAMES[host][0]}问你：`; $('qText').textContent = q.q; $('qEn').textContent = E ? E.q : '';
@@ -3171,7 +3243,7 @@ const Stage = (() => {
       say.appendChild(sp); return sp; };
     if (ln.a > 0) seg(0, ln.a, 'pg-dim'); cur = seg(ln.a, ln.b, 'pg-cur'); if (ln.b < t.length) seg(ln.b, t.length, 'pg-dim');
     $('sayEn').textContent = ln.p.en; $('who').textContent = nameOf(ln.who)[0];
-    try { cur.scrollIntoView({ block: 'nearest' }); } catch (e) { }
+    try { cur.scrollIntoView({ block: 'nearest' }); const e = $('sayEn'); e.scrollTop = (e.scrollHeight - e.clientHeight) * (ln.b >= t.length ? 1 : ln.a / t.length); } catch (e) { }
   }
   function pop(obj) {
     const b = obj.userData.base || (obj.userData.base = obj.scale.clone());
@@ -3850,7 +3922,7 @@ const Isle1 = (() => {
     const knoll = mk(new THREE.SphereGeometry(9, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), '#86CB63', Z.hill[0], -3.2, Z.hill[1] - 3, null, false); knoll.scale.y = .55;
     sp.solids.push([Z.hill[0] - 7, Z.hill[1] - 10, Z.hill[0] + 7, Z.hill[1] + 1]);
     for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI; mk(box(.12, .9, .12), '#B98A5A', Z.farm[0] + Math.cos(a) * 5, .45, Z.farm[1] - Math.sin(a) * 4); }
-    sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 4, Z.meadow[1] + 4.6, '#5E9A57'); sign('日出山坡', Z.hill[0] + 6, Z.hill[1] + 2.4, '#F28C28', 2.2);
+    sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 6.6, Z.meadow[1] - 5.4, '#5E9A57'); sign('日出山坡', Z.hill[0] + 6, Z.hill[1] + 2.4, '#F28C28', 2.2);
     // trees and flowers
     const T0 = TREES.length;
     [[-33, 26], [-34, -4], [-30, -28], [34, -26], [34, 2], [12, 26], [-8, 26], [-4, -6], [10, 4], [30, -12]].forEach(([x, z], i) => roundTree(x, 0, z, .9 + (i % 3) * .15, i % 2 ? '#6DBF5A' : '#5EA94E'));
@@ -3881,7 +3953,7 @@ const Isle1 = (() => {
     B1.tick(dt, t); B1b.tick(dt, t); B1c.tick(dt, t); B1f.tick(dt);
     const me = ME().obj.position;
     trees.forEach(tr => {   // fade trees that hide you from the camera, as in the town
-      const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x;
+      const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x;
       const want = inFront ? 0 : 1; if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); }
     });
   }
@@ -3889,11 +3961,10 @@ const Isle1 = (() => {
   function nearbyTown(add) { add(-9, 41.2, 2.4, '坐船', 'Take the ferry', () => Ferry.choose('town'), 1); const c = PEOPLE.captain5; if (c && c.space === 'town') add(c.obj.position.x, c.obj.position.z, 2.6, '说话', 'Talk', () => talk('captain5', [['欢迎来到第五册岛！这里是小镇。', 'Welcome to the Book 5 island — the town!'], ['想去别的岛，就到码头尽头找我。', 'To visit another island, find me at the end of the dock.']])); }
   function nearby(add) {
     add(.6, 41, 2.8, '坐船', 'Take the ferry', () => Ferry.choose('isle1'), 1);
-    add(Z.home[0], Z.home[1] + 4.8, 2.2, '进家', 'Go home', () => { UI.back = { space: 'isle1', x: Z.home[0], z: Z.home[1] + 5.4 }; goTo('home', 0, 3.6, Math.PI); });
     const c = PEOPLE.captain.obj.position; add(c.x, c.z, 2.8, '说话', 'Talk', () => talk('captain', [['欢迎来到第一册岛！', 'Welcome to the Book 1 island!'], ['岛上的新朋友，很快就会搬来。', 'New friends are moving to the island soon.']]));
     B1.nearby(add); B1b.nearby(add); B1c.nearby(add); B1d.nearby(add); B1e.nearby(add); B1f.nearby(add);
   }
-  return { build, tick, nearby, nearbyTown, sail, ferry, Z, phase: applyPhase };
+  return { build, tick, nearby, nearbyTown, sail, ferry, Z, phase: applyPhase, trees };
 })();/* =====================================================================
    Book 1 island lessons. Hosts live on the island; each lesson has its own play.
    ===================================================================== */
@@ -4030,8 +4101,11 @@ const B1 = (() => {
     await talk('nongfu', [['稻草人做好了！', 'The scarecrow is finished!'], ['现在数数你的手指头吧。', 'Now count your fingers.']]);
     await fingers();
     await talk('nongfu', [['一共十个手指头！', 'Ten fingers altogether!']]);
+    const look = new THREE.Object3D(); look.position.set(-6.2, 0, -4.2); UI.focus = look;   // the camera shows the baskets, then the pumpkins, while you answer
     for (;;) { const c = await talk('nongfu', [['哪个篮子的苹果「多」？', 'Which basket has “many” apples?']], [['红篮子', 'red basket'], ['蓝篮子', 'blue basket']]); if (c === 1) { sayIt('多'); break; } await talk('nongfu', [['数一数，红篮子只有三个，是「少」。', 'Count: the red basket has only three. That is “few”.']]); }
+    look.position.x = -14.6;
     for (;;) { const c = await talk('nongfu', [['哪个南瓜「大」？', 'Which pumpkin is “big”?']], [['左边的南瓜', 'the left pumpkin'], ['右边的南瓜', 'the right pumpkin']]); if (c === 1) { sayIt('大'); break; } await talk('nongfu', [['左边的南瓜小小的。再看看！', 'The left pumpkin is small. Look again!']]); }
+    UI.focus = null;
     done(102, '跟农夫伯伯说「回答问题」', 'Talk to Uncle Farmer to answer questions.');
   };
   /* two hands on screen: tap every finger once, counting 一 to 十 */
@@ -4208,6 +4282,7 @@ const B1b = (() => {
   const hopOnce = o => gsap.timeline().to(o.position, { y: o.position.y + .3, duration: .15 }).to(o.position, { y: o.position.y, duration: .2 });
   T[104] = async () => {
     await talk('laoshi', [['我们来玩「老师说」！', "Let's play “Teacher says”!"], ['我说一个字，你按对的字，就跟着做。', 'I say a character; tap the right one and do the move.']]);
+    { const lp = PEOPLE.laoshi.obj.position; UI.busy = true; if (ME().obj.position.z < lp.z + 1) await walkTo(ME(), lp.x + (ME().obj.position.x < lp.x ? -1.8 : 1.8), lp.z + 1.2); await walkTo(ME(), lp.x, lp.z + 3.2); ME().obj.rotation.y = Math.PI; ME().play('idle'); UI.busy = false; }
     Q.sy = ME().obj.scale.y; const r = mulberry(7), order = ['上', '下', '左', '右', '坐', '立', '走', '上'];
     for (const ch of order) {
       const others = MOVES.map(m => m[0]).filter(x => x !== ch).sort(() => r() - .5).slice(0, 2), opts = [ch, ...others].sort(() => r() - .5);
@@ -4273,7 +4348,7 @@ const B1c = (() => {
     const fl = new THREE.Group(); fl.position.set(M[0] - 1.4, 0, M[1] + 3.4); S.add(fl); mk(cyl(.04, .04, .9, 6), '#4E9A45', 0, .45, 0, fl);
     for (let k = 0; k < 5; k++) { const a = k / 5 * Math.PI * 2; mk(sph(.18, 10), '#E8524A', Math.cos(a) * .2, .95, Math.sin(a) * .2, fl).scale.y = .5; } mk(sph(.1, 10), '#F2B233', 0, 1, 0, fl);
     prop('flower', fl);
-    roundTree(M[0] + 6.4, 0, M[1] - 3.6, .8, '#6DBF5A'); const t = TREES.pop(); Q.tree = t;
+    roundTree(M[0] + 6.4, 0, M[1] - 3.6, .8, '#6DBF5A'); const t = TREES.pop(); Q.tree = t; Isle1.trees.push(t);
     const bird = new THREE.Group(); bird.position.set(M[0] + 5.2, 2.7, M[1] - 2.6); S.add(bird); Q.birdMat = new THREE.MeshStandardMaterial({ color: lin('#9A9A92') });
     const bb = mk(sph(.28, 12), Q.birdMat, 0, 0, 0, bird); bb.scale.set(1, .9, 1.3); mk(sph(.18, 12), Q.birdMat, 0, .2, .28, bird);
     const bk = mk(new THREE.ConeGeometry(.05, .14, 6), '#E88A2A', 0, .18, .48, bird, false); bk.rotation.x = Math.PI / 2;
@@ -4507,9 +4582,11 @@ const B1d = (() => {
     if (!PEOPLE.tongxue2) PEOPLE.tongxue2 = makeKid({ gender: 'girl', style: 1, glasses: false, hair: 2, shirt: 4, pants: 2, skin: 2 });
     putIn(PEOPLE.tongxue2, I(), 20.6, -1.2, Math.PI / 2); NAMES.tongxue2 = ['同学', 'Classmate'];
     const ask = async (who, zh, en, right) => { for (;;) { const opts = [['你们好！', 'Hello, everyone!'], ['老师早！', 'Good morning, teacher!'], ['再见！', 'Goodbye!']]; const c = await talk(who, [[zh, en]], opts); if (c === right) { sayIt(opts[c][0]); Sfx.play('found'); return; } await talk(who, [['再想想该说什么。', 'Think about what to say.']]); } };
+    UI.focus = me.obj;   // keep the usual camera here: the parked bus hides the side view
     await ask('laoshi', '见了老师，说什么？', 'You see your teacher. What do you say?', 1);
     await ask('tongxue', '见了同学们，说什么？', 'You see your classmates. What do you say?', 0);
     await talk('tongxue', [['你好！开学了，真高兴！', 'Hello! School has started. We are so happy!']]);
+    UI.focus = null;
     { const b = Q.bus; gsap.timeline({ onComplete: () => { b.visible = false; } }).to(b.rotation, { y: 0, duration: .6 }).to(b.position, { z: 18, duration: 2.6, ease: 'power1.inOut' }).to(b.rotation, { y: -Math.PI / 2, duration: .5 }).to(b.position, { x: -40, duration: 3.2, ease: 'power1.in' }); }
     setTimeout(() => { putIn(PEOPLE.laoshi, I(), 12.4, -5.4, 0); PEOPLE.tongxue.obj.visible = false; PEOPLE.tongxue2.obj.visible = false; }, 4000);
     done(108, '回车站跟司机叔叔说「回答问题」', 'Go back to the bus stop and talk to the bus driver to answer questions.');
@@ -4579,7 +4656,7 @@ const B1e = (() => {
       g.forEach(m => { m.visible = false; }); Q.bloom[s] = g;
     });
     if (G.garden) { Q.bloom['春'].forEach(m => m.visible = true); }
-    Q.signs = ['春', '夏', '秋', '冬'].map((s, i) => { const x = Q.big.x - 3.6 + i * 2.4, z = Q.big.z + 3.6, b = signBoard(s, .6, .6, '#5E9A57'); b.position.set(x, 1.3, z); S.add(b); mk(cyl(.05, .05, 1, 6), '#8A6A4A', x, .5, z); return { s, x, z }; });
+    Q.signs = ['春', '夏', '秋', '冬'].map((s, i) => { const x = Q.big.x - 5.4 + i * 1.8, z = Q.big.z + 3.6, b = signBoard(s, .6, .6, '#5E9A57'); b.position.set(x, 1.3, z); S.add(b); mk(cyl(.05, .05, 1, 6), '#8A6A4A', x, .5, z); return { s, x, z }; });
   }
   function setPhoto(url) { const img = new Image(); img.onload = () => { const t = new THREE.Texture(img); t.encoding = THREE.sRGBEncoding; t.needsUpdate = true; Q.photo.material.map = t; Q.photo.material.color.set('#FFFFFF'); Q.photo.material.needsUpdate = true; }; img.src = url; }
   function spawn() {
@@ -4610,6 +4687,7 @@ const B1e = (() => {
   }
   async function photo() {
     Q.s9 = null;
+    { const fc = new THREE.Object3D(); fc.position.set(Q.bench.x + 1.4, 0, Q.bench.z + 3); UI.focus = fc; }   // show the family by the bench while you count them
     await talk('imom', [['大家都到了！', 'Everyone is here!']]);
     for (;;) { const c = await talk('imom', [['我家有几口人？', 'How many people are in our family?']], [['三口人', 'three'], ['四口人', 'four'], ['五口人', 'five']]); if (c === 2) { sayIt('五口人'); break; } await talk('imom', [['数一数：爷爷、奶奶、爸爸、妈妈，还有你！', 'Count: Grandpa, Grandma, Dad, Mom, and you!']]); }
     UI.busy = true; putIn(ME(), I(), Q.bench.x, Q.bench.z + 1.9, 0);
@@ -4834,7 +4912,9 @@ const Ferry = (() => {
     else { await goTo(to, land[0], land[1], Math.PI); if (onArrive) onArrive(); }
     if (to === 'isle1') Isle1.phase(); if (to === 'isle2') Isle2.phase(); if (to === 'isle3') Isle3.phase(); if (to === 'isle4') Isle4.phase();
     if (f) await arrive(f, home, land);
-    if (first) { showToast(`欢迎来到${d[1]}！`, `Welcome to ${d[2]}!`, 2600); setTimeout(() => { const nm = Guide.nextName(); if (nm) showToast(`去找${nm[0]}说说话吧！跟着黄色的「！」走。`, `Go and talk to ${nm[1]}! Follow the yellow “!”.`, 3600); }, 2800); }
+    const home1st = IHome.due(to);
+    if (home1st) await IHome.welcome(to);
+    if (first && !home1st) { showToast(`欢迎来到${d[1]}！`, `Welcome to ${d[2]}!`, 2600); setTimeout(() => { const nm = Guide.nextName(); if (nm) showToast(`去找${nm[0]}说说话吧！跟着黄色的「！」走。`, `Go and talk to ${nm[1]}! Follow the yellow “!”.`, 3600); }, 2800); }
   }
   async function arrive(f, home, land) {
     const me = ME(), o = me.obj.position, ck = captainOf(here), cap = ck && PEOPLE[ck]; UI.busy = true; UI.ride = true;
@@ -4914,7 +4994,7 @@ const Isle2 = (() => {
     // garden plot, lotus pond, and the terrain-model yard (each filled in by its lesson)
     plane(10, 6, '#9A6B45', Z.garden[0], Y.plot, Z.garden[1]); sign('菜园', Z.garden[0] + 6, Z.garden[1] - 2.6, '#7DA35A');
     const pond = mk(cyl(5, 5, .1, 36), '#6FB7DA', Z.pond[0], .08, Z.pond[1], null, false); sp.solids.push([Z.pond[0] - 4.6, Z.pond[1] - 4.6, Z.pond[0] + 4.6, Z.pond[1] + 4.6]); sign('荷花池', Z.pond[0] - 6, Z.pond[1] - 3.6, '#5E9A57');
-    plane(16, 10, '#D9CDB4', Z.model[0], Y.plaza, Z.model[1]); sign('江河模型', Z.model[0] + 9, Z.model[1] + 4.6, '#4F86C6');
+    plane(16, 10, '#D9CDB4', Z.model[0], Y.plaza, Z.model[1]); sign('江河模型', Z.model[0] - 9, Z.model[1] + 4.6, '#4F86C6');
     // trees, flowers and street lamps
     const T0 = TREES.length;
     [[-33, -24], [-33, 6], [33, -24], [33, 6], [-10, -26], [12, -26], [-30, 20], [10, 24], [-10, 24], [32, 16]].forEach(([x, z], i) => roundTree(x, 0, z, .85 + (i % 3) * .15, i % 2 ? '#6DBF5A' : '#5EA94E'));
@@ -4935,7 +5015,7 @@ const Isle2 = (() => {
     if (t - last > 3) { last = t; phaseNow(); }
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
-    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x, want = inFront ? 0 : 1;
+    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x, want = inFront ? 0 : 1;
       if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     B2.tick(dt, t); B2d.tick(dt); B2e.tick(dt); B2f.tick(dt, t);
   }
@@ -4991,10 +5071,10 @@ const B2 = (() => {
       const ok = c2().desks[i]; g.position.set(x + (ok ? 0 : (i % 2 ? .7 : -.6)), 0, z + (ok ? 0 : (i % 3 - 1) * .5)); g.rotation.y = ok ? 0 : (i % 2 ? .45 : -.35); sp.solids.push([x - 1, z - .6, x + 1, z + .6]); return { g, x, z, i }; });
     // art frames on the walls on both sides, and the reading corner at the back
     Q.frames = [[-7, -1.6], [-7, 1.8], [7, -1.6], [7, 1.8]].map(([x, z], i) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.1), new THREE.MeshBasicMaterial({ map: artTex(i) })); m.position.set(x + (x < 0 ? .22 : -.22), 2.6, z); m.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2; m.visible = !!c2().art[i]; S.add(m); return { m, x, z, i }; });
-    Q.shelf = new THREE.Group(); Q.shelf.position.set(-4.6, 0, 4.6); S.add(Q.shelf);
+    Q.shelf = new THREE.Group(); Q.shelf.position.set(-6.5, 0, 3.7); Q.shelf.rotation.y = Math.PI / 2; S.add(Q.shelf);
     mk(rbox(2.6, 2.2, .7, .06), '#8C5B3A', 0, 1.1, 0, Q.shelf); [.6, 1.3].forEach(y => mk(box(2.4, .06, .6), '#B98A5A', 0, y, .05, Q.shelf));
     Q.books = []; for (let k = 0; k < 12; k++) { const b = mk(box(.16, .5, .45), ['#E8574A', '#4F86C6', '#F2B233', '#5E9A57'][k % 4], -1 + (k % 6) * .36, k < 6 ? .9 : 1.6, .05, Q.shelf, false); b.visible = k < c2().books * 4; Q.books.push(b); }
-    sp.solids.push([-6, 4.2, -3.2, 5]); const tag = signBoard('图书角', 1.4, .45, '#5E9A57'); tag.position.set(-4.6, 2.5, 4.3); tag.rotation.y = Math.PI; S.add(tag);
+    sp.solids.push([-7, 2.3, -6, 5.1]); const tag = signBoard('图书角', 1.4, .45, '#5E9A57'); tag.position.set(-6.3, 2.6, 3.7); tag.rotation.y = Math.PI; S.add(tag);
     Q.pile = mk(rbox(1.2, .5, .8, .05), '#B98A5A', 4.8, .25, 4.2); sp.solids.push([4.1, 3.7, 5.5, 4.7]);
     Q.marks = { front: new THREE.Object3D(), back: new THREE.Object3D() }; Q.marks.front.position.set(0, 0, -4.2); Q.marks.back.position.set(-4.6, 0, 4.4); S.add(Q.marks.front, Q.marks.back);
     W.scene = SP.isle2.scene; here_build = SP.isle2;
@@ -5098,7 +5178,7 @@ const B2 = (() => {
     if (Q.s2 === 'desks') Q.desks.forEach(d => { if (!c2().desks[d.i]) add(d.x, d.z + 1.1, 1.3, '摆整齐', 'Straighten', () => straighten(d), 1); });
     if (Q.s2 === 'platform') add(0, -3, 2.2, '这是讲台', 'This is the platform', platform, 1);
     if (Q.s2 === 'art') Q.frames.forEach(f => { if (!c2().art[f.i]) add(f.x + (f.x < 0 ? 1.2 : -1.2), f.z, 1.4, '贴作品', 'Put up a picture', () => hangArt(f), 1); });
-    if (Q.s2 === 'books') add(-4.6, 3.4, 2, '放书', 'Shelve books', shelve, 1);
+    if (Q.s2 === 'books') add(-5.2, 3.7, 2, '放书', 'Shelve books', shelve, 1);
   }
   function tick() {}
   return { build, spawn, nearby, nearbyRoom, tick, room, paint };
@@ -5433,7 +5513,11 @@ const B2d = (() => {
   function setLight(green) { Q.green = green; Q.t = 0; Q.heads.forEach(h => { h.r.material.color = lin(green ? '#5A1E1E' : '#FF4A3A'); h.g.material.color = lin(green ? '#3AE06A' : '#1E4A2A'); }); }
   function tick(dt) {
     Q.t += dt; if (!Q.hold && Q.t > (Q.green ? 6 : 5)) setLight(!Q.green);
-    if (!Q.green) Q.cars.forEach(c => { const p = c.g.position; if (c.ax === 'x') { p.x += 9 * dt; if (p.x > 32) p.x = -32; } else { p.z -= 9 * dt; if (p.z < -17.5) p.z = 25; } });
+    const [cx, cz] = C(), v = 9 * dt;   // on the walk signal a car drives up to its stop line and waits there; one already in the junction drives on out
+    Q.cars.forEach(c => { const p = c.g.position;
+      if (c.ax === 'x') { let nx = p.x + v; if (Q.green && p.x <= cx - 7 && nx > cx - 7) nx = cx - 7; p.x = nx > 32 ? -32 : nx; }
+      else { let nz = p.z - v; if (Q.green && p.z >= cz + 7 && nz < cz + 7) nz = cz + 7; p.z = nz < -17.5 ? 25 : nz; } });
+    Q.clear = !Q.cars.some(c => c.ax === 'x' ? Math.abs(c.g.position.x - cx) < 6.9 : Math.abs(c.g.position.z - cz) < 6.9);
   }
 
   /* ---------- Lesson 7: three crossings with 弟弟 and 妹妹 ---------- */
@@ -5447,6 +5531,7 @@ const B2d = (() => {
   async function cross() {
     if (!Q.green) { Sfx.play('pop'); sayIt('红灯停一停！'); showToast('哔——红灯停一停！', 'Whistle! Red means stop and wait!', 1600); return; }
     UI.busy = true; Q.hold = true; const [cx] = C(), [a, b] = ROUTE[Q.k], me = ME();
+    while (!Q.clear) await wait(100);   // let a car that is still in the junction drive out first
     sayIt('绿灯快快走！'); me.play('walk');
     walkTo(PEOPLE.didi, cx + b[0] - .9, b[1] + .4, 4.5); walkTo(PEOPLE.meimei, cx + b[0] - 1.5, b[1] + .7, 4.5);
     await new Promise(res => gsap.to(me.obj.position, { x: cx + b[0], z: b[1], duration: 1.6, ease: 'none', onComplete: res })); me.play('idle');
@@ -5470,7 +5555,7 @@ const B2d = (() => {
     [[14.4, 9, .4, 0, 9.5, -5.7], [.4, 9, 11.4, -7.2, 9.5, 0], [.4, 9, 11.4, 7.2, 9.5, 0]].forEach(([w, h, d, x, y, z]) => mk(new THREE.BoxGeometry(w, h, d), '#E6DCC8', x, y, z, null, false));
     const shelf = (x, z, w, label, col, ry = 0) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; S.add(g); mk(rbox(w, 2.2, .6, .05), '#8C5B3A', 0, 1.1, 0, g); for (let k = 0; k < Math.floor(w / .22); k++) [.55, 1.25, 1.9].forEach((y, j) => mk(box(.16, .5, .4), [col, '#FFFFFF', '#5E9A57', '#E8843A'][(k + j) % 4], -w / 2 + .2 + k * .22, y, .05, g, false)); if (label) { const s = signBoard(label, 1.4, .45, col); s.position.set(0, 2.5, .3); g.add(s); } return g; };
     shelf(-4.2, -5.1, 4.4, '大人的书', '#5A6A8A'); sp.solids.push([-6.5, -5.5, -1.9, -4.7]);
-    Q.kinds = KINDS.map(([zh, en, col], i) => { const x = 1.6 + (i % 2) * 3.4, z = i < 2 ? -3.4 : .2; shelf(x, z, 2.4, zh, col); sp.solids.push([x - 1.3, z - .4, x + 1.3, z + .4]); return { zh, en, x, z, i }; });
+    Q.kinds = KINDS.map(([zh, en, col], i) => { const x = 1.6 + (i % 2) * 3.4, z = i < 2 ? -4.6 : .8; shelf(x, z, 2.4, zh, col); sp.solids.push([x - 1.3, z - .4, x + 1.3, z + .4]); return { zh, en, x, z, i }; });
     const ks = signBoard('儿童区', 1.8, .55, '#3F7F78'); ks.position.set(3.5, 3.6, -5.45); S.add(ks);
     const clock = new THREE.Mesh(new THREE.CircleGeometry(.55, 32), new THREE.MeshBasicMaterial({ map: clockTex() })); clock.position.set(-.6, 3.6, -5.48); S.add(clock);
     mk(rbox(2.6, 1, 1, .06), '#B98A5A', -4.4, .5, 2.4); sp.solids.push([-5.8, 1.8, -3, 3]); Q.counter = { x: -4.4, z: 3.6 };
@@ -5713,11 +5798,11 @@ const B2f = (() => {
     return new Promise(res => {
       UI.busy = true; const v = document.createElement('div'); v.className = 'veil';
       v.innerHTML = `<div class="sheet" style="text-align:center"><h2>青蛙的诗<small class="en-only">The frog's poem</small></h2>
-        <div data-leaf style="background:radial-gradient(circle at 50% 50%,#8FD07A,#4E9A45);border-radius:50%;padding:42px 18px;font-size:26px;font-weight:700;color:#1E3A1E;line-height:2"></div>
+        <div data-leaf style="background:radial-gradient(circle at 50% 50%,#8FD07A,#4E9A45);border-radius:50%;padding:42px 18px;font-size:22px;font-weight:700;color:#1E3A1E;line-height:2.2;white-space:nowrap"></div>
         <p style="margin:8px 0;color:var(--ink-soft)">先点一个空格，再选一个帮手。<span class="en-only"><br>Tap a gap, then choose a helper.</span></p>
         <div class="row" style="justify-content:center;gap:8px">${HELP.map(([zh, m, en], i) => `<button class="pill" data-h="${i}">${zh} ${m}<small class="en-only" style="display:block;font-size:11px">${en}</small></button>`).join('')}</div></div>`;
       document.body.appendChild(v); const leaf = v.querySelector('[data-leaf]'); let sel = null, left = 0;
-      PARTS.forEach(p => { if (p === 'br') { leaf.appendChild(document.createElement('br')); return; } if (typeof p === 'string') { const s = document.createElement('span'); s.textContent = p; leaf.appendChild(s); } else { left++; const b = document.createElement('button'); b.dataset.want = p; b.textContent = '＿'; b.style.cssText = 'min-width:44px;margin:0 2px;border-radius:10px;border:2px dashed #2F6E46;background:#E8F6D8;font:inherit'; b.onclick = () => { if (b.dataset.ok) return; leaf.querySelectorAll('button').forEach(x => x.style.outline = ''); sel = b; b.style.outline = '3px solid #F2B233'; }; leaf.appendChild(b); } });
+      PARTS.forEach(p => { if (p === 'br') { leaf.appendChild(document.createElement('br')); return; } if (typeof p === 'string') { const s = document.createElement('span'); s.textContent = p; leaf.appendChild(s); } else { left++; const b = document.createElement('button'); b.dataset.want = p; b.textContent = '＿'; b.style.cssText = 'min-width:34px;margin:0 1px;padding:1px 4px;border-radius:10px;border:2px dashed #2F6E46;background:#E8F6D8;font:inherit'; b.onclick = () => { if (b.dataset.ok) return; leaf.querySelectorAll('button').forEach(x => x.style.outline = ''); sel = b; b.style.outline = '3px solid #F2B233'; }; leaf.appendChild(b); } });
       v.querySelectorAll('[data-h]').forEach(h => h.onclick = () => { const i = +h.dataset.h; sayIt(HELP[i][0]); if (!sel) { showToast('先点一个空格！', 'Tap a gap first!', 1200); return; }
         if (+sel.dataset.want !== i) { showToast(`这里不是${HELP[i][0]}哦。`, `Not the ${HELP[i][2]} here.`, 1400); return; }
         sel.textContent = MARK[i]; sel.dataset.ok = 1; sel.style.border = '2px solid #2F6E46'; sel.style.outline = ''; sel = null; Sfx.play('pop'); left--;
@@ -5746,14 +5831,17 @@ const B2f = (() => {
   };
   async function pour() {
     const which = Q.s12; Q.s12 = null; UI.busy = true; Sfx.play('whoosh'); sayIt('从西流到东'); const f = new THREE.Object3D(); f.position.set(Q.m.x, 0, Q.m.z + 2); I().scene.add(f); UI.focus = f;
-    await flow(which === 'cj' ? Q.cj : Q.hh); UI.focus = null; I().scene.remove(f); UI.busy = false;
-    if (which === 'cj') { await talk('yeye2', [['水从西流到东，流进了大海！这是一条大江。', 'The water flows from west to east into the sea! That is a great river.'], ['再倒一次，还有一条大河。', 'Pour once more: there is another great river.']]); Q.s12 = 'hh'; return; }
+    UI.seatCam = { pos: new THREE.Vector3(Q.m.x, 27, Q.m.z + 29), look: new THREE.Vector3(Q.m.x, .5, Q.m.z) };   // far enough back to see the whole model on a phone
+    const back = () => { UI.focus = null; UI.seatCam = null; I().scene.remove(f); };
+    await flow(which === 'cj' ? Q.cj : Q.hh); UI.busy = false;
+    if (which === 'cj') { await talk('yeye2', [['水从西流到东，流进了大海！这是一条大江。', 'The water flows from west to east into the sea! That is a great river.'], ['再倒一次，还有一条大河。', 'Pour once more: there is another great river.']]); back(); Q.s12 = 'hh'; return; }
     for (;;) { const c = await talk('yeye2', [['靠南边的这条，是中国最长的江。它叫什么？', "The southern one is China's longest river. What is it called?"]], [['黄河', 'the Yellow River'], ['长江', 'the Yangtze']]); if (c === 1) break; await talk('yeye2', [['最长的是长江哦。', 'The longest is the Yangtze.']]); }
     sayIt('长江'); Q.lcj.visible = true; Sfx.play('pop');
     for (;;) { const c = await talk('yeye2', [['靠北边的这条，是中国的母亲河。它叫什么？', "The northern one is China's mother river. What is it called?"]], [['黄河', 'the Yellow River'], ['长江', 'the Yangtze']]); if (c === 0) break; await talk('yeye2', [['母亲河是黄河哦。', 'The mother river is the Yellow River.']]); }
     sayIt('黄河'); Q.lhh.visible = true; Sfx.play('pop');
     Q.boats.forEach(b => b.visible = true); Q.sail = true; G.rivers = true; saveG();
     await talk('yeye2', [['小船在长江上，从西开到东。我们爱长江，我们爱黄河！', 'Little boats sail down the Yangtze from west to east. We love the Yangtze; we love the Yellow River!']]);
+    back();
     done(212, '跟爷爷说「回答问题」', 'Talk to Grandpa to answer questions.');
   }
 
@@ -5775,6 +5863,90 @@ const B2f = (() => {
   return { build, spawn, nearby, tick };
 })();
 /* =====================================================================
+   A home on every island: a room with a bed to rest in. The first time you land on an island you start
+   in that island's home, where Mom welcomes you and sends you to the first lesson.
+   (Book 2 already has its own home; Book 5's home is the one in the town.)
+   ===================================================================== */
+const IHome = (() => {
+  const Q = {};
+  const DOOR = { isle1: [-20, 13], isle3: [-14.3, 26.2], isle4: [8.5, 21.2] };   // where "Go home" appears, in front of each house door
+  const ROOM = { ihome1: 'isle1', ihome3: 'isle3', ihome4: 'isle4' };
+  const LOOK = { isle1: ['#FFF3DC', '#E9C46A', '#E8574A'], isle3: ['#EEF3E2', '#9FD3C8', '#4F86C6'], isle4: ['#F6E9E2', '#E8B0A0', '#B8332A'] };   // wall, rug, blanket
+  const BOOKNAME = { isle1: ['第一册岛', 'the Book 1 island'], isle2: ['第二册岛', 'the Book 2 island'], isle3: ['第三册岛', 'the Book 3 island'], isle4: ['第四册岛', 'the Book 4 island'] };
+  Object.assign(NAMES, { hmom3: ['妈妈', 'Mom'], hmom4: ['妈妈', 'Mom'] });
+  Object.assign(B5.CHATS, { hmom4: [['我来邮局寄一封信。', 'I have come to the post office to send a letter.'], ['写信给亲戚朋友，他们收到一定很高兴。', 'Write to family and friends: they will be so glad to get a letter.']] });
+  function build(isle) {
+    const name = 'ihome' + isle.slice(-1), keepS = W.scene, keepB = here_build, [wall, rug, blanket] = LOOK[isle];
+    const sp = space(name, { scene: new THREE.Scene(), floor: () => 0, cam: [0, 11, 13], camTall: [0, 13, 17], box: [-6.6, -4.4, 6.6, 5.4] }); here_build = sp;
+    const S = sp.scene; S.background = new THREE.Color(lin('#2E2A33')); lights(S, '#FFF6E6', '#B8A07A', '#FFE9C8', .9, .85);
+    const fl = mk(new THREE.PlaneGeometry(14, 18), '#D8A86E', 0, 0, 3.5, null, false); fl.rotation.x = -Math.PI / 2; sp.walk.push(fl);
+    [[14.4, 5, .4, 0, 2.5, -5.7], [.4, 5, 11.4, -7.2, 2.5, 0], [.4, 5, 11.4, 7.2, 2.5, 0]].forEach(([w, h, d, x, y, z]) => mk(new THREE.BoxGeometry(w, h, d), wall, x, y, z));
+    [[14.4, 9, .4, 0, 9.5, -5.7], [.4, 9, 11.4, -7.2, 9.5, 0], [.4, 9, 11.4, 7.2, 9.5, 0]].forEach(([w, h, d, x, y, z]) => mk(new THREE.BoxGeometry(w, h, d), wall, x, y, z, null, false));
+    const rg = mk(new THREE.PlaneGeometry(5, 3.4), rug, .8, .02, 1, null, false); rg.rotation.x = -Math.PI / 2;
+    mk(rbox(2, 1.4, .1, .06), '#9FD0E6', .6, 3, -5.45, null, false); mk(rbox(2.2, .12, .3, .04), '#FFFFFF', .6, 2.24, -5.4, null, false);
+    // the bed, in the back corner
+    mk(rbox(2.4, .5, 3.6, .08), '#B98A5A', -5.2, .25, -3.2); mk(rbox(2.4, 1.2, .2, .08), '#B98A5A', -5.2, .6, -5); mk(rbox(2.2, .3, 3.3, .1), '#FFFFFF', -5.2, .62, -3.2, null, false);
+    mk(rbox(2.24, .32, 2, .1), blanket, -5.2, .64, -2.5, null, false); mk(rbox(1.4, .22, .7, .1), '#FFF6E0', -5.2, .86, -4.4, null, false); sp.solids.push([-6.5, -5.2, -3.9, -1.3]);
+    // a table with two stools, a bookshelf and a plant
+    mk(rbox(2.2, .12, 1.4, .05), '#D9B48A', 1.2, .8, .6); [[-.9, -.5], [.9, -.5], [-.9, .5], [.9, .5]].forEach(([a, b]) => mk(cyl(.06, .06, .8, 6), '#8A6A4A', 1.2 + a, .4, .6 + b)); sp.solids.push([0, -.2, 2.4, 1.4]);
+    [-.6, 3].forEach(x => mk(cyl(.3, .3, .45, 12), '#C99A66', x, .23, .6));
+    mk(rbox(2.6, 2.2, .6, .06), '#8C5B3A', 4.8, 1.1, -5.1); for (let k = 0; k < 10; k++) [.6, 1.3, 1.9].forEach((y, j) => mk(box(.16, .46, .4), ['#E8574A', '#4F86C6', '#F2B233', '#5E9A57'][(k + j) % 4], 3.8 + k * .22, y, -5, null, false)); sp.solids.push([3.4, -5.5, 6.2, -4.6]);
+    mk(cyl(.3, .24, .5, 12), '#C96A4A', -6, .25, 3.6); mk(sph(.5, 12), '#5EA94E', -6, .95, 3.6); sp.solids.push([-6.5, 3.1, -5.5, 4.1]);
+    if (isle !== 'isle1') { const k = 'hmom' + isle.slice(-1), c = isle === 'isle3' ? '#C96A88' : '#C8453B', c2 = isle === 'isle3' ? '#A84E6E' : '#9E2E26';
+      PEOPLE[k] = makeChar('mom', { '3,0': c, '7,0': c2, '6,0': c2, '4,0': c, '7,1': '#3E4A52', '0,1': '#4C4A5A', '2,1': '#4C4A5A', '1,1': '#4C4A5A', '1,0': '#2B2420' }, 1, { hairCol: '#2B2420' }); putIn(PEOPLE[k], sp, 3.4, -2.2, 0); if (G.friend[k] == null) G.friend[k] = 0; }
+    W.scene = keepS; here_build = keepB; if (G.homeLeft && G.homeLeft[isle]) away(isle); return sp;
+  }
+  /* after you have left home the first time, Mom is where she said she would be */
+  function away(isle) {
+    if (isle === 'isle3' && PEOPLE.hmom3) { PEOPLE.hmom3.obj.visible = false; PEOPLE.hmom3.space = 'away'; }   // she is in the clinic now (Lesson 3)
+    if (isle === 'isle4' && PEOPLE.hmom4 && SP.isle4) putIn(PEOPLE.hmom4, SP.isle4, Isle4.Z.post[0] - 3.2, Isle4.Z.post[1] + 4.4, 0);   // outside the post office
+  }
+  /* Book 2's home gets a bed too, along the back wall */
+  function bed2() {
+    const sp = SP.home2; if (!sp || sp.__bed) return; sp.__bed = true; const keepS = W.scene, keepB = here_build; W.scene = sp.scene; here_build = sp;
+    mk(rbox(3.6, .5, 2.2, .08), '#B98A5A', -1.2, .25, -4.3); mk(rbox(.2, 1.2, 2.2, .08), '#B98A5A', -2.9, .6, -4.3); mk(rbox(3.3, .3, 2, .1), '#FFFFFF', -1.1, .62, -4.3, null, false);
+    mk(rbox(2, .32, 2.04, .1), '#F28C28', -.4, .64, -4.3, null, false); mk(rbox(.7, .22, 1.4, .1), '#FFF6E0', -2.3, .86, -4.3, null, false); sp.solids.push([-3.1, -5.4, .7, -3.2]);
+    W.scene = keepS; here_build = keepB;
+  }
+  const room = isle => isle === 'isle2' ? B2b.home() : (SP['ihome' + isle.slice(-1)] || build(isle));
+  const momOf = isle => ({ isle1: 'imom', isle2: 'mama2', isle3: 'hmom3', isle4: 'hmom4' })[isle];
+  async function enter(isle) { const sp = room(isle); await goTo(sp.name, 0, 3.6, Math.PI); }
+  async function leave(isle) {
+    const d = DOOR[isle]; await goTo(isle, d[0], d[1] + .8, 0);
+    if (!(G.homeLeft && G.homeLeft[isle])) { (G.homeLeft = G.homeLeft || {})[isle] = true; saveG(); away(isle); }
+    if (Q.momBack) { const b = Q.momBack; Q.momBack = null; putIn(PEOPLE.imom, SP.isle1, b.x, b.z, b.ry); }   // Mom goes back to her spot on the meadow
+  }
+  async function sleep() {
+    UI.busy = true; const f = $('fade'); await new Promise(r => gsap.to(f, { opacity: 1, duration: .6, onComplete: r }));
+    showToast('睡了一觉……', 'A good sleep…', 2000); await wait(2100);
+    await new Promise(r => gsap.to(f, { opacity: 0, duration: .6, onComplete: r })); UI.busy = false;
+    Voice.speak('睡醒了，精神真好！'); showToast('睡醒了，精神真好！', 'Awake and full of energy!', 2000);
+  }
+  const due = isle => !!BOOKNAME[isle] && !(G.homeSeen && G.homeSeen[isle]);
+  /* first landing on an island: you start in its home, and Mom tells you where to go */
+  async function welcome(isle) {
+    (G.homeSeen = G.homeSeen || {})[isle] = true; saveG();
+    const nm = Guide.nextName(), who = momOf(isle), bn = BOOKNAME[isle], sp = room(isle);
+    if (isle === 'isle1') { const o = PEOPLE.imom.obj; if (PEOPLE.imom.space === 'isle1') { Q.momBack = { x: o.position.x, z: o.position.z, ry: o.rotation.y }; putIn(PEOPLE.imom, sp, 3.4, -2.2, 0); } }
+    await goTo(sp.name, 0, 3.6, Math.PI);
+    const lines = [[`{name}，欢迎回家！这是我们在${bn[0]}的家。`, `Welcome home, {name}! This is our home on ${bn[1]}.`]];
+    lines.push(['累了就回家，在床上睡一觉。', 'Whenever you are tired, come home and have a sleep in your bed.']);
+    lines.push({ isle1: ['我待会儿要去草地上。想找我，就到草地来！', 'I am going to the meadow in a while. If you want me, come to the meadow!'], isle2: ['妈妈今天在家里做饭。', 'Mom is at home cooking today.'],
+      isle3: ['我待会儿要去诊所。想找我，就到诊所来！', 'I am going to the clinic in a while. If you want me, come to the clinic!'], isle4: ['我待会儿要去邮局寄信。想找我，就到邮局来！', 'I am going to the post office to send a letter in a while. If you want me, come to the post office!'] }[isle]);
+    lines.push(nm ? [`出门以后，先去找${nm[0]}吧！跟着黄色的「！」走。`, `When you go out, find ${nm[1]} first! Follow the yellow “!”.`] : ['出门去走走吧！', 'Go out and have a look around!']);
+    await talk(who, lines);
+  }
+  function nearby(add) {
+    const d = DOOR[here.name]; if (d) add(d[0], d[1], 2.2, '进家', 'Go home', () => enter(here.name), 0);
+    if (here.name === 'home2') { bed2(); add(-1.2, -2.6, 1.6, '睡一觉', 'Have a sleep', sleep, 0); }
+    const isle = ROOM[here.name]; if (!isle) return;
+    add(0, 4.9, 2, '出去', 'Go out', () => leave(isle), 1);
+    add(-3.4, -3, 1.8, '睡一觉', 'Have a sleep', sleep, 0);
+    const k = momOf(isle), c = PEOPLE[k]; if (c && c.space === here.name) add(c.obj.position.x, c.obj.position.z, 2.6, '说话', 'Talk', () => talk(k, [['这里是我们的家。累了就睡一觉吧！', 'This is our home. Have a sleep whenever you are tired!']]), 0);
+  }
+  return { nearby, due, welcome, DOOR };
+})();
+/* =====================================================================
    Book 3 island: a village between hills, a lake and the sea. Built the first time you sail there.
    Ground rule: every flat piece of ground has its own height, so nothing flickers.
    ===================================================================== */
@@ -5782,7 +5954,7 @@ const Isle3 = (() => {
   let sp = null, phase = null, last = -99;
   const trees = [], lamps = [];
   const Y = { sand: 0, grass: .03, road: .06, stripe: .09, plaza: .12, plot: .15, snow: .18 };
-  const Z = { cross: [0, 6], bookstore: [-12, -3], clinic: [12, -3], garden: [-26, 20], lake: [-24, -20], river: [32, 0], snow: [24, -14], tower: [0, -24], cottage: [12, 20], workshop: [26, 24], track: [12, -20], hill: [-28, 2] };
+  const Z = { home: [-14.3, 22], cross: [0, 6], bookstore: [-12, -3], clinic: [12, -3], garden: [-26, 20], lake: [-24, -20], river: [32, 0], snow: [24, -14], tower: [0, -24], cottage: [12, 20], workshop: [26, 24], track: [12, -20], hill: [-28, 2] };
   Object.assign(NAMES, { captain3: ['船长', 'Captain'] });
   function roundedRect(w, h, r) { const s = new THREE.Shape(), x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s; }
   function flat(w, h, r, col, y) { const m = mk(new THREE.ShapeGeometry(roundedRect(w, h, r), 12), col, 0, y, 0, null, false); m.rotation.x = -Math.PI / 2; m.receiveShadow = SHADOWS; return m; }
@@ -5820,6 +5992,7 @@ const Isle3 = (() => {
     building(Z.clinic[0], Z.clinic[1], 10, 7, 4.4, '#FFFFFF', '#5E8FB8', '诊所', '#5E8FB8');
     building(Z.cottage[0], Z.cottage[1], 8, 6, 3.8, '#EADCC2', '#8C5B3A', '瓦特的家', '#8C5B3A');
     building(Z.workshop[0], Z.workshop[1], 8, 6, 3.6, '#E9D9B4', '#B98A3A', '造纸坊', '#B98A3A');
+    building(Z.home[0], Z.home[1], 7, 6, 3.8, '#FFF6E2', '#E8574A', '我的家', '#8C5B3A');
     disc(6, '#6FB7DA', Z.lake[0], .09, Z.lake[1]); sp.solids.push([Z.lake[0] - 5.6, Z.lake[1] - 5.6, Z.lake[0] + 5.6, Z.lake[1] + 5.6]); sign('湖', Z.lake[0] + 7, Z.lake[1] + 2, '#4F86C6');
     plane(4, 54, '#6FB7DA', Z.river[0], .1, Z.river[1] + 3); sp.solids.push([Z.river[0] - 2, -26, Z.river[0] + 2, 31]); sign('小河', Z.river[0] - 3.6, -4, '#4F86C6');
     plane(11, 8, '#FFFFFF', Z.snow[0], Y.snow, Z.snow[1]);   // stops short of the river on the east side sign('雪地', Z.snow[0] - 7, Z.snow[1] + 3.6, '#7FA6C8');
@@ -5848,7 +6021,7 @@ const Isle3 = (() => {
     if (t - last > 3) { last = t; phaseNow(); }
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
-    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x, want = inFront ? 0 : 1;
+    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x, want = inFront ? 0 : 1;
       if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     B3.tick(dt, t); B3b.tick(dt, t); B3c.tick(dt, t); B3d.tick(dt, t); B3e.tick(dt, t); B3f.tick(dt, t);
   }
@@ -6640,7 +6813,7 @@ const Isle4 = (() => {
   let sp = null, phase = null, last = -99;
   const trees = [], lamps = [], halls = [];
   const Y = { sand: 0, grass: .03, road: .06, stripe: .09, plaza: .12, plot: .15, water: .1 };
-  const Z = { post: [-4, 18], wall: [-24, -26], gugong: [-26, -12], tam: [-10, -14], square: [-10, -6], lake: [14, -12], hill: [14, -25], gate: [26, -6], versailles: [22, 16], village: [-24, 16] };
+  const Z = { home: [8.5, 17], post: [-4, 18], wall: [-24, -26], gugong: [-26, -12], tam: [-10, -14], square: [-10, -6], lake: [14, -12], hill: [14, -25], gate: [26, -6], versailles: [22, 16], village: [-24, 16] };
   Object.assign(NAMES, { captain4: ['船长', 'Captain'] });
   function roundedRect(w, h, r) { const s = new THREE.Shape(), x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s; }
   function flat(w, h, r, col, y) { const m = mk(new THREE.ShapeGeometry(roundedRect(w, h, r), 12), col, 0, y, 0, null, false); m.rotation.x = -Math.PI / 2; m.receiveShadow = SHADOWS; return m; }
@@ -6670,6 +6843,11 @@ const Isle4 = (() => {
     // post office
     const po = new THREE.Group(); po.position.set(Z.post[0], 0, Z.post[1]); S.add(po); mk(rbox(8, 4, 6, .3), '#E9F2D8', 0, 2, 0, po); mk(rbox(8.6, .5, 6.6, .12), '#3F7F4A', 0, 4.25, 0, po); mk(rbox(1.8, 2.9, .3, .14), '#8C5B3A', 0, 1.45, 3.05, po);
     const ps = signBoard('邮局', 1.8, .65, '#3F7F4A'); ps.position.set(0, 3.5, 3.2); po.add(ps); sp.solids.push([Z.post[0] - 4.2, Z.post[1] - 3.2, Z.post[0] + 4.2, Z.post[1] + 3.2]);
+    // your home on this island
+    { const hm = new THREE.Group(); hm.position.set(Z.home[0], 0, Z.home[1]); hm.userData.noMerge = 1; S.add(hm); mk(rbox(7, 3.8, 6, .3), '#FFF6E2', 0, 1.9, 0, hm);
+      const rf = mk(new THREE.ConeGeometry(5.1, 2.6, 4), '#E8574A', 0, 5.1, 0, hm); rf.rotation.y = Math.PI / 4; rf.scale.z = 6 / 7; mk(rbox(1.8, 2.9, .3, .14), '#8C5B3A', 0, 1.45, 3.05, hm);
+      [-2, 2].forEach(dx => mk(rbox(1.3, 1.2, .2, .12), '#9FD0E6', dx, 2.1, 3.02, hm)); const hs = signBoard('我的家', 2.1, .65, '#8C5B3A'); hs.position.set(0, 3.3, 3.2); hm.add(hs);
+      sp.solids.push([Z.home[0] - 3.7, Z.home[1] - 3.2, Z.home[0] + 3.7, Z.home[1] + 3.2]); }
     // the Beijing corner: a stretch of wall on a ridge, the palace gate, the gate tower and its square
     const [wx, wz] = Z.wall; const ridge = mk(new THREE.BoxGeometry(22, 1.2, 3), '#7DBF5A', wx, .6, wz); sp.solids.push([wx - 11, wz - 1.6, wx + 11, wz + 1.6]);
     mk(box(22, 1.4, 1.6), '#B9AE98', wx, 1.9, wz); for (let k = 0; k < 18; k++) mk(box(.6, .5, .25), '#B9AE98', wx - 10.5 + k * 1.24, 2.85, wz + .7);
@@ -6710,7 +6888,7 @@ const Isle4 = (() => {
     if (t - last > 3) { last = t; phaseNow(); }
     if (sp.ferry) sp.ferry.position.y = Math.sin(t * 1.3) * .06;
     const me = ME().obj.position;
-    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x, want = inFront ? 0 : 1;
+    trees.forEach(tr => { const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && Math.abs(p.x - me.x) < 4.2 * tr.scale.x || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x, want = inFront ? 0 : 1;
       if (Math.abs(tr.userData.fade - want) > .01) { tr.userData.fade += (want - tr.userData.fade) * Math.min(1, dt * 8); tr.userData.mats.forEach(m => { m.opacity = tr.userData.fade; m.depthWrite = tr.userData.fade > .9; }); tr.visible = tr.userData.fade > .03; if (tr.userData.fruitG) tr.userData.fruitG.traverse(o => { if (o.isMesh) o.visible = tr.userData.fade > .5; }); } });
     // a hall between the camera and the player is cut away, so the Great Wall and the palace stay in view
     halls.forEach(h => { const p = h.g.position; h.g.visible = !(me.z < p.z - h.d / 2 - .5 && me.z > p.z - 16 && Math.abs(me.x - p.x) < h.w / 2 + 3); });
