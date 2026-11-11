@@ -5998,7 +5998,7 @@ const Isle3 = (() => {
     plane(11, 8, '#FFFFFF', Z.snow[0], Y.snow, Z.snow[1]);   // stops short of the river on the east side sign('雪地', Z.snow[0] - 7, Z.snow[1] + 3.6, '#7FA6C8');
     const tg = new THREE.Group(); tg.position.set(Z.tower[0], 0, Z.tower[1]); S.add(tg); for (let k = 0; k < 4; k++) { mk(rbox(5 - k * .7, 2.2, 5 - k * .7, .1), '#C8644A', 0, 1.1 + k * 2.4, 0, tg); const r = mk(new THREE.ConeGeometry((5 - k * .7) * .9, .8, 4), '#4C4A5A', 0, 2.5 + k * 2.4, 0, tg); r.rotation.y = Math.PI / 4; }
     sp.solids.push([Z.tower[0] - 2.8, Z.tower[1] - 2.8, Z.tower[0] + 2.8, Z.tower[1] + 2.8]); sign('鹳雀楼', Z.tower[0] + 4, Z.tower[1] + 3, '#C8644A');
-    plane(12, 6, '#B9D98A', Z.track[0], Y.plot, Z.track[1]); sign('赛跑场', Z.track[0] - 7, Z.track[1] + 2, '#7DA35A');
+    plane(12, 6, '#B9D98A', Z.track[0], Y.plot, Z.track[1]); sign('赛跑场', Z.track[0] + 6.4, Z.track[1] + 3.6, '#7DA35A');
     const hill = mk(new THREE.SphereGeometry(7, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), '#7FC25A', Z.hill[0], -2.2, Z.hill[1] - 2, null, false); hill.scale.y = .55; sp.solids.push([Z.hill[0] - 5, Z.hill[1] - 7, Z.hill[0] + 5, Z.hill[1] + 2]);
     plane(10, 6, '#C9E6A0', Z.garden[0], Y.plot, Z.garden[1]); sign('谜语花园', Z.garden[0] + 6.4, Z.garden[1] - 2, '#E8843A');
     // trees, flowers, lamps
