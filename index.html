@@ -461,7 +461,7 @@ const Sfx = (() => {
     if (name === 'whoosh') noise(t, .45, .2);
     if (name === 'fold') noise(t, .25, .12, 900, 300);
     if (name === 'thunder') { noise(t, 1.4, .45, 420, 60); noise(t + .1, .9, .3, 900, 120); FX.shake(.6); }
-    if (name === 'step') noise(t, .06, .045, 700 + Math.random() * 300, 240);
+    if (name === 'step') noise(t, .06, .02, 700 + Math.random() * 300, 240);
     if (name === 'ting') { tone(1568, t, .16, 'sine', .1); tone(2349, t + .06, .28, 'sine', .08); }
     if (name === 'chirp') { const f = 2300 + Math.random() * 900; [0, .11, .2].forEach((d, i) => tone(f * (1 + i * .06), t + d, .08, 'sine', .09 * v, f * 1.25)); }
     if (name === 'buzz') { const f = 175 + Math.random() * 30; tone(f, t, .5, 'sawtooth', .05 * v, f * 1.12); tone(f * 2.02, t, .5, 'square', .012 * v, f * 2.2); }
@@ -846,7 +846,7 @@ const FX = (() => {
   const SHADER_FX = FXQ !== '0';
   // uniforms shared by every patched material (one object each, so one write per frame updates them all)
   const U = { t: { value: 0 }, cloud: { value: 0 }, wind: { value: REDUCED ? .25 : 1 }, rim: { value: new THREE.Color(0, 0, 0) } };
-  const S = { day: 1, env: null, waters: [], post: null, trauma: 0, shakeT: 0, step: 0, stepN: 0, amb: 6, slowT: 0, frames: 0, last: 0 };
+  const S = { day: 1, env: null, waters: [], waterMeshes: new Set(), post: null, trauma: 0, shakeT: 0, step: 0, stepN: 0, amb: 6, slowT: 0, frames: 0, last: 0 };
 
   /* ---------- colour grade: gentle shoulder (bright walls keep their colour), a little more contrast and saturation ---------- */
   const GRADE = `
@@ -904,21 +904,55 @@ float fxNoise( vec2 p ) {
     } catch (e) { S.env = null; }
     return S.env;
   }
-  /* o.rim = [x, z, r] draws a foam ring at the bank of a round pond; o.flow = 1 makes the pattern run down a waterfall */
+  /* The sea cannot know where the coast is, so each place gets one small top-down picture of everything that stands
+     at or above the water line (land, piers, boats, rocks). The sea shader reads it to draw surf that rolls in to the
+     shore and to make the water paler in the shallows. It is drawn once, a moment after you arrive. */
+  let blackTex = null; const shores = [];
+  function shoreSlot(mesh, mat) {
+    blackTex = blackTex || new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat); blackTex.needsUpdate = true;
+    const sh = { mesh, mat, map: { value: blackTex }, box: { value: new THREE.Vector4(0, 0, 1, 1) }, done: false, wait: 0 }; shores.push(sh); return sh;
+  }
+  function shoreMask(sh, scene) {
+    const wy = sh.mesh.getWorldPosition(_o).y, box = new THREE.Box3(), b = new THREE.Box3(), size = new THREE.Vector3(), hide = [];
+    scene.traverse(o => {
+      if (o === scene || !o.visible) return;
+      const skip = o.isSprite || o.isPoints || o.isLine || o.isSkinnedMesh || (o.isMesh && (o.userData.fx || S.waterMeshes.has(o) || (o.material && (o.material.side === THREE.BackSide || o.material.transparent))));
+      if (skip) { hide.push(o); return; }
+      if (o.isMesh && o.geometry) { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); b.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld); b.getSize(size); if (Math.max(size.x, size.z) > 320) { hide.push(o); return; } if (b.max.y > wy - .6) box.union(b); }
+    });
+    if (box.isEmpty()) { sh.done = true; return; }
+    box.getSize(size); const c = box.getCenter(new THREE.Vector3()), half = Math.min(170, Math.max(size.x, size.z) / 2 + 8);
+    const cam = new THREE.OrthographicCamera(-half, half, half, -half, .1, 400); cam.position.set(c.x, 200, c.z); cam.up.set(0, 0, -1); cam.lookAt(c.x, 0, c.z); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+    const rt = new THREE.WebGLRenderTarget(512, 512, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true, stencilBuffer: false });
+    const keep = { bg: scene.background, om: scene.overrideMaterial, fog: scene.fog, cp: renderer.clippingPlanes, tm: renderer.toneMapping, sh: renderer.shadowMap.autoUpdate, target: renderer.getRenderTarget() };
+    hide.forEach(o => o.visible = false);
+    scene.background = new THREE.Color(0, 0, 0); scene.fog = null; scene.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, toneMapped: false });
+    renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), -(wy - .6))]; renderer.toneMapping = THREE.NoToneMapping; renderer.shadowMap.autoUpdate = false;
+    try { renderer.setRenderTarget(rt); renderer.render(scene, cam); } catch (e) { }
+    renderer.setRenderTarget(keep.target); renderer.clippingPlanes = keep.cp; renderer.toneMapping = keep.tm; renderer.shadowMap.autoUpdate = keep.sh;
+    scene.overrideMaterial.dispose(); scene.overrideMaterial = keep.om; scene.background = keep.bg; scene.fog = keep.fog; hide.forEach(o => o.visible = true);
+    sh.map.value = rt.texture; sh.box.value.set(c.x - half, c.z - half, half * 2, half * 2); sh.done = true;
+  }
+  function shoreTick(dt) {
+    for (let i = 0; i < shores.length; i++) { const sh = shores[i]; if (sh.done) continue; let r = sh.mesh; while (r.parent) r = r.parent; if (r !== here.scene) continue; sh.wait += dt; if (sh.wait > 1.2) shoreMask(sh, here.scene); return; }
+  }
+  /* o.rim = [x, z, r] draws a foam ring at the bank of a round pond; o.flow = 1 makes the pattern run down a waterfall; o.shore = 1 is the sea, with surf along the coast */
   function water(mesh, o = {}) {
     if (!mesh || !mesh.material || LOW || !SHADER_FX) return mesh;
     const m = mesh.material.clone(), rim = o.rim || [0, 0, 0];
     m.roughness = Math.min(m.roughness, .2); m.metalness = Math.max(m.metalness, .08);
     const env = skyEnv(); if (env && !o.flow) { m.envMap = env; m.envMapIntensity = .16; }
-    const u = { rim: { value: new THREE.Vector3(rim[0], rim[1], rim[2]) }, flow: { value: o.flow ? 1 : 0 } };
+    const u = { rim: { value: new THREE.Vector3(rim[0], rim[1], rim[2]) }, flow: { value: o.flow ? 1 : 0 } }, shore = o.shore ? shoreSlot(mesh, m) : null;
     m.onBeforeCompile = sh => {
-      baseHook(sh); sh.uniforms.uFxRimW = u.rim; sh.uniforms.uFxFlow = u.flow;
+      baseHook(sh); sh.uniforms.uFxRimW = u.rim; sh.uniforms.uFxFlow = u.flow; sh.uniforms.uFxRain = U.rain; if (shore) { sh.uniforms.uFxShore = shore.map; sh.uniforms.uFxShoreBox = shore.box; }
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFxP;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvFxP = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <fog_pars_fragment>', `#include <fog_pars_fragment>
 varying vec3 vFxP;
 uniform vec3 uFxRimW;
 uniform float uFxFlow;
+uniform float uFxRain;
+${shore ? 'uniform sampler2D uFxShore;\nuniform vec4 uFxShoreBox;\nfloat fxLand( vec2 p ) { vec2 uv = ( p - uFxShoreBox.xy ) / uFxShoreBox.zw; uv.y = 1.0 - uv.y; return texture2D( uFxShore, uv ).r * step( 0.0, uv.x ) * step( uv.x, 1.0 ) * step( 0.0, uv.y ) * step( uv.y, 1.0 ); }' : ''}
 #ifndef USE_FOG
 uniform float uFxT;
 ${NOISE}
@@ -939,14 +973,24 @@ float fxFoam( vec2 p ) {   // thin bright lines along the borders of drifting ce
 	float fxDeep = fxNoise( fxP * 0.07 + uFxT * 0.01 );
 	diffuseColor.rgb *= 0.88 + 0.2 * fxDeep;
 	diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.86, 0.97, 1.0 ), fxF * fxFar * 0.24 );
+	${shore ? `{ // how close is land: average of the land picture over two rings (about 1.2 m and 3 m)
+		float fxN1 = 0.0, fxN2 = 0.0;
+		for ( int i = 0; i < 6; i++ ) { float a = float( i ) * 1.0472; vec2 d = vec2( cos( a ), sin( a ) ); fxN1 += fxLand( vFxP.xz + d * 1.2 ); fxN2 += fxLand( vFxP.xz + d * 3.0 ); }
+		float fxNear = fxN1 / 6.0, fxWide = fxN2 / 6.0, fxS = max( fxNear, fxWide * 0.75 );
+		diffuseColor.rgb = mix( diffuseColor.rgb, diffuseColor.rgb * 0.6 + vec3( 0.34, 0.42, 0.36 ), smoothstep( 0.0, 0.7, fxS ) * 0.55 );                    // paler, greener shallows
+		float fxWave = sin( fxS * 9.0 + uFxT * 1.5 + fxNoise( fxP * 0.6 ) * 3.0 ) * 0.5 + 0.5;                                                  // surf lines rolling in
+		float fxSurf = smoothstep( 0.04, 0.3, fxS ) * smoothstep( 0.55, 0.95, fxWave ) * 0.75 + smoothstep( 0.5, 0.78, fxNear ) * ( 0.75 + 0.25 * fxNoise( fxP * 2.0 + uFxT * 0.6 ) );
+		diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), clamp( fxSurf, 0.0, 1.0 ) * 0.72 );
+	}` : ''}
+	diffuseColor.rgb += uFxRain * fxFar * 0.2 * smoothstep( 0.78, 0.95, fxNoise( fxP * 6.5 + vec2( uFxT * 2.3, -uFxT * 1.7 ) ) );   // raindrops dimple the surface
 	if ( uFxRimW.z > 0.0 ) {
 		float fxD = uFxRimW.z - length( vFxP.xz - uFxRimW.xy ) + sin( atan( vFxP.z - uFxRimW.y, vFxP.x - uFxRimW.x ) * 9.0 + uFxT * 1.4 ) * 0.07;
 		diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), ( 1.0 - smoothstep( 0.1, 0.5, fxD ) ) * 0.7 );
 	}`).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 	normal = normalize( normal + fxFar * 0.07 * vec3( sin( fxP.x * 1.9 + uFxT * 1.3 ) + sin( fxP.y * 3.1 - uFxT ), cos( fxP.y * 2.3 + uFxT * 1.1 ) + sin( fxP.x * 1.3 + uFxT * 0.8 ), 0.0 ) );`);
     };
-    m.customProgramCacheKey = () => 'fx-water';
-    mesh.material = m; S.waters.push(m); return mesh;
+    m.customProgramCacheKey = () => shore ? 'fx-water-shore' : 'fx-water';
+    mesh.material = m; S.waters.push(m); S.waterMeshes.add(mesh); return mesh;
   }
 
   /* ---------- wind: leaves and flowers sway in the vertex shader (no per-frame work in JavaScript) ---------- */
@@ -1194,6 +1238,9 @@ void main() {
     // the sea: looping soft noise that swells slowly, heard outdoors
     const n = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = n.getChannelData(0); let last = 0; for (let i = 0; i < d.length; i++) { last = last * .97 + (Math.random() * 2 - 1) * .03; d[i] = last * 6; }
     const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); src.buffer = n; src.loop = true; f.type = 'lowpass'; f.frequency.value = 700; g.gain.value = 0; src.connect(f); f.connect(g); g.connect(c.destination); src.start(); A.surf = g;
+    // rain: brighter looping noise
+    const rn = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), rd = rn.getChannelData(0); for (let i = 0; i < rd.length; i++) rd[i] = Math.random() * 2 - 1;
+    const rs = c.createBufferSource(), rh = c.createBiquadFilter(), rl = c.createBiquadFilter(), rg2 = c.createGain(); rs.buffer = rn; rs.loop = true; rh.type = 'highpass'; rh.frequency.value = 900; rl.type = 'lowpass'; rl.frequency.value = 6500; rg2.gain.value = 0; rs.connect(rh); rh.connect(rl); rl.connect(rg2); rg2.connect(c.destination); rs.start(); A.rain = rg2;
   }
   function clip(k, v = 1, rate = 1) {
     const L = A.buf[k]; if (!A.ctx || !L || !L.length) return false; const d = L[(Math.random() * L.length) | 0]; if (!d) return false;
@@ -1225,6 +1272,7 @@ void main() {
     if (A.place !== here) { if (A.place && !!A.place.sky !== !!here.sky) clip(here.sky ? 'close' : 'open', .45); if (outdoor && ROOT[here.name]) A.root = ROOT[here.name]; A.place = here; }
     const hush = UI.talking || (window.speechSynthesis && speechSynthesis.speaking), now = c.currentTime;
     A.surf.gain.setTargetAtTime(outdoor ? (.05 + .035 * Math.sin(t * .55) * Math.sin(t * .21)) * (hush ? .4 : 1) : 0, now, .5);
+    { const w = weather(), wet = w === 'rain' || w === 'storm'; A.rain.gain.setTargetAtTime(wet ? (outdoor ? .075 : .022) * (hush ? .45 : 1) : 0, now, .8); }   // indoors the rain is a murmur on the roof
     A.out.gain.setTargetAtTime(A.on ? (hush ? .22 : outdoor ? .8 : .5) : 0, now, .5);
     if (!A.on) { A.next = 0; return; }
     const night = ph === 'night', stepLen = night ? .44 : ph === 'evening' ? .38 : .33;
@@ -1245,11 +1293,11 @@ void main() {
   function scatterState(sp) {
     let st = SC.get(sp); if (st) return st;
     // setColorAt sizes the colour buffer from the current count, so it is called before count drops to 0
-    const cap = HI ? 1500 : 800, mk1 = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); m.setColorAt(0, _c.set('#FFFFFF')); m.count = 0; m.frustumCulled = false; m.userData.fx = true; sp.scene.add(m); return m; };
+    const cap = HI ? 2000 : 1100, mk1 = (geo, mat, n) => { const m = new THREE.InstancedMesh(geo, mat, n); m.setColorAt(0, _c.set('#FFFFFF')); m.count = 0; m.frustumCulled = false; m.userData.fx = true; sp.scene.add(m); return m; };
     const pg = new THREE.IcosahedronGeometry(.1, 0); pg.scale(1, .55, 1); const bg = new THREE.IcosahedronGeometry(.05, 0); bg.translate(0, .13, 0);
-    st = { cells: new Set(), fails: 0,
+    st = { cells: new Map(),
       tuft: mk1(tuftGeo(), sway(new THREE.MeshStandardMaterial({ roughness: .9, side: THREE.DoubleSide }), 'inst'), cap),
-      rock: mk1(pg, new THREE.MeshStandardMaterial({ roughness: .95 }), Math.round(cap * .08)),
+      rock: mk1(pg, new THREE.MeshStandardMaterial({ roughness: .95 }), Math.round(cap * .1)),
       bloom: mk1(bg, sway(new THREE.MeshStandardMaterial({ roughness: .7 }), 'inst'), Math.round(cap * .16)) };
     SC.set(sp, st); return st;
   }
@@ -1263,23 +1311,119 @@ void main() {
     if (LOW || !outdoor || !PEOPLE.me) return;
     const st = scatterState(here), winter = Life.season() === 'winter';
     st.tuft.visible = st.bloom.visible = !winter; if (winter) return;
-    if (st.tuft.count >= st.tuft.instanceMatrix.count) return;
+    const cap = st.tuft.instanceMatrix.count; if (st.tuft.count >= cap) return;
     const p = ME().obj.position; _ray.camera = camera;
     for (let probe = 0, tries = 0; probe < (HI ? 2 : 1) && tries < 10; tries++) {
-      const a = Math.random() * 6.283, r = 1.5 + Math.random() * 21, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, key = Math.round(x / .95) + ',' + Math.round(z / .95);
-      if (st.cells.has(key)) continue; st.cells.add(key); probe++;
+      const a = Math.random() * 6.283, r = 1.5 + Math.random() * 21, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, cx = Math.round(x / .95), cz = Math.round(z / .95), key = cx + ',' + cz;
+      if (st.cells.has(key)) continue; probe++;
+      const cell = { t: 'x', x, z, y: 0, h: 0, s: 0, l: 0 }; st.cells.set(key, cell);
       _ray.set(_o.set(x, 40, z), _down); _ray.far = 45;
       const hits = _ray.intersectObjects(here.scene.children, true); let h = null;
       for (let i = 0; i < hits.length; i++) { const o = hits[i].object; if (o.isMesh && !o.userData.fx && o.material && o.material.side !== THREE.BackSide && !(o.parent && o.parent.userData.fx) && shown(o)) { h = hits[i]; break; } }
       if (!h || !h.face || h.point.y < -.05 || h.point.y > 6 || h.object.isSkinnedMesh || h.object.isInstancedMesh) continue;
       const mat = Array.isArray(h.object.material) ? h.object.material[h.face.materialIndex || 0] : h.object.material; if (!mat || !mat.color || mat.transparent) continue;   // a block of ground has a grass top and earth sides
       if (_n.copy(h.face.normal).transformDirection(h.object.matrixWorld).y < .9) continue;
-      _c.copy(mat.color).convertLinearToSRGB().getHSL(_hsl); if (_hsl.h < .19 || _hsl.h > .42 || _hsl.s < .22) continue;   // only green ground
-      const roll = Math.random(), y = h.point.y;
+      _c.copy(mat.color).convertLinearToSRGB().getHSL(_hsl); const y = h.point.y, green = _hsl.h >= .19 && _hsl.h <= .42 && _hsl.s >= .22;
+      Object.assign(cell, { t: green ? 'g' : 'p', y, h: _hsl.h, s: _hsl.s, l: _hsl.l });   // 'g' grass, 'p' any other flat ground (path, road, sand, water), 'x' not ground
+      /* where grass meets a path, a road or a pond, it grows thicker and shorter along the border, so the edge is not a ruled line */
+      for (let k = 0; k < 4; k++) {
+        const nb = st.cells.get((cx + [1, -1, 0, 0][k]) + ',' + (cz + [0, 0, 1, -1][k]));
+        if (!nb || nb.t === 'x' || nb.t === cell.t || Math.abs(nb.y - y) > .25) continue;
+        const g = green ? cell : nb, o = green ? nb : cell, dx = o.x - g.x, dz = o.z - g.z, n = HI ? 5 : 3;
+        for (let q = 0; q < n; q++) { const f = .3 + Math.random() * .22, side = (Math.random() - .5) * .9; plant(st.tuft, g.x + dx * f - dz * side, g.y, g.z + dz * f + dx * side, .45 + Math.random() * .35, _c.setHSL(g.h + (Math.random() - .5) * .03, Math.min(1, g.s * 1.05), g.l * (.66 + Math.random() * .18)).convertSRGBToLinear()); }
+        if (Math.random() < .3) plant(st.rock, g.x + dx * .55, Math.max(g.y, o.y) + .02, g.z + dz * .55, .5 + Math.random() * .5, _c.setHSL(.1, .06, .52 + Math.random() * .14).convertSRGBToLinear());
+      }
+      if (!green || st.tuft.count > cap * .78) continue;   // the last part of the budget is kept for the borders
+      const roll = Math.random();
       if (roll < .07) plant(st.rock, x, y + .02, z, .7 + Math.random() * .9, _c.setHSL(.1, .06, .5 + Math.random() * .16).convertSRGBToLinear());
       else if (roll < .2) plant(st.bloom, x, y, z, .8 + Math.random() * .6, _c.set(['#FFFFFF', '#FFE46B', '#FFC2DA', '#D8C8FF'][(Math.random() * 4) | 0]).convertSRGBToLinear());
-      else { const n = 2 + ((Math.random() * 3) | 0); for (let k = 0; k < n; k++) plant(st.tuft, x + (Math.random() - .5) * .8, y, z + (Math.random() - .5) * .8, .8 + Math.random() * .7, _c.setHSL(_hsl.h + (Math.random() - .5) * .03, Math.min(1, _hsl.s * 1.05), _hsl.l * (.78 + Math.random() * .2)).convertSRGBToLinear()); }
+      else { const n = 2 + ((Math.random() * 3) | 0); for (let k = 0; k < n; k++) plant(st.tuft, x + (Math.random() - .5) * .8, y, z + (Math.random() - .5) * .8, .8 + Math.random() * .7, _c.setHSL(cell.h + (Math.random() - .5) * .03, Math.min(1, cell.s * 1.05), cell.l * (.78 + Math.random() * .2)).convertSRGBToLinear()); }
     }
+  }
+
+
+  /* ---------- weather ----------
+     Three modes, chosen in the sound settings panel and remembered:
+       local  the real weather where you are (Open-Meteo, free, no key). The position is rounded to about 10 km and
+              sent only to that service. Without permission, without a network, or inside a sandboxed page, it falls
+              back to "auto" by itself.
+       auto   picked from the date, so it is the same all day and on every island: mostly clear, some overcast days,
+              a few rainy ones; in winter the rainy days are snowy days.
+       sunny  always clear.
+     Weather changes the light and sky, adds rain or snow around you, rain sound, and ripples on the water. */
+  const WXF = { clear: { sun: 1, hemi: 1, grey: 0, fog: 1 }, cloudy: { sun: .5, hemi: .95, grey: .55, fog: .9 }, rain: { sun: .32, hemi: .85, grey: .75, fog: .7 }, storm: { sun: .24, hemi: .75, grey: .85, fog: .62 }, snow: { sun: .55, hemi: 1.05, grey: .5, fog: .72 } };
+  const WX = { mode: store.get('zhongwen-town.weather', 'local'), real: null, busy: false, t: 0, alpha: 0, kind: '', thunder: 30, note: '' };
+  U.rain = { value: 0 };
+  const _wc = new THREE.Color(), _wg = new THREE.Color();
+  function dayWeather() {
+    const d = new Date(); let h = Math.sin((d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate()) * 12.9898) * 43758.5453; h -= Math.floor(h);
+    const w = h < .68 ? 'clear' : h < .88 ? 'cloudy' : 'rain'; return w === 'rain' && Life.season() === 'winter' ? 'snow' : w;
+  }
+  const codeWeather = c => c >= 95 ? 'storm' : (c >= 71 && c <= 77) || c === 85 || c === 86 ? 'snow' : (c >= 51 && c <= 67) || (c >= 80 && c <= 82) ? 'rain' : c >= 2 ? 'cloudy' : 'clear';   // WMO weather codes
+  const WXQ = (/[?&]wx=(clear|cloudy|rain|storm|snow)\b/.exec(location.search) || [])[1];   // ?wx=rain in the address previews a kind of weather
+  function weather() { return WXQ || (WX.mode === 'sunny' ? 'clear' : (WX.mode === 'local' && WX.real) || dayWeather()); }
+  function fetchWeather(loc) {
+    WX.busy = true;
+    fetch('https://api.open-meteo.com/v1/forecast?latitude=' + loc[0] + '&longitude=' + loc[1] + '&current=weather_code')
+      .then(r => r.json()).then(j => { const c = j && j.current && j.current.weather_code; if (typeof c !== 'number') throw 0; WX.real = codeWeather(c); WX.note = 'ok'; store.set('zhongwen-town.wx', { at: Date.now(), w: WX.real }); })
+      .catch(() => { WX.note = 'offline'; }).then(() => { WX.busy = false; });
+  }
+  /* ask = true only when a person has just chosen "local" in the settings, so the browser's location question never appears on its own */
+  function localWeather(ask) {
+    if (WX.mode !== 'local' || WX.busy) return;
+    const c = store.get('zhongwen-town.wx', null); if (!ask && c && Date.now() - c.at < 30 * 60000) { WX.real = c.w; WX.note = 'ok'; return; }
+    const loc = store.get('zhongwen-town.loc', null); if (loc && !ask) { fetchWeather(loc); return; }
+    const locate = () => { WX.busy = true; navigator.geolocation.getCurrentPosition(p => { const L = [Math.round(p.coords.latitude * 10) / 10, Math.round(p.coords.longitude * 10) / 10]; store.set('zhongwen-town.loc', L); fetchWeather(L); }, () => { WX.busy = false; WX.note = 'denied'; if (loc) fetchWeather(loc); }, { maximumAge: 3600000, timeout: 12000 }); };
+    if (!navigator.geolocation) { WX.note = 'denied'; return; }
+    if (ask) { locate(); return; }
+    try { if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'geolocation' }).then(s => { if (s.state === 'granted') locate(); else WX.note = 'ask'; }, () => { WX.note = 'ask'; }); else WX.note = 'ask'; } catch (e) { WX.note = 'ask'; }
+  }
+  function weatherMode(m) { if (m) { WX.mode = m; store.set('zhongwen-town.weather', m); WX.t = 0; if (m === 'local') localWeather(true); } return { mode: WX.mode, now: weather(), note: WX.note }; }
+  /* the look of a time of day under a kind of weather: light factors and sky colours (as hex strings, like the phase table) */
+  function wxLook(ph, w) {
+    const p = Life.PH[ph], f = WXF[w] || WXF.clear, hex = h => { _wc.copy(lin(h)); const l = (_wc.r * .2126 + _wc.g * .7152 + _wc.b * .0722) * (ph === 'night' ? .8 : .9); _wc.lerp(_wg.setRGB(l, l, l * 1.05), f.grey); return '#' + _wc.convertLinearToSRGB().getHexString(); };
+    return { f, p: Object.assign({}, p, { top: hex(p.top), bot: hex(p.bot), fog: hex(p.fog), si: p.si * f.sun, hemi: p.hemi * f.hemi }) };
+  }
+  /* rain streaks and snowflakes: animated in the vertex shader, so they cost nothing per frame in JavaScript */
+  function precip(scene, n) {
+    const H = 18, rp = [], re = [], sp = [], ss = [];
+    for (let i = 0; i < n; i++) { const x = (Math.random() - .5) * 44, y = Math.random() * H, z = (Math.random() - .5) * 44; rp.push(x, y, z, x, y, z); re.push(0, 1); }
+    for (let i = 0; i < n; i++) { sp.push((Math.random() - .5) * 44, Math.random() * H, (Math.random() - .5) * 44); ss.push(Math.random()); }
+    const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); rg.setAttribute('aEnd', new THREE.Float32BufferAttribute(re, 1));
+    const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg.setAttribute('aSeed', new THREE.Float32BufferAttribute(ss, 1));
+    const u = { uT: { value: 0 }, uA: { value: 0 }, uPx: { value: Math.min(2, devicePixelRatio || 1) } };
+    const rain = new THREE.LineSegments(rg, new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false,
+      vertexShader: 'attribute float aEnd; uniform float uT; void main() { vec3 p = position; p.y = mod( position.y - uT * 24.0, 18.0 ) + aEnd * 0.85; p.x += aEnd * 0.1; gl_Position = projectionMatrix * modelViewMatrix * vec4( p, 1.0 ); }',
+      fragmentShader: 'uniform float uA; void main() { gl_FragColor = vec4( 0.8, 0.87, 1.0, 0.5 * uA ); }' }));
+    const snow = new THREE.Points(sg, new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false,
+      vertexShader: 'attribute float aSeed; uniform float uT; uniform float uPx; void main() { vec3 p = position; p.y = mod( position.y - uT * ( 1.3 + aSeed * 0.9 ), 18.0 ); p.x += sin( uT * 0.7 + aSeed * 6.28 ) * 0.8; p.z += cos( uT * 0.5 + aSeed * 9.4 ) * 0.5; vec4 mv = modelViewMatrix * vec4( p, 1.0 ); gl_PointSize = ( 2.5 + aSeed * 3.0 ) * uPx * 22.0 / max( 1.0, -mv.z ); gl_Position = projectionMatrix * mv; }',
+      fragmentShader: 'uniform float uA; void main() { float d = length( gl_PointCoord - 0.5 ); gl_FragColor = vec4( 1.0, 1.0, 1.0, smoothstep( 0.5, 0.15, d ) * 0.9 * uA ); }' }));
+    const g = new THREE.Group(); g.userData.fx = true; rain.frustumCulled = snow.frustumCulled = false; rain.userData.fx = snow.userData.fx = true; g.add(rain, snow); if (scene) scene.add(g);
+    return { g, rain, snow, u };
+  }
+  function precipSet(P, w, dt, t, x, y, z) {
+    const wet = w === 'rain' || w === 'storm', sn = w === 'snow'; P.rain.visible = wet; P.snow.visible = sn;
+    P.u.uT.value = t; P.u.uA.value += ((wet || sn ? 1 : 0) - P.u.uA.value) * Math.min(1, dt * 1.5); P.g.visible = P.u.uA.value > .01 && (wet || sn); P.g.position.set(x, y, z);
+  }
+  let PR = null;
+  function weatherTick(dt, t, outdoor, ph) {
+    const w = weather(), wet = w === 'rain' || w === 'storm';
+    U.rain.value += ((outdoor && wet ? 1 : 0) - U.rain.value) * Math.min(1, dt);
+    if (outdoor && PEOPLE.me) { PR = PR || precip(null, LOW ? 220 : HI ? 800 : 450); if (PR.g.parent !== here.scene) here.scene.add(PR.g); const p = ME().obj.position; precipSet(PR, w, dt, t, p.x, p.y, p.z); } else if (PR) PR.g.visible = false;
+    if (w === 'storm' && outdoor && !UI.talking) { WX.thunder -= dt; if (WX.thunder <= 0) { WX.thunder = 28 + Math.random() * 40; Sfx.play('thunder'); } }
+    WX.t -= dt; if (WX.t > 0) return; WX.t = 1.5;
+    if (WX.mode === 'local' && !WX.busy && Date.now() - (WX.asked || 0) > 30 * 60000) { WX.asked = Date.now(); localWeather(false); }
+    if (!outdoor) return;
+    const sp = here, S = sp.scene, key = w + ph;
+    if (sp.fxSun === undefined) { sp.fxSun = S.children.find(o => o.isDirectionalLight) || null; sp.fxHemi = S.children.find(o => o.isHemisphereLight) || null; sp.fxFog = S.fog ? [S.fog.near, S.fog.far] : null; }
+    S.children.forEach(o => { if (o.isPoints && !o.userData.fx && o.material && o.material.size === .32) o.visible = false; });   // the old always-on winter snow: the weather decides now
+    const L = wxLook(ph, w);
+    if (sp.fxSun) sp.fxSun.intensity = L.p.si; if (sp.fxHemi) sp.fxHemi.intensity = L.p.hemi;
+    if (S.fog) { S.fog.color.copy(lin(L.p.fog)); if (sp.fxFog) S.fog.far = sp.fxFog[0] + (sp.fxFog[1] - sp.fxFog[0]) * L.f.fog; }
+    if (S.background && S.background.isColor) S.background.copy(lin(L.p.fog));
+    // the islands repaint their own sky when the time of day changes, a few seconds after this may have run, so the sky is set again for a few rounds after any change
+    if (sp.fxWxKey !== key) { sp.fxWxKey = key; sp.fxSkyAgain = 4; }
+    if (sp.fxSkyAgain > 0 && sp.sky && sp.sky.set) { sp.fxSkyAgain--; sp.sky.set(L.p, ph); }
   }
 
   /* ---------- once per frame ---------- */
@@ -1287,23 +1431,24 @@ void main() {
     U.t.value = t;
     const ph = Life.current(), outdoor = !!(here && here.sky);
     const day = { morning: .85, day: 1, evening: .6, night: .12 }[ph] || 1; S.day += (day - S.day) * Math.min(1, dt * 2);
-    const wantCloud = outdoor && !REDUCED ? (S.post ? .44 : .3) * (ph === 'night' ? .35 : 1) : 0; U.cloud.value += (wantCloud - U.cloud.value) * Math.min(1, dt * 3);
+    const wx = weather(), fair = wx === 'clear';
+    const wantCloud = outdoor && !REDUCED && fair ? (S.post ? .44 : .3) * (ph === 'night' ? .35 : 1) : 0; U.cloud.value += (wantCloud - U.cloud.value) * Math.min(1, dt * 3);
     U.rim.value.set(ph === 'night' ? '#6F86C8' : ph === 'evening' ? '#FFB07A' : '#FFF4DC').convertSRGBToLinear().multiplyScalar(outdoor ? .1 + .28 * S.day : .16);
     for (let i = 0; i < S.waters.length; i++) if (S.waters[i].envMap) S.waters[i].envMapIntensity = .04 + .12 * S.day;
     // footsteps: a soft tap and a puff of dust in step with the walk
     const me = PEOPLE.me;
     if (me && me.cur && !UI.ride && !UI.sit && me.space === here.name && me.obj.visible) {
       const n = me.cur.getClip().name, run = /Running/.test(n), walk = /Walking/.test(n);
-      if (run || walk) { S.step -= dt; if (S.step <= 0) { S.step = run ? .27 : .36; S.stepN++; const p = me.obj.position; if (!clip(!outdoor ? 'wood' : Life.season() === 'winter' ? 'snow' : 'grass', run ? .5 : .34, .9 + Math.random() * .2)) Sfx.play('step'); if (run || S.stepN % 2 === 0) dust(p.x, p.y, p.z, run); } }
+      if (run || walk) { S.step -= dt; if (S.step <= 0) { S.step = run ? .27 : .36; S.stepN++; const p = me.obj.position; if (!clip(!outdoor ? 'wood' : Life.season() === 'winter' ? 'snow' : 'grass', run ? .2 : .13, .9 + Math.random() * .2)) Sfx.play('step'); if (run || S.stepN % 2 === 0) dust(p.x, p.y, p.z, run); } }
       else S.step = .12;
     }
     for (let i = 0; i < pool.length; i++) { const q = pool[i]; if (q.life <= 0) continue; q.life -= dt; const s = q.s, k = Math.max(0, q.life / q.max);
       s.position.x += q.vx * dt; s.position.y += q.vy * dt; s.position.z += q.vz * dt; q.vy -= dt * (q.grow > .5 ? .6 : 1.6);
       s.scale.setScalar(q.size * (1 + (1 - k) * q.grow)); s.material.opacity = k * (q.grow > .5 ? .55 : 1); if (q.life <= 0) s.visible = false; }
-    butterflies(dt, t, outdoor); nearSounds(dt); soundscape(dt, t, outdoor, ph); scatter(outdoor);
+    butterflies(dt, t, outdoor && (fair || wx === 'cloudy')); nearSounds(dt); weatherTick(dt, t, outdoor, ph); soundscape(dt, t, outdoor, ph); scatter(outdoor); if (outdoor) shoreTick(dt);
     // now and then a bird by day, a cricket in the evening; never over a voice or a conversation
     S.amb -= dt;
-    if (S.amb <= 0) { S.amb = 7 + Math.random() * 9; if (outdoor && !UI.talking && !UI.busy && !(window.speechSynthesis && speechSynthesis.speaking)) Sfx.play(S.day > .5 ? 'chirp' : 'cricket', .4); }
+    if (S.amb <= 0) { S.amb = 7 + Math.random() * 9; if (outdoor && (fair || wx === 'cloudy') && !UI.talking && !UI.busy && !(window.speechSynthesis && speechSynthesis.speaking)) Sfx.play(S.day > .5 ? 'chirp' : 'cricket', .4); }
     // slow frames on the high tier: first drop the bloom, then the resolution
     if (S.post && FXQ !== 'lock') {
       const now = performance.now(); if (S.last) { S.slowT += now - S.last; S.frames++; } S.last = now;
@@ -1313,8 +1458,9 @@ void main() {
   }
 
   if (SHADER_FX) patchChunks();
-  return { setup, resize, render, water, sway, rim, tick, cam, people, gain, shake, dust, voice, music,
-    stats: () => { const st = here && SC.get(here); return { audio: A.ctx ? A.ctx.state : 'none', clips: Object.keys(A.buf).map(k => k + ':' + A.buf[k].filter(Boolean).length).join(' '), musicSteps: A.step, music: A.on, tufts: st ? st.tuft.count : 0, rocks: st ? st.rock.count : 0, blooms: st ? st.bloom.count : 0, cells: st ? st.cells.size : 0, voices: voices.length, post: !!S.post, bloom: !!(S.post && S.post.bloom) }; } };   // read by the automated play-through test
+  try { localWeather(false); } catch (e) { }
+  return { setup, resize, render, water, sway, rim, tick, cam, people, gain, shake, dust, voice, music, weather, weatherMode, wxLook, precip, precipSet,
+    stats: () => { const st = here && SC.get(here); return { audio: A.ctx ? A.ctx.state : 'none', clips: Object.keys(A.buf).map(k => k + ':' + A.buf[k].filter(Boolean).length).join(' '), musicSteps: A.step, music: A.on, tufts: st ? st.tuft.count : 0, rocks: st ? st.rock.count : 0, blooms: st ? st.bloom.count : 0, cells: st ? st.cells.size : 0, voices: voices.length, post: !!S.post, bloom: !!(S.post && S.post.bloom), weather: weather(), wxMode: WX.mode, wxNote: WX.note, rainOn: !!(PR && PR.g.visible && PR.rain.visible), snowOn: !!(PR && PR.g.visible && PR.snow.visible) }; } };   // read by the automated play-through test
 })();
 
 /* ---------- sitting on benches: a seat list per place, a real sitting pose (thighs forward, knees bent),
@@ -2819,7 +2965,7 @@ function showPicker(list) {
 }
 /* ---------- the boat ride in 3D: a rolling sea, islands on the horizon, gulls, the ferry with you and the captain on deck ---------- */
 const Boat3D = (() => {
-  let R, S, cam, raf = 0, last = 0, ship, sea, base, me, capt, gulls = [], sail = 0, camA = .75;
+  let R, S, cam, raf = 0, last = 0, ship, sea, base, me, capt, gulls = [], sail = 0, camA = .75, wxP = null, wxKind = 'clear';
   function size(cv) { const w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; R.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
   function start(cv) {
     R = new THREE.WebGLRenderer({ canvas: cv, antialias: true }); R.setPixelRatio(Math.min(2, devicePixelRatio || 1)); R.outputEncoding = THREE.sRGBEncoding;
@@ -2848,6 +2994,16 @@ const Boat3D = (() => {
     capt.obj.position.set(-.7, 1.12, 2.3); capt.obj.rotation.y = .9; ship.add(capt.obj); if (capt.play) capt.play('idle');
     const wake = new THREE.Mesh(new THREE.PlaneGeometry(3, 14), new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: .45 })); wake.rotation.x = -Math.PI / 2; wake.position.set(0, .12, 10); ship.add(wake); ship.userData.wake = wake;
     for (let k = 0; k < 4; k++) { const gl = new THREE.Group(); [-1, 1].forEach(s => { const w = new THREE.Mesh(new THREE.BoxGeometry(.7, .05, .18), new THREE.MeshStandardMaterial({ color: lin('#FFFFFF') })); w.position.x = s * .32; gl.add(w); }); S.add(gl); gl.userData.a = k * 1.6; gl.userData.r = 6 + k * 1.5; gulls.push(gl); }
+    { const ph = Life.current(), wx = FX.weather(), p = FX.wxLook(ph, wx).p, se = Life.season(), same = (c, hex) => { const k = lin(hex); return Math.abs(c.r - k.r) + Math.abs(c.g - k.g) + Math.abs(c.b - k.b) < .02; };
+      S.background = new THREE.Color(lin(p.top)).lerp(lin(p.bot), ph === 'night' ? .6 : ph === 'evening' ? .7 : .5); S.fog.color = lin(p.fog);
+      S.children.forEach(o => { if (o.isHemisphereLight) o.intensity = .95 * p.hemi / .8; if (o.isDirectionalLight) { o.color = lin(p.sun); o.intensity = 1.15 * p.si / 1.25; } });
+      disc.visible = wx === 'clear'; wxP = FX.precip(S, 500); wxKind = wx;
+      disc.material.color.set(ph === 'night' ? '#F4F1DE' : ph === 'evening' ? '#FFB070' : '#FFE9A8'); if (ph === 'night') disc.scale.setScalar(.6); if (ph === 'evening' || ph === 'morning') disc.position.y = 16;
+      if (ph === 'night') { const n = 160, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, e = .12 + Math.random() * 1.1, r = 300; pos[i * 3] = Math.cos(a) * Math.cos(e) * r; pos[i * 3 + 1] = Math.sin(e) * r; pos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * r; }
+        const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); const stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: '#FFFFFF', size: 1.6, sizeAttenuation: false, fog: false })); stars.frustumCulled = false; S.add(stars); }
+      const ground = se === 'winter' ? '#E3ECEA' : se === 'autumn' ? '#8DB45A' : null, leaf = { spring: '#8BD46A', summer: null, autumn: '#E8A33A', winter: '#EEF4F6' }[se];
+      S.traverse(o => { if (!o.isMesh || !o.material.color || o.material.isMeshBasicMaterial) return; const c = o.material.color;
+        if (ground && ['#7FC25A', '#6FB257', '#86C766'].some(h => same(c, h))) o.material.color = lin(ground); else if (leaf && same(c, '#4E9A45')) o.material.color = lin(leaf); }); }
     sail = 0; camA = .75; last = performance.now(); loop(); addEventListener('resize', onResize);
   }
   const onResize = () => R && size(R.domElement);
@@ -2863,6 +3019,7 @@ const Boat3D = (() => {
     const ang = (sail ? 0 : Math.sin(t * .15) * .35), p = ship.position;
     const far = cam.aspect < 1 ? 21 : 14;   // a tall phone screen needs the camera further back to fit the whole boat
     cam.position.set(p.x + Math.sin(camA + ang) * far, far * .5, p.z + Math.cos(camA + ang) * far); cam.lookAt(p.x, 1.4, p.z - (sail ? 8 : .5));
+    if (wxP) FX.precipSet(wxP, wxKind, dt, t, ship.position.x, 0, ship.position.z);
     R.render(S, cam);
   }
   function sailAway() { sail = .001; }
@@ -2973,7 +3130,7 @@ const Intro = (() => {
     return new Promise(res => {
       const s = stage(`<h2 style="margin:0 0 8px">去哪一座岛？<small class="en-only">Which island first?</small></h2><div class="isle-grid">${ISLES.map(([id, zh, en, e, d, de]) => `<button class="isle-card" data-id="${id}"><span style="font-size:30px">${e}</span><b>${zh}</b><span class="en-only">${en}<br></span><span>${d}</span><span class="en-only"><br>${de}</span></button>`).join('')}</div>`);
       root.classList.add('panel');
-      s.querySelectorAll('.isle-card').forEach(b => b.onclick = () => { Sfx.play('pop'); const i = ISLES.find(x => x[0] === b.dataset.id); Voice.speak(i[1], .8); root.classList.remove('panel'); stage(''); res(i); });
+      s.querySelectorAll('.isle-card').forEach(b => b.onclick = () => { Sfx.play('pop'); const i = ISLES.find(x => x[0] === b.dataset.id); root.classList.remove('panel'); stage(''); res(i); });
     });
   }
   /* questions the child can ask; each answer is a short chat, and the last option moves on */
@@ -3018,7 +3175,7 @@ const Intro = (() => {
       ['船长，你会唱歌吗？', 'Captain, can you sing?', [['哈哈，我只会唱「呜——呜——」，那是船的歌！', 'Ha ha, I can only sing “toot — toot —”, the boat’s song!']]]
     ], ['我想选岛了！', 'I want to choose an island!']);
     say('capt', '那么，你想先去哪一座岛呢？', 'So, which island would you like to visit first?', false); const isle = await chooseIsle();
-    await say('capt', '好，坐稳了，出发啦！', 'Hold on tight — off we go!');
+    await say('capt', '好，去' + isle[1] + '！坐稳了，出发啦！', 'Right, the ' + isle[2] + ' island! Hold on tight — off we go!');
     Boat3D.sail(); Sfx.play('whoosh'); await wait(3300);   // long enough to sail right up to the island ahead
     G.where = isle[0]; saveG(); Players.update(); await ASSETS_READY; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     startGame({ land: isle[0], first: true, onArrive: () => { Boat3D.stop(); root.remove(); } });
@@ -3208,7 +3365,7 @@ const B5 = (() => {
     const vs = signBoard('葡萄园', 2.2, .6, '#7B4FA8'); vs.position.set(VX + 4.4, 1.4, VZ + 3.4); S.add(vs); mk(cyl(.06, .06, 1.4, 6), '#8A6A4A', VX + 4.4, .7, VZ + 3.4);   // to one side: it used to stand between the camera and the fox
     // the sea and the dock for Lesson 10 and the ferry
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, 80), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, transparent: true, opacity: .95 }));
-    sea.rotation.x = -Math.PI / 2; sea.position.set(0, .03, 72); S.add(sea); P.sea = sea; FX.water(sea);
+    sea.rotation.x = -Math.PI / 2; sea.position.set(0, .03, 72); S.add(sea); P.sea = sea; FX.water(sea, { shore: 1 });
     const sand = mk(new THREE.PlaneGeometry(200, 3), '#EFE0B4', 0, .02, 31.2, null, false); sand.rotation.x = -Math.PI / 2;
     const DX = -9; P.dock = { x0: DX - 2, x1: DX + 2, z0: 31, z1: 42 };
     for (let z = 31; z < 42; z += .7) mk(box(4, .16, .62), z % 1.4 < .7 ? '#B98A5A' : '#A97A4A', DX, .35, z);
@@ -3784,6 +3941,11 @@ function openVoices() {
   const g = $('albumGrid'); g.innerHTML = ''; g.style.gridTemplateColumns = '1fr';
   const test = document.createElement('button'); test.className = 'pill'; test.style.width = '100%'; test.innerHTML = '🔊 听一听<span class="en-only"> Test the voice</span>'; test.onclick = () => Voice.speak('你好！欢迎来到中文群岛。', .72); g.appendChild(test);
   const mus = document.createElement('button'); mus.className = 'pill soft'; mus.style.width = '100%'; mus.style.marginTop = '8px'; const musLabel = () => { mus.innerHTML = (FX.music() ? '🎵 背景音乐：开' : '🎵 背景音乐：关') + '<span class="en-only"> Music ' + (FX.music() ? 'on' : 'off') + '</span>'; }; musLabel(); mus.onclick = () => { FX.music(!FX.music()); musLabel(); }; g.appendChild(mus);
+  const wxb = document.createElement('button'); wxb.className = 'pill soft'; wxb.style.width = '100%'; wxb.style.marginTop = '8px'; const wxn = document.createElement('div'); wxn.style.cssText = 'font-size:13px;opacity:.8;padding:6px 2px 0';
+  const WXN = { clear: ['晴天', 'clear'], cloudy: ['阴天', 'overcast'], rain: ['下雨', 'rain'], storm: ['雷雨', 'thunderstorm'], snow: ['下雪', 'snow'] }, WXM = { local: ['🌦 天气：当地天气', 'Weather: where you are'], auto: ['🌤 天气：自动', 'Weather: automatic'], sunny: ['☀️ 天气：总是晴天', 'Weather: always sunny'] };
+  const wxLabel = () => { const s = FX.weatherMode(); wxb.innerHTML = WXM[s.mode][0] + '<span class="en-only"> ' + WXM[s.mode][1] + '</span>'; const real = s.mode === 'local' && s.note === 'ok';
+    wxn.innerHTML = '现在：' + WXN[s.now][0] + (s.mode === 'local' ? (real ? '（当地实况）' : '（还没有当地天气，先按日期安排。按一下上面的按钮，允许使用位置）') : '') + '<span class="en-only"> Now: ' + WXN[s.now][1] + (s.mode === 'local' ? (real ? ' (live)' : ' (no local weather yet, using the calendar. Tap the button above to allow location)') : '') + '</span>' + (s.mode === 'local' ? '<br><a href="https://open-meteo.com/" target="_blank" rel="noopener" style="color:inherit">Weather data by Open-Meteo.com</a>' : ''); };
+  wxLabel(); wxb.onclick = () => { const order = ['local', 'auto', 'sunny'], s0 = FX.weatherMode(); if (s0.mode === 'local' && s0.note !== 'ok' && !wxb.dataset.asked) { wxb.dataset.asked = '1'; FX.weatherMode('local'); } else FX.weatherMode(order[(order.indexOf(s0.mode) + 1) % 3]); wxLabel(); setTimeout(wxLabel, 2500); setTimeout(wxLabel, 8000); }; g.appendChild(wxb); g.appendChild(wxn);
   const adv = document.createElement('details'); adv.innerHTML = '<summary style="cursor:pointer;font-weight:700;padding:10px 2px">每个角色的声音（家长设定）<span class="en-only" style="font-weight:400"> · Voice for each character (for parents)</span></summary>'; g.appendChild(adv);
   who.forEach(([k, zh]) => {
     const cur = G.voices[k] || {}, row = document.createElement('div'); row.className = 'cell got'; row.style.textAlign = 'left';
@@ -4521,7 +4683,7 @@ const Isle1 = (() => {
     S.background = new THREE.Color(lin('#D7EEF4')); sp.sky = makeSky(S); S.fog = new THREE.Fog(lin('#D7EEF4'), 70, 170);
     sp.sun = lights(S, '#E8F4FF', '#9CC38A', '#FFF1D8', 1.25, .8); sp.hemi = S.children.find(o => o.isHemisphereLight);
     // sea, beach and grass
-    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea);
+    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea, { shore: 1 });
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', 0), flat(80, 66, 12, '#7CC25A', .03));
     // paths: a ring road for the school bus, and spokes to every place
     [[-26, 18, 26, 18], [26, 18, 26, -20], [26, -20, -26, -20], [-26, -20, -26, 18], [0, 30, 0, 18], [0, 18, 0, 6], [18, -20, 18, -16.6], [-20, 18, -20, 12.6], [-14, -20, -14, -18]].forEach(a => path(...a));
@@ -5594,7 +5756,7 @@ const Isle2 = (() => {
     here_build = sp; const S = sp.scene; STATIC_MARK = true;
     S.background = new THREE.Color(lin('#D7EEF4')); sp.sky = makeSky(S); S.fog = new THREE.Fog(lin('#D7EEF4'), 70, 170);
     sp.sun = lights(S, '#E8F4FF', '#9CC38A', '#FFF1D8', 1.25, .8); sp.hemi = S.children.find(o => o.isHemisphereLight);
-    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea);
+    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea, { shore: 1 });
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#86C766', Y.grass));
     // streets: the main avenue and the north-south street cross in the middle
     plane(64, 4.4, '#8E8C92', 0, Y.road, Z.cross[1]); plane(4.4, 25.4, '#8E8C92', 0, Y.road, -10.9); plane(4.4, 23.8, '#8E8C92', 0, Y.road, 18.1);   // the two halves stop at the avenue's edges, so no road lies on another
@@ -6608,7 +6770,7 @@ const Isle3 = (() => {
     here_build = sp; const S = sp.scene; STATIC_MARK = true;
     S.background = new THREE.Color(lin('#D7EEF4')); sp.sky = makeSky(S); S.fog = new THREE.Fog(lin('#D7EEF4'), 70, 170);
     sp.sun = lights(S, '#E8F4FF', '#9CC38A', '#FFF1D8', 1.25, .8); sp.hemi = S.children.find(o => o.isHemisphereLight);
-    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea);
+    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea, { shore: 1 });
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#8ACB68', Y.grass));
     // a market street with a crossroads, and the pier street
     const [cx, cz] = Z.cross; plane(36, 4.4, '#8E8C92', cx, Y.road, cz); plane(4.4, 22.8, '#8E8C92', cx, Y.road, cz + 13.6); plane(4.4, 4.6, '#8E8C92', cx, Y.road, cz - 4.5);
@@ -6625,8 +6787,11 @@ const Isle3 = (() => {
     building(Z.cottage[0], Z.cottage[1], 8, 6, 3.8, '#EADCC2', '#8C5B3A', '瓦特的家', '#8C5B3A');
     building(Z.workshop[0], Z.workshop[1], 8, 6, 3.6, '#E9D9B4', '#B98A3A', '造纸坊', '#B98A3A');
     building(Z.home[0], Z.home[1], 7, 6, 3.8, '#FFF6E2', '#E8574A', '我的家', '#8C5B3A');
-    disc(6, '#6FB7DA', Z.lake[0], .09, Z.lake[1]); sp.solids.push([Z.lake[0] - 5.6, Z.lake[1] - 5.6, Z.lake[0] + 5.6, Z.lake[1] + 5.6]); sign('湖', Z.lake[0] + 7, Z.lake[1] + 2, '#4F86C6');
-    plane(4, 54, '#6FB7DA', Z.river[0], .1, Z.river[1] + 3); sp.solids.push([Z.river[0] - 2, -26, Z.river[0] + 2, 31]); sign('小河', Z.river[0] - 3.6, -4, '#4F86C6');
+    FX.water(disc(6, '#6FB7DA', Z.lake[0], .09, Z.lake[1]), { rim: [Z.lake[0], Z.lake[1], 6] }); sp.solids.push([Z.lake[0] - 5.6, Z.lake[1] - 5.6, Z.lake[0] + 5.6, Z.lake[1] + 5.6]); sign('湖', Z.lake[0] + 7, Z.lake[1] + 2, '#4F86C6');
+    FX.water(plane(4, 60.5, '#6FB7DA', Z.river[0], .1, Z.river[1] - .25)); sp.solids.push([Z.river[0] - 2, -30.5, Z.river[0] + 2, 31]);
+    { const fall = mk(new THREE.PlaneGeometry(4, 2.4), new THREE.MeshStandardMaterial({ color: lin('#8FCBEF'), roughness: .2 }), Z.river[0], 1.2, -30.36, null, false); FX.water(fall, { flow: 1 });
+      FX.water(plane(4, 3.2, '#6FB7DA', Z.river[0], 2.49, -32.1));
+      [[-2.2, -29.8, .45, .15], [2.2, -29.7, .5, .15], [-1.2, -29.9, .3, .12], [-2, -33.6, .5, 2.5], [0, -33.9, .6, 2.5], [2, -33.6, .5, 2.5]].forEach(([dx, z, r, y], i) => { mk(sph(r, 8), i % 2 ? '#9A9A92' : '#8A8E96', Z.river[0] + dx, y, z).scale.y = .7; }); } sign('小河', Z.river[0] - 3.6, -4, '#4F86C6');
     plane(11, 8, '#FFFFFF', Z.snow[0], Y.snow, Z.snow[1]);   // stops short of the river on the east side sign('雪地', Z.snow[0] - 7, Z.snow[1] + 3.6, '#7FA6C8');
     const tg = new THREE.Group(); tg.position.set(Z.tower[0], 0, Z.tower[1]); S.add(tg); for (let k = 0; k < 4; k++) { mk(rbox(5 - k * .7, 2.2, 5 - k * .7, .1), '#C8644A', 0, 1.1 + k * 2.4, 0, tg); const r = mk(new THREE.ConeGeometry((5 - k * .7) * .9, .8, 4), '#4C4A5A', 0, 2.5 + k * 2.4, 0, tg); r.rotation.y = Math.PI / 4; }
     sp.solids.push([Z.tower[0] - 2.8, Z.tower[1] - 2.8, Z.tower[0] + 2.8, Z.tower[1] + 2.8]); sign('鹳雀楼', Z.tower[0] + 4, Z.tower[1] + 3, '#C8644A');
@@ -6708,6 +6873,7 @@ const B3 = (() => {
   const REQ = [['cars', '车来了！让车先走吧。', 'Cars are coming! Let the cars go first.'], ['kids', '弟弟妹妹要过马路了！', 'Little brother and sister want to cross!'], ['cars', '又有车来了。', 'More cars are coming.'], ['cars', '最后一队车来了。', 'Here comes the last group of cars.']];
   T[301] = async () => {
     await talk('warden', [['今天路口的红绿灯交给你管！', 'Today the lights at this crossing are yours to run!'], ['站在信号箱旁边，按「切换红绿灯」。车要走就给车绿灯；弟弟妹妹要过马路，就给车红灯。', 'Stand by the signal box and press “Switch lights”. Give cars green when they need to go; when the children want to cross, give cars red.']]);
+    Q.cars.forEach(c => { if (!c.gone) I().scene.remove(c.g); }); Q.cars = [];   // clear the everyday traffic before the lesson's own cars arrive
     putIn(ME(), I(), Q.box.x - .6, Q.box.z + 1.2, Math.PI); setCars(false); Q.step = 0; next();
   };
   function next() {
@@ -6739,6 +6905,13 @@ const B3 = (() => {
       else { const d = c.stop - p.x; if (Math.abs(d) > .05) p.x += Math.sign(d) * Math.min(Math.abs(d), 9 * dt); } });
     if (Q.step != null && REQ[Q.step] && REQ[Q.step][0] === 'cars' && Q.cars.length && Q.cars.every(c => c.gone)) { Q.cars = []; Sfx.play('found'); stepDone(); }
     if (Q.kidsWait && !Q.carGreen && !Q.crossing) crossKids();
+    // everyday traffic when no lesson is running: a car now and then in either direction, on a green light; the give-way rules above apply to it too
+    if (Q.step == null && mine) {
+      if (!Q.carGreen) setCars(true);
+      if (Q.cars.some(c => c.gone)) Q.cars = Q.cars.filter(c => !c.gone);
+      Q.trafficT = (Q.trafficT == null ? 2 : Q.trafficT) - dt;
+      if (Q.trafficT <= 0 && Q.cars.length < 3) { Q.trafficT = 4 + Math.random() * 6; const dir = Math.random() < .5 ? 1 : -1; if (!Q.cars.some(c => c.dir === dir && Math.abs(c.g.position.x - (Isle3.Z.cross[0] - dir * 22)) < 6)) car(dir, 0); }
+    }
   }
 
   /* ---------- the bookstore, with a fairy-tale table ---------- */
@@ -7470,7 +7643,7 @@ const Isle4 = (() => {
     here_build = sp; const S = sp.scene; STATIC_MARK = true;
     S.background = new THREE.Color(lin('#D7EEF4')); sp.sky = makeSky(S); S.fog = new THREE.Fog(lin('#D7EEF4'), 70, 170);
     sp.sun = lights(S, '#E8F4FF', '#9CC38A', '#FFF1D8', 1.25, .8); sp.hemi = S.children.find(o => o.isHemisphereLight);
-    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea);
+    const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea, { shore: 1 });
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#8ACB68', Y.grass));
     plane(4, 22, '#E9D9B4', 0, Y.road, 22); plane(56, 3.6, '#E9D9B4', 0, Y.road, 9.2);
     // pier and ferry
@@ -7685,7 +7858,7 @@ const B4b = (() => {
     const pal = new THREE.Group(); pal.position.set(vx, 0, vz - 4); S.add(pal); mk(rbox(14, 3.6, 3.6, .1), '#F2E6CC', 0, 1.8, 0, pal); mk(rbox(14.4, .8, 4, .1), '#6E7A8A', 0, 4, 0, pal);
     for (let k = 0; k < 9; k++) mk(rbox(.8, 1.6, .1, .05), '#9FC8DE', -6 + k * 1.5, 1.9, 1.82, pal); mk(rbox(1.6, 2.4, .2, .08), '#8C5B3A', 0, 1.2, 1.85, pal);
     I().solids.push([vx - 7.2, vz - 6, vx + 7.2, vz - 2]);
-    const cc = [vx, vz + 6]; mk(new THREE.PlaneGeometry(14, 1.4), '#6FB7DA', cc[0], .1, cc[1], null, false).rotation.x = -Math.PI / 2; const arm = mk(new THREE.PlaneGeometry(1.4, 8), '#6FB7DA', cc[0], .101, cc[1] + .6, null, false); arm.rotation.x = -Math.PI / 2;
+    const cc = [vx, vz + 6]; FX.water(mk(new THREE.PlaneGeometry(14, 1.4), '#6FB7DA', cc[0], .1, cc[1], null, false)).rotation.x = -Math.PI / 2; const arm = FX.water(mk(new THREE.PlaneGeometry(1.4, 8), '#6FB7DA', cc[0], .101, cc[1] + .6, null, false)); arm.rotation.x = -Math.PI / 2;
     Q.canal = cc; I().solids.push([cc[0] - 7, cc[1] - .7, cc[0] + 7, cc[1] + .7], [cc[0] - .7, cc[1] - 3.4, cc[0] + .7, cc[1] + 4.6]);
     [[-5, 3], [5, 3], [-5, 9.4], [5, 9.4]].forEach(([dx, dz], i) => roundTree(vx + dx, 0, vz + dz, .6, '#4E9A45'));
     flowers(vx - 3, vz + 3.4, .03, 8, 511, null, 1.2); flowers(vx + 3, vz + 3.4, .03, 8, 512, null, 1.2);
@@ -7862,7 +8035,7 @@ const B4c = (() => {
   }
   function build(S) {
     const sx = -24, sz = 26.4; Q.s = { x: sx, z: sz };
-    mk(new THREE.PlaneGeometry(24, 3), '#6FB7DA', sx, .1, sz, null, false).rotation.x = -Math.PI / 2; I().solids.push([sx - 12, sz - 1.5, sx + 12, sz + 1.5]);
+    FX.water(mk(new THREE.PlaneGeometry(24, 3), '#6FB7DA', sx, .1, sz, null, false)).rotation.x = -Math.PI / 2; I().solids.push([sx - 12, sz - 1.5, sx + 12, sz + 1.5]);
     [[-1.4, -1.2], [1.2, 1.1], [0, 0]].forEach(([dx, dz]) => mk(sph(.25, 8), '#9A9A92', sx + dx * .3, .14, sz + dz, null, false));
     Q.cow = new THREE.Group(); Q.cow.position.set(sx - 3.4, 0, sz - 2.4); Q.cow.rotation.y = -Math.PI / 3; S.add(Q.cow); cow(Q.cow); prop('laoniu', Q.cow);
     const tr = new THREE.Group(); tr.position.set(sx + 6.6, 0, sz - 2.6); S.add(tr); mk(cyl(.2, .3, 2.6, 8), '#8A6A4A', 0, 1.3, 0, tr); mk(sph(1.2, 12), '#5EA94E', 0, 3, 0, tr); I().solids.push([sx + 6.2, sz - 3, sx + 7, sz - 2.2]);   // further east: it used to hide the bench where Grandma's family sits in the sun
