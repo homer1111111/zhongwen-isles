@@ -521,7 +521,8 @@ const Sfx = (() => {
     if (name === 'ting') { tone(1568, t, .16, 'sine', .1); tone(2349, t + .06, .28, 'sine', .08); }
     if (name === 'chirp') { const f = 2300 + Math.random() * 900; [0, .11, .2].forEach((d, i) => tone(f * (1 + i * .06), t + d, .08, 'sine', .09 * v, f * 1.25)); }
     if (name === 'buzz') { const f = 175 + Math.random() * 30; tone(f, t, .5, 'sawtooth', .05 * v, f * 1.12); tone(f * 2.02, t, .5, 'square', .012 * v, f * 2.2); }
-    if (name === 'cricket') [0, .07, .14, .32, .39, .46].forEach(d => tone(4300, t + d, .045, 'triangle', .02));
+    if (name === 'cricket') [0, .07, .14, .32, .39, .46].forEach(d => tone(4300, t + d, .045, 'triangle', .02 * v));
+    if (name === 'cicada') for (let i = 0; i < 22; i++) tone(5100 + (i % 3) * 140, t + i * .05, .04, 'square', .006 * v);
   };
   const note = f => { if (ctx) { tone(f, ctx.currentTime, .32, 'triangle', .26); tone(f * 2, ctx.currentTime, .2, 'sine', .06); } };
   return { init, play, note, ctx: () => ctx };
@@ -1011,7 +1012,7 @@ float fxNoise( vec2 p ) {
     const env = skyEnv(); if (env && !o.flow) { m.envMap = env; m.envMapIntensity = .16; }
     const u = { rim: { value: new THREE.Vector3(rim[0], rim[1], rim[2]) }, flow: { value: o.flow ? 1 : 0 } }, shore = o.shore ? shoreSlot(mesh, m) : null;
     m.onBeforeCompile = sh => {
-      baseHook(sh); sh.uniforms.uFxRimW = u.rim; sh.uniforms.uFxFlow = u.flow; sh.uniforms.uFxRain = U.rain; if (shore) { sh.uniforms.uFxShore = shore.map; sh.uniforms.uFxShoreBox = shore.box; }
+      baseHook(sh); sh.uniforms.uFxRimW = u.rim; sh.uniforms.uFxFlow = u.flow; sh.uniforms.uFxRain = U.rain; sh.uniforms.uFxIce = U.ice; if (shore) { sh.uniforms.uFxShore = shore.map; sh.uniforms.uFxShoreBox = shore.box; }
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vFxP;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvFxP = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <fog_pars_fragment>', `#include <fog_pars_fragment>
@@ -1019,6 +1020,7 @@ varying vec3 vFxP;
 uniform vec3 uFxRimW;
 uniform float uFxFlow;
 uniform float uFxRain;
+uniform float uFxIce;
 ${shore ? 'uniform sampler2D uFxShore;\nuniform vec4 uFxShoreBox;\nfloat fxLand( vec2 p ) { vec2 uv = ( p - uFxShoreBox.xy ) / uFxShoreBox.zw; uv.y = 1.0 - uv.y; return texture2D( uFxShore, uv ).r * step( 0.0, uv.x ) * step( uv.x, 1.0 ) * step( 0.0, uv.y ) * step( uv.y, 1.0 ); }' : ''}
 #ifndef USE_FOG
 uniform float uFxT;
@@ -1050,6 +1052,7 @@ float fxFoam( vec2 p ) {   // thin bright lines along the borders of drifting ce
 		diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), clamp( fxSurf, 0.0, 1.0 ) * 0.72 );
 	}` : ''}
 	diffuseColor.rgb += uFxRain * fxFar * 0.2 * smoothstep( 0.78, 0.95, fxNoise( fxP * 6.5 + vec2( uFxT * 2.3, -uFxT * 1.7 ) ) );   // raindrops dimple the surface
+	${shore ? '' : 'diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.84, 0.92, 0.97 ), uFxIce * 0.74 * ( 1.0 - uFxFlow ) );   // still water freezes over in winter'}
 	if ( uFxRimW.z > 0.0 ) {
 		float fxD = uFxRimW.z - length( vFxP.xz - uFxRimW.xy ) + sin( atan( vFxP.z - uFxRimW.y, vFxP.x - uFxRimW.x ) * 9.0 + uFxT * 1.4 ) * 0.07;
 		diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 1.0 ), ( 1.0 - smoothstep( 0.1, 0.5, fxD ) ) * 0.7 );
@@ -1258,7 +1261,7 @@ void main() {
       const px = Math.max(b[0], Math.min(b[2], o.x)), pz = Math.max(b[1], Math.min(b[3], o.z)), dist = Math.hypot(px - o.x, pz - o.z); if (dist < bd && dist > .3) { bd = dist; best = { b, px, pz }; } });
     if (!best) return null;
     const dx = o.x - best.px, dz = o.z - best.pz, l = Math.hypot(dx, dz) || 1, ox = dx / l, oz = dz / l;
-    for (const sh of [0, 1.3, -1.3, 2.6, -2.6, 3.9, -3.9]) { const x = best.px + ox * .9 - oz * (sh + (idx % 3) * .45), z = best.pz + oz * .9 + ox * (sh + (idx % 3) * .45); if (!(sp.blocked && sp.blocked(x, z))) return { x, z }; }
+    for (const sh of [0, 1.3, -1.3, 2.6, -2.6, 3.9, -3.9]) { const x = best.px + ox * .9 - oz * (sh + (idx % 3) * .45), z = best.pz + oz * .9 + ox * (sh + (idx % 3) * .45); if (!blocked(x, z)) return { x, z }; }
     return null;
   }
   function zzz() { return N.zTex || (N.zTex = canvasTex(128, 96, c => { c.fillStyle = 'rgba(255,255,255,.92)'; c.font = '700 56px sans-serif'; c.fillText('Z', 8, 86); c.font = '700 40px sans-serif'; c.fillText('z', 54, 58); c.font = '700 28px sans-serif'; c.fillText('z', 88, 34); })); }
@@ -1285,7 +1288,10 @@ void main() {
     if (!R.qs.length && R.ws.length < 3) { setPassed(who); return true; }
     N.gating = true;
     try {
-      const others = Object.keys(PEOPLE).filter(k => k !== who && k !== 'me' && isHuman(PEOPLE[k]) && !isCaptain(k) && PEOPLE[k].fxD && PEOPLE[k].fxD.home0 === here0);
+      /* an errand names the person to find, so only somebody whose name is unique on this island can be its target (several children are all called 小朋友) */
+      const locals = Object.keys(PEOPLE).filter(k => k !== 'me' && isHuman(PEOPLE[k]) && !isCaptain(k) && PEOPLE[k].fxD && PEOPLE[k].fxD.home0 === here0), count = {};
+      locals.forEach(k => { count[nm(k, 0)] = (count[nm(k, 0)] || 0) + 1; });
+      const others = locals.filter(k => k !== who && count[nm(k, 0)] === 1 && nm(k, 0) !== nm(who, 0) && typeof NAMES !== 'undefined' && NAMES[k]);
       if (R.ws.length >= 3 && others.length && Math.random() < .5 && !N.errand) {
         const w = pickOne(R.ws), to = pickOne(others);
         await N.talk0(who, [['这么晚了……先帮我一个忙吧！', 'It is late… do me a favour first!'], ['把「' + w[0] + '」这个词带给' + nm(to, 0) + '，再回来找我。', 'Take the word “' + w[0] + '” to ' + nm(to, 1) + ', then come back to me.']]);
@@ -1313,9 +1319,12 @@ void main() {
       setPassed(e.from); setStars(G.stars + 5); N.errand = null;
     } finally { N.gating = false; }
   }
+  function bringOutAt(c, D) { const sp = SP[D.home0]; c.obj.position.x = D.spot.x; c.obj.position.z = D.spot.z; if (sp && sp.floor) c.obj.position.y = sp.floor(D.spot.x, D.spot.z); c.obj.rotation.y = D.spot.r; D.px = D.spot.x; D.pz = D.spot.z; D.mode = 'rest'; D.t = 20; try { c.play('idle'); } catch (e) { } }
   function comeOut(k, c) {
     const D = c.fxD; if (!D || D.mode !== 'home') return;
-    c.space = D.home0; c.obj.visible = true; if (D.door) { c.obj.position.x = D.door.x; c.obj.position.z = D.door.z; D.px = D.door.x; D.pz = D.door.z; } D.mode = 'back'; D.tx = D.spot.x; D.tz = D.spot.z; c.play('walk');
+    c.space = D.home0; c.obj.visible = true;
+    if (!D.door || !clearPath(D.door.x, D.door.z, D.spot.x, D.spot.z)) { bringOutAt(c, D); if (N.signs[k]) N.signs[k].visible = false; return; }
+    c.obj.position.x = D.door.x; c.obj.position.z = D.door.z; D.px = D.door.x; D.pz = D.door.z; D.mode = 'back'; D.tx = D.spot.x; D.tz = D.spot.z; c.play('walk');
     if (N.signs[k]) N.signs[k].visible = false;
   }
   /* straight back to their spot, without the walk: used when a lesson needs people now */
@@ -1324,7 +1333,8 @@ void main() {
     c.space = D.home0; c.obj.visible = true; const sp = SP[D.home0]; c.obj.position.x = D.spot.x; c.obj.position.z = D.spot.z; if (sp && sp.floor) c.obj.position.y = sp.floor(D.spot.x, D.spot.z); c.obj.rotation.y = D.spot.r;
     D.px = D.spot.x; D.pz = D.spot.z; D.mode = 'rest'; D.t = 20; if (N.signs[k]) N.signs[k].visible = false; try { c.play('idle'); } catch (e) { }
   }
-  function everyoneOut(space) { N.allOut[space] = nightKey(); for (const k in PEOPLE) { const c = PEOPLE[k]; if (c && c.fxD && c.fxD.home0 === space) bringOut(k, c); } }
+  /* a lesson may call on people from anywhere (a party indoors invites the children from outside), so everybody on every island comes out */
+  function everyoneOut() { N.allOutAll = nightKey(); for (const k in PEOPLE) { const c = PEOPLE[k]; if (c && c.fxD) bringOut(k, c); } }
   async function knock(k) {
     const c = PEOPLE[k]; Sfx.play('tap'); setTimeout(() => Sfx.play('tap'), 180); setTimeout(() => Sfx.play('tap'), 360);
     if (N.errand && N.errand.to === k) { await deliver(k); return; }
@@ -1337,17 +1347,19 @@ void main() {
     talk = function (who, lines, choices) {
       const tapped = performance.now() - N.fromAct < 60, c = PEOPLE[who]; N.fromAct = 0;
       /* any conversation with a lesson host that offers choices may be the start of a lesson, and lessons move other people about: everybody on the island comes out first */
-      if (!N.gating && c && here && here.sky && choices && choices.length && hostSet().has(who) && !(c.fxD && c.fxD.mode === 'home') && (!tapped || passed(who) || !isNight())) everyoneOut(here.name);
+      if (!N.gating && c && choices && choices.length && hostSet().has(who) && !(c.fxD && c.fxD.mode === 'home') && (!tapped || passed(who) || !isNight() || !(here && here.sky))) everyoneOut();
       if (!tapped || N.gating || !isNight() || !c || who === 'me' || !(here && here.sky)) return N.talk0(who, lines, choices);
       if (c.fxD && c.fxD.mode === 'home') { showToast(nm(who, 0) + '回家了，去敲敲门吧。', nm(who, 1) + ' has gone home. Knock on the door.'); return new Promise(() => { }); }
       if (N.errand && N.errand.to === who) return deliver(who).then(() => new Promise(() => { }));
       const needs = (isSleeper(who, c) || isHuman(c)) && !passed(who);
-      if (!needs) { everyoneOut(here.name); return N.talk0(who, lines, choices); }
+      if (!needs) { everyoneOut(); return N.talk0(who, lines, choices); }
       if (N.errand && N.errand.from === who) { showToast('先去找' + nm(N.errand.to, 0) + '。', 'Find ' + nm(N.errand.to, 1) + ' first.'); return new Promise(() => { }); }
-      return gate(who).then(ok => { if (!ok) return new Promise(() => { }); everyoneOut(here.name); return N.talk0(who, lines, choices); });
+      return gate(who).then(ok => { if (!ok) return new Promise(() => { }); everyoneOut(); return N.talk0(who, lines, choices); });
     };
     /* a lesson script that walks someone who is indoors gets them back first, so it never meets a person without a place */
-    const walk0 = walkTo; walkTo = function (ch) { if (ch && ch.fxD && ch.fxD.mode === 'home') { const k = Object.keys(PEOPLE).find(x => PEOPLE[x] === ch); bringOut(k, ch); } return walk0.apply(this, arguments); };
+    const walk0 = walkTo; walkTo = function (ch) { if (ch && ch.fxD && ch.fxD.mode === 'home' && /^night@/.test(ch.space || '')) { const k = Object.keys(PEOPLE).find(x => PEOPLE[x] === ch); bringOut(k, ch); } return walk0.apply(this, arguments); };
+    /* a script that places someone who is indoors: they are simply out now, wherever the script puts them */
+    const put0 = putIn; putIn = function (ch) { const D = ch && ch.fxD; if (D && D.mode === 'home') { ch.obj.visible = true; D.mode = 'rest'; D.t = 25; const k = Object.keys(PEOPLE).find(x => PEOPLE[x] === ch); if (N.signs[k]) N.signs[k].visible = false; } const r = put0.apply(this, arguments); if (D) { D.px = ch.obj.position.x; D.pz = ch.obj.position.z; } return r; };
     const near0 = nearby;
     nearby = function () {
       const best = near0(), me = PEOPLE.me; let mine = null;
@@ -1359,6 +1371,14 @@ void main() {
     };
     nearby.all = null;
   }
+  /* a straight walk is only taken when nothing solid is in the way (the first step is skipped: people stand close to walls and to each other) */
+  function clearPath(x0, z0, x1, z1) { const d = Math.hypot(x1 - x0, z1 - z0), n = Math.ceil(d / .3); for (let i = 2; i <= n; i++) { const q = i / n; try { if (blocked(x0 + (x1 - x0) * q, z0 + (z1 - z0) * q)) return false; } catch (e) { return false; } } return true; }
+  /* the colour of the ground under a point: a stroll stays on the same kind of ground it started on, so nobody steps off the grass or the pavement into the road */
+  function groundKey(x, z) {
+    try { _ray.camera = camera; _ray.set(_o.set(x, 12, z), _down); _ray.far = 14; const hits = _ray.intersectObjects(here.scene.children, true);
+      for (let i = 0; i < hits.length; i++) { const o = hits[i].object; if (!o.isMesh || o.isSkinnedMesh || o.isInstancedMesh || o.userData.fx || (o.parent && o.parent.userData.fx) || !shown(o) || !hits[i].face) continue; const m = Array.isArray(o.material) ? o.material[hits[i].face.materialIndex || 0] : o.material; if (!m || !m.color || m.transparent) continue; return m.color.getHexString() + '@' + Math.round(hits[i].point.y * 4); }
+    } catch (e) { } return '?';
+  }
   const LEGS = [['upperlegl', -1.5], ['upperlegr', -1.5], ['lowerlegl', 1.55], ['lowerlegr', 1.55]];
   function stepTo(c, D, dt, speed) {   // one frame of walking toward D.tx, D.tz; true on arrival
     const o = c.obj, dx = D.tx - o.position.x, dz = D.tz - o.position.z, d = Math.hypot(dx, dz), sp = SP[D.home0] || here;
@@ -1369,7 +1389,7 @@ void main() {
     if (!N.hooked) { try { hookGame(); } catch (e) { N.hooked = true; } if (N.forced) try { Life.force('night'); N.lessonTime = false; } catch (e) { } }
     const sp = here, me = PEOPLE.me; if (!sp || !me) return;
     if (N.lastSpace !== sp) { N.lastSpace = sp; N.arrived = 0; } N.arrived += dt;
-    const out = !!sp.sky, night = out && isNight(), busy = UI.busy || UI.talking || UI.fishing || UI.ride, mp = me.obj.position, everyone = N.allOut[sp.name] === nightKey();
+    const out = !!sp.sky, night = out && isNight(), busy = UI.busy || UI.talking || UI.fishing || UI.ride, mp = me.obj.position, everyone = N.allOutAll === nightKey();
     let idx = 0;
     for (const k in PEOPLE) {
       const c = PEOPLE[k]; if (!c || !c.obj || k === 'me') continue; let D = c.fxD;
@@ -1384,9 +1404,10 @@ void main() {
       const o = c.obj;
       if (!D) { D = c.fxD = { home0: sp.name, spot: { x: o.position.x, z: o.position.z, r: o.rotation.y }, mode: 'rest', t: 4 + Math.random() * 14, px: o.position.x, pz: o.position.z, door: null, noHome: false, idx }; D.door = doorFor(c, sp, idx); if (!D.door) D.noHome = true; }
       if (D.noHome) { D.mode = 'rest'; continue; }
+      if (D.mode !== 'home' && c.space !== D.home0) continue;   /* visiting somewhere else for a lesson: leave them alone */
       /* someone else (a lesson) moved this person: stand down and, once they settle, treat the new place as their spot */
       if (D.mode !== 'home' && (Math.abs(o.position.x - D.px) > .02 || Math.abs(o.position.z - D.pz) > .02)) {
-        if (D.mode === 'sit' && D.seat) D.seat.fxBusy = false; D.mode = 'rest'; D.t = 25; D.spot = { x: o.position.x, z: o.position.z, r: o.rotation.y }; D.px = o.position.x; D.pz = o.position.z; D.door = doorFor(c, sp, D.idx) || D.door; continue; }
+        if (D.mode === 'sit' && D.seat) D.seat.fxBusy = false; D.mode = 'rest'; D.t = 25; D.spot = { x: o.position.x, z: o.position.z, r: o.rotation.y }; D.gk = null; D.px = o.position.x; D.pz = o.position.z; D.door = doorFor(c, sp, D.idx) || D.door; continue; }
       const dist = Math.hypot(mp.x - o.position.x, mp.z - o.position.z), wantHome = night && !passed(k) && !everyone;
       if (D.mode === 'home' && c.space !== 'night@' + D.home0) { o.visible = true; D.mode = 'rest'; D.t = 25; D.px = o.position.x; D.pz = o.position.z; if (N.signs[k]) N.signs[k].visible = false; continue; }   /* a script placed this person somewhere: they are out */
       if (D.mode === 'home') { if (!wantHome && !busy) comeOut(k, c); else sign(k, D.door, sp).visible = night; continue; }
@@ -1395,6 +1416,8 @@ void main() {
         if (D.mode === 'sit' && D.seat) D.seat.fxBusy = false;
         /* you were not there to see it: already indoors */
         if (N.arrived < 1.5 || dist > 22) { o.visible = false; c.space = 'night@' + sp.name; D.mode = 'home'; sign(k, D.door, sp).visible = true; continue; }
+        /* no clear way to the door: they are simply indoors */
+        if (!clearPath(o.position.x, o.position.z, D.door.x, D.door.z)) { o.visible = false; c.space = 'night@' + sp.name; D.mode = 'home'; sign(k, D.door, sp).visible = true; continue; }
         D.mode = 'going'; D.tx = D.door.x; D.tz = D.door.z; c.play('walk');
       }
       if (D.mode === 'going') { if (stepTo(c, D, dt, 1.5)) { c.play('idle'); o.visible = false; c.space = 'night@' + sp.name; D.mode = 'home'; sign(k, D.door, sp).visible = true; } continue; }
@@ -1413,8 +1436,10 @@ void main() {
       D.t -= dt; if (D.t > 0 || night || REDUCED || dist < 7 || !(c.cur && c.cur.getClip().name === 'Idle')) continue;
       D.t = 10 + Math.random() * 18; D.seat = null;
       const seats = (Sit.seats ? Sit.seats(sp.name) : []).filter(s2 => !s2.fxBusy && !s2.view && Math.hypot(s2.x - D.spot.x, s2.z - D.spot.z) < 9 && Math.hypot(s2.x - mp.x, s2.z - mp.z) > 5);
-      if (seats.length && Math.random() < .3) { D.seat = pickOne(seats); D.seat.fxBusy = true; D.tx = D.seat.x - Math.sin(D.seat.ry) * .18; D.tz = D.seat.z - Math.cos(D.seat.ry) * .18; D.mode = 'walk'; c.play('walk'); continue; }
-      for (let tries = 0; tries < 6; tries++) { const a = Math.random() * 6.283, r = 1.2 + Math.random() * 1.6, x = D.spot.x + Math.cos(a) * r, z = D.spot.z + Math.sin(a) * r; let ok = true; for (let q = .25; q <= 1; q += .25) if (sp.blocked && sp.blocked(D.spot.x + (x - D.spot.x) * q, D.spot.z + (z - D.spot.z) * q)) ok = false;
+      const reach = seats.filter(s2 => clearPath(D.spot.x, D.spot.z, s2.x - Math.sin(s2.ry) * .7, s2.z - Math.cos(s2.ry) * .7));
+      if (reach.length && Math.random() < .3) { D.seat = pickOne(reach); D.seat.fxBusy = true; D.tx = D.seat.x - Math.sin(D.seat.ry) * .18; D.tz = D.seat.z - Math.cos(D.seat.ry) * .18; D.mode = 'walk'; c.play('walk'); continue; }
+      for (let tries = 0; tries < 6; tries++) { const a = Math.random() * 6.283, r = 1.2 + Math.random() * 1.6, x = D.spot.x + Math.cos(a) * r, z = D.spot.z + Math.sin(a) * r; const g0 = D.gk || (D.gk = groundKey(D.spot.x, D.spot.z));
+        const ok = clearPath(D.spot.x, D.spot.z, x, z) && !blocked(x, z) && groundKey(x, z) === g0 && groundKey((x + D.spot.x) / 2, (z + D.spot.z) / 2) === g0;
         if (ok && sp.floor && Math.abs(sp.floor(x, z) - sp.floor(D.spot.x, D.spot.z)) < .2) { D.tx = x; D.tz = z; D.mode = 'walk'; c.play('walk'); break; } }
     }
   }
@@ -1443,7 +1468,7 @@ void main() {
   }
   function gestures(c, key, isMe, mp, dt) {
     let st = c.fxG;
-    if (!st) { st = c.fxG = { look: 0, wave: -9, greet: -99, fid: 6 + Math.random() * 14, fidT: -9, fidK: 0, ph: Math.random() * 6 }; GB.forEach(n => { st[n] = { bone: c.obj.getObjectByName(n) || null, base: new THREE.Quaternion(), out: new THREE.Quaternion(), has: false }; }); }
+    if (!st) { st = c.fxG = { look: 0, wave: -9, greet: -99, fid: 6 + Math.random() * 14, fidT: -9, fidK: 0, ph: Math.random() * 6 }; GB.forEach(n => { st[n] = { bone: c.obj.getObjectByName(n) || null, base: new THREE.Quaternion(), out: new THREE.Quaternion(), has: false }; }); try { winterWear(c, key); } catch (e) { } }
     const t = G0.clock, idle = !!(c.cur && c.cur.getClip().name === 'Idle') && !(isMe && UI.sit);
     let hx = 0, hy = 0, hz = 0, cy = 0, rUp = 0, rFw = 0, rEl = 0, lFw = 0, lEl = 0;
     // glance at the player
@@ -1546,7 +1571,7 @@ void main() {
   /* ---------- butterflies near you on outdoor days ---------- */
   const flies = [];
   function butterflies(dt, t, outdoor) {
-    const on = outdoor && !LOW && !UI.ride && S.day > .45 && Life.season() !== 'winter' && !!PEOPLE.me;
+    const on = outdoor && !LOW && !UI.ride && S.day > .45 && /spring|summer/.test(Life.season()) && !!PEOPLE.me;
     if (on && !flies.length) {
       const g0 = new THREE.CircleGeometry(.17, 12); g0.scale(1, 1.3, 1); g0.rotateX(-Math.PI / 2); g0.translate(.17, 0, 0);   // one wing, hinged at the body
       const body = new THREE.BoxGeometry(.05, .05, .3), bm = tm('#4A3A30');
@@ -1584,6 +1609,7 @@ void main() {
     for (const k in vTimer) vTimer[k] -= dt;
     for (const k in best) {   // only the nearest source of each kind speaks, louder the closer you are
       if (quiet || (vTimer[k] || 0) > 0) continue;
+      if (k === 'chirp' && Math.random() > ({ spring: 1, summer: 1, autumn: .4, winter: .12 }[Life.season()] || 1)) { vTimer[k] = 2; continue; }
       const b = best[k]; vTimer[k] = b.v.every * (.7 + Math.random() * .6); Sfx.play(k, 1 - .75 * b.d / b.v.radius);
     }
   }
@@ -1601,7 +1627,7 @@ void main() {
     // music bus: dry signal plus a filtered feedback echo
     A.out = c.createGain(); A.out.gain.value = 0; A.out.connect(c.destination);
     A.bus = c.createGain(); A.bus.connect(A.out);
-    const dl = c.createDelay(1), fb = c.createGain(), lp = c.createBiquadFilter(); dl.delayTime.value = .36; fb.gain.value = .3; lp.type = 'lowpass'; lp.frequency.value = 2200;
+    const dl = c.createDelay(1), fb = c.createGain(), lp = c.createBiquadFilter(); dl.delayTime.value = .42; fb.gain.value = .2; lp.type = 'lowpass'; lp.frequency.value = 2200;
     A.bus.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(A.out);
     // the sea: looping soft noise that swells slowly, heard outdoors
     const n = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = n.getChannelData(0); let last = 0; for (let i = 0; i < d.length; i++) { last = last * .97 + (Math.random() * 2 - 1) * .03; d[i] = last * 6; }
@@ -1617,9 +1643,10 @@ void main() {
     const s = A.ctx.createBufferSource(), g = A.ctx.createGain(); s.buffer = d; s.playbackRate.value = rate; g.gain.value = v; s.connect(g); g.connect(A.ctx.destination); s.start(); return true;
   }
   function pluck(f, t, v, long) {
-    const c = A.ctx, g = c.createGain(), o = c.createOscillator(), o2 = c.createOscillator(), g2 = c.createGain(), len = long ? 2.6 : 1.5;
-    o.type = long ? 'sine' : 'triangle'; o.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f * 2; g2.gain.value = long ? 0 : .22;
-    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + (long ? .06 : .012)); g.gain.exponentialRampToValueAtTime(.0001, t + len);
+    const c = A.ctx, g = c.createGain(), o = c.createOscillator(), o2 = c.createOscillator(), g2 = c.createGain(), len = long ? 3.4 : 2.4;
+    /* a soft piano-like tone: a pure fundamental with a little of the octave above, a quick touch and a long fade */
+    o.type = 'sine'; o.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f * 2; g2.gain.value = long ? .08 : .3;
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t + (long ? .04 : .008)); g.gain.exponentialRampToValueAtTime(v * .35, t + .28); g.gain.exponentialRampToValueAtTime(.0001, t + len);
     o.connect(g); o2.connect(g2); g2.connect(g); g.connect(A.bus); o.start(t); o2.start(t); o.stop(t + len + .05); o2.stop(t + len + .05);
   }
   const PENTA = [0, 2, 4, 7, 9], ROOT = { town: 293.66, isle1: 261.63, isle2: 196, isle3: 349.23, isle4: 220 };   // D, C, G, F, A
@@ -1629,11 +1656,11 @@ void main() {
     if (A.rest > 0) { A.rest--; return; }
     if (beat === 0) { pluck(root / 2, t, .1, true); if (Math.random() < .12) A.rest = 8; }   // bass on the bar; now and then a bar of quiet
     if (beat === 8) pluck(root / 2 * 1.5, t, .07, true);
-    if (Math.random() < (beat % 4 === 0 ? .88 : beat % 2 === 0 ? .55 : .28) * (night ? .75 : 1)) {
+    if (Math.random() < (beat % 4 === 0 ? .8 : beat % 2 === 0 ? .4 : .14) * (night ? .75 : 1)) {
       const moves = [-2, -1, -1, 1, 1, 2, 0]; A.deg = Math.max(0, Math.min(9, A.deg + moves[(Math.random() * moves.length) | 0]));
       if (beat === 14) A.deg = A.deg >= 5 ? 5 : 0;                                            // phrases come home to the key note
       pluck(noteHz(root, A.deg), t, .085, false);
-      if (Math.random() < .18) pluck(noteHz(root, A.deg + 2), t + .02, .045, false);          // a soft harmony note
+      if (Math.random() < .12) pluck(noteHz(root, A.deg + 2), t + .02, .045, false);          // a soft harmony note
     }
   }
   function soundscape(dt, t, outdoor, ph) {
@@ -1645,9 +1672,10 @@ void main() {
     { const w = weather(), wet = w === 'rain' || w === 'storm'; A.rain.gain.setTargetAtTime(wet ? (outdoor ? .075 : .022) * (hush ? .45 : 1) : 0, now, .8); }   // indoors the rain is a murmur on the roof
     { let d = 99; const me = PEOPLE.me; if (me) for (let i = 0; i < S.falls.length; i++) { const f = S.falls[i]; let r = f; while (r.parent) r = r.parent; if (r !== here.scene) continue; f.getWorldPosition(_vp); d = Math.min(d, Math.hypot(_vp.x - me.obj.position.x, _vp.z - me.obj.position.z)); }
       const k = Math.max(0, 1 - d / 15); A.fall.gain.setTargetAtTime(k * k * .16 * (hush ? .4 : 1), now, .4); }
-    A.out.gain.setTargetAtTime(A.on ? (hush ? .22 : outdoor ? .8 : .5) : 0, now, .5);
+    /* background level: about a fifth of full */
+    A.out.gain.setTargetAtTime(A.on ? (hush ? .06 : outdoor ? .2 : .15) : 0, now, .5);
     if (!A.on) { A.next = 0; return; }
-    const night = ph === 'night', stepLen = night ? .44 : ph === 'evening' ? .38 : .33;
+    const night = ph === 'night', stepLen = night ? .6 : ph === 'evening' ? .52 : .46;
     if (A.next < now - .5) A.next = now + .1;                                                 // first run, or back from a pause
     while (A.next < now + .25) { musicStep(A.next, (A.root || ROOT.town) * (night ? .75 : 1), night); A.next += stepLen; }
   }
@@ -1682,7 +1710,7 @@ void main() {
   function scatter(outdoor) {
     if (LOW || !outdoor || !PEOPLE.me) return;
     const st = scatterState(here), winter = Life.season() === 'winter';
-    st.tuft.visible = st.bloom.visible = !winter; if (winter) return;
+    st.tuft.visible = !winter; st.bloom.visible = /spring|summer/.test(Life.season()); if (winter) return;
     const cap = st.tuft.instanceMatrix.count; if (st.tuft.count >= cap) return;
     const p = ME().obj.position; _ray.camera = camera;
     for (let probe = 0, tries = 0; probe < (HI ? 2 : 1) && tries < 10; tries++) {
@@ -1867,6 +1895,131 @@ void main() {
     tc.pos.copy(sh.pos).lerp(sh.look, k);
   }
 
+
+
+  /* ---------- the four seasons, for everything alive ----------
+     The season is the real one. Plants and animals follow it on every island:
+       butterflies and bees in spring and summer; wild flowers in the grass in spring and summer; flower beds from
+       spring to autumn; pond fish and lily pads until the pond freezes in winter (lily flowers only in summer, the
+       pads turn brown in autumn); birds sing less in autumn and hardly at all in winter; cicadas in summer and
+       crickets in autumn; wild geese cross the sky in autumn; trees change leaf everywhere, not only on the first island.
+     Something a lesson needs is brought back while that lesson is in progress, whatever the season.
+     In winter people wear a woolly hat and a scarf, and when you chat they may talk about the season or the weather. */
+  const SEA = { t: 0, items: [], wear: [], now: '', trees: -1, geese: null, gt: 20, ground: {} };
+  const LEAF = { spring: ['#8BD46A', '#9EDC7E'], summer: ['#5FB354', '#6DBF5A'], autumn: ['#E8A33A', '#D9653B'], winter: ['#EEF4F6', '#DCE7EA'] };
+  const RANGE = { town: [2, 12], isle1: [101, 112], isle2: [201, 212], isle3: [301, 312], isle4: [401, 412] };
+  U.ice = { value: 0 };
+  const lessonOn = n => { try { const pr = B5.prog(n); return !!(pr.story && !pr.done); } catch (e) { return false; } };
+  const placeOf = scene => { for (const k in RANGE) if (SP[k] && SP[k].scene === scene) return k; return ''; };
+  /* seasons: when it is shown. lessons: lesson numbers that bring it back; without a list, any lesson in progress on its island does */
+  function seasonal(obj, seasons, lessons, also) { if (obj) SEA.items.push({ obj, seasons, lessons: lessons || null, also: also || null, place: null }); return obj; }
+  function seasonNow() { return Life.season(); }
+  function seasonTick(dt, t, outdoor) {
+    geeseTick(dt, t, outdoor);
+    SEA.t -= dt; if (SEA.t > 0) return; SEA.t = 1.2;
+    const sn = seasonNow(), busyIsle = {};
+    for (const k in RANGE) { busyIsle[k] = false; for (let n = RANGE[k][0]; n <= RANGE[k][1]; n++) if (lessonOn(n)) { busyIsle[k] = true; break; } }
+    for (let i = 0; i < SEA.items.length; i++) { const it = SEA.items[i]; if (it.place === null) { let r = it.obj; while (r.parent) r = r.parent; it.place = placeOf(r); if (!it.place && !r.isScene) it.place = null; }
+      const on = it.seasons.indexOf(sn) >= 0 || (it.lessons ? it.lessons.some(lessonOn) : !!busyIsle[it.place]); it.obj.visible = on; if (it.also) it.also(sn, on); }
+    U.ice.value = sn === 'winter' ? 1 : 0;
+    for (let i = 0; i < SEA.wear.length; i++) SEA.wear[i].visible = sn === 'winter';
+    /* leaves on every island (trees built after the first island was set up used to stay summer green) */
+    if (SEA.now !== sn || SEA.trees !== TREES.length) { const L2 = LEAF[sn]; TREES.forEach(tr => { const m = tr.userData.mats; if (m && m[1] && m[2]) { m[1].color = lin(L2[0]); m[2].color = lin(L2[1]); } }); SEA.trees = TREES.length; }
+    /* the grass of the other islands turns with the season too (the first island already did) */
+    if (here && here.name !== 'town' && here.walk && SEA.ground[here.name] !== sn) { SEA.ground[here.name] = sn; const hsl = {};
+      here.walk.forEach(m => { (Array.isArray(m.material) ? m.material : [m.material]).forEach(mt => { if (!mt || !mt.color) return; if (!mt.userData.fx0) { mt.color.clone().convertLinearToSRGB().getHSL(hsl); if (hsl.h < .2 || hsl.h > .4 || hsl.s < .25) return; mt.userData.fx0 = mt.color.clone(); }
+        mt.color.copy(mt.userData.fx0); if (sn === 'winter') mt.color.lerp(lin('#E3ECEA'), .86); else if (sn === 'autumn') mt.color.lerp(lin('#B7B85A'), .45); else if (sn === 'spring') mt.color.lerp(lin('#A6E07A'), .25); }); }); }
+    SEA.now = sn;
+  }
+  /* wild geese in a V, high up, on autumn days */
+  function geeseTick(dt, t, outdoor) {
+    const on = outdoor && seasonNow() === 'autumn' && S.day > .5 && !LOW && !!PEOPLE.me;
+    if (!on) { if (SEA.geese) SEA.geese.visible = false; return; }
+    if (!SEA.geese) { const g = SEA.geese = new THREE.Group(), mat = new THREE.MeshBasicMaterial({ color: '#4A4F5A', side: THREE.DoubleSide, fog: false }), wing = new THREE.PlaneGeometry(1.1, .22).translate(.55, 0, 0); g.userData.fx = true; g.userData.birds = [];
+      for (let i = 0; i < 7; i++) { const b = new THREE.Group(), a = new THREE.Mesh(wing, mat), c = new THREE.Mesh(wing, mat); c.scale.x = -1; a.rotation.x = c.rotation.x = -Math.PI / 2; b.add(a, c); const k = Math.ceil(i / 2), sd = i % 2 ? 1 : -1; b.position.set(-k * 1.9, 0, sd * k * 1.7); g.add(b); g.userData.birds.push([a, c, i]); } g.visible = false; }
+    const g = SEA.geese; if (g.parent !== here.scene) here.scene.add(g);
+    SEA.gt -= dt; if (!g.visible && SEA.gt <= 0) { const p = ME().obj.position; g.visible = true; g.position.set(p.x - 70, p.y + 26, p.z - 18 + Math.random() * 20); SEA.gx = p.x + 75; }
+    if (g.visible) { g.position.x += dt * 5.5; g.userData.birds.forEach(([a, c, i]) => { const w = Math.sin(t * 5 + i) * .45; a.rotation.y = w; c.rotation.y = -w; }); if (g.position.x > SEA.gx) { g.visible = false; SEA.gt = 35 + Math.random() * 40; } }
+  }
+  /* winter clothes: a woolly hat and a scarf on the head bone (same space the hair pieces use) */
+  const WOOL = ['#E8574A', '#4F86C6', '#F3C24F', '#5E9A57', '#8E6BBF', '#F2884B'];
+  function winterWear(c, key) {
+    const head = c.obj.getObjectByName('head'); if (!head) return; let h = 0; for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 997;
+    const g = new THREE.Group(), col = tm(WOOL[h % 6]), col2 = tm(WOOL[(h + 3) % 6]), white = tm('#FFFDF6');
+    const hat = new THREE.Mesh(new THREE.SphereGeometry(.6, 16, 10, 0, Math.PI * 2, 0, Math.PI * .5), col); hat.position.y = .6; hat.scale.set(1.02, .9, 1.06);
+    const brim = new THREE.Mesh(new THREE.TorusGeometry(.6, .09, 8, 20), white); brim.rotation.x = Math.PI / 2; brim.position.y = .62; brim.scale.set(1.02, 1.06, 1);
+    const pom = new THREE.Mesh(new THREE.SphereGeometry(.15, 10, 8), white); pom.position.y = 1.2;
+    const scarf = new THREE.Mesh(new THREE.TorusGeometry(.36, .13, 8, 18), col2); scarf.rotation.x = Math.PI / 2; scarf.position.y = .02; scarf.scale.set(1, .9, 1);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(.2, .46, .1), col2); tail.position.set(.2, -.26, .36);
+    g.add(hat, brim, pom, scarf, tail); g.name = 'FxWinter'; g.visible = false; head.add(g); SEA.wear.push(g);
+  }
+  /* something to say about the season or the weather, for an ordinary chat (about one chat in two) */
+  const SAY = { rain: [['下雨了，记得带伞。', 'It is raining. Remember your umbrella.'], ['下雨天，路很滑，慢慢走。', 'The road is slippery in the rain. Walk slowly.']], storm: [['打雷了，快回家吧！', 'There is thunder. Hurry home!']],
+    snow: [['下雪了，好冷！', 'It is snowing. So cold!'], ['下雪了，我们来堆雪人吧！', 'It is snowing. Let us build a snowman!']], cloudy: [['今天是阴天，没有太阳。', 'It is cloudy today. No sun.']],
+    spring: [['春天来了，花开了。', 'Spring is here. The flowers are blooming.'], ['春天真暖和。', 'Spring is so warm.'], ['你看，蝴蝶飞来了。', 'Look, the butterflies are here.']],
+    summer: [['夏天真热！', 'Summer is so hot!'], ['夏天到了，我想吃西瓜。', 'Summer is here. I want some watermelon.'], ['你听，知了在叫。', 'Listen, the cicadas are singing.']],
+    autumn: [['秋天到了，树叶红了。', 'Autumn is here. The leaves have turned red.'], ['秋天真凉快。', 'Autumn is nice and cool.'], ['你看，大雁往南飞了。', 'Look, the wild geese are flying south.']],
+    winter: [['冬天真冷，多穿衣服。', 'Winter is cold. Wear more clothes.'], ['天冷了，我戴上了帽子和围巾。', 'It is cold. I put on my hat and scarf.'], ['冬天到了，小鸟都躲起来了。', 'Winter is here. The little birds are hiding.']] };
+  function remark(k) {
+    const c = PEOPLE[k]; if (!isHuman(c) || !here || !here.sky || Math.random() > .5) return null;
+    const w = weather(), pool = (w !== 'clear' && SAY[w] && Math.random() < .6) ? SAY[w] : SAY[seasonNow()]; return pool ? pickOne(pool) : null;
+  }
+
+  /* ---------- everyday traffic for any island with a road ----------
+     One rule everywhere: cars keep to the road (they appear at one end and leave at the other), stop at the line
+     when you are on the zebra crossing or waiting beside it, brake for anybody in the road ahead (you or a
+     neighbour), and never run into the car in front. o.quiet() can switch the traffic off while a lesson uses the road. */
+  const roads = [];
+  function traffic(space, o) { roads.push(Object.assign({ space, cars: [], t: 3, half: 1.1, speed: 8.5 }, o)); }
+  function trafficCar(R, dir) {
+    const g = new THREE.Group(), col = ['#E8574A', '#4F86C6', '#F3C24F', '#5E9A57', '#8E6BBF'][(Math.random() * 5) | 0];
+    mk(rbox(3.2, .8, 1.8, .3), col, 0, .7, 0, g); mk(rbox(1.6, .6, 1.5, .2), '#9FD0E6', -.2, 1.3, 0, g);
+    [[-1, -.85], [-1, .85], [1, -.85], [1, .85]].forEach(([a, b]) => { const w = mk(cyl(.32, .32, .25, 12), '#2B2420', a, .32, b, g); w.rotation.x = Math.PI / 2; });
+    g.userData.fx = true; g.position.set(dir > 0 ? R.x0 : R.x1, 0, R.z + (dir > 0 ? R.half : -R.half)); g.rotation.y = dir > 0 ? 0 : Math.PI; g.scale.setScalar(.05); SP[R.space].scene.add(g);
+    R.cars.push({ g, dir, stop: R.cx - dir * 6.6 });
+  }
+  function trafficTick(dt) {
+    for (let i = 0; i < roads.length; i++) {
+      const R = roads[i]; if (!here || here.name !== R.space || !PEOPLE.me) continue;
+      const quiet = REDUCED || (R.quiet && R.quiet()), me = ME().obj.position, waiting = Math.abs(me.x - R.cx) < 5.4 && Math.abs(me.z - R.z) < 4.3;
+      const walkers = [me]; for (const k in PEOPLE) { const w = PEOPLE[k]; if (w && w.obj && k !== 'me' && w.space === R.space && w.obj.visible && Math.abs(w.obj.position.z - R.z) < 2.4) walkers.push(w.obj.position); }
+      for (let j = R.cars.length - 1; j >= 0; j--) {
+        const c = R.cars[j], p = c.g.position, before = (c.stop - p.x) * c.dir > 0;
+        const edge = Math.min(p.x - R.x0, R.x1 - p.x); c.g.scale.setScalar(Math.max(.05, Math.min(1, (edge + .3) / 1.4)));
+        if (quiet || (c.dir > 0 ? p.x >= R.x1 : p.x <= R.x0)) { SP[R.space].scene.remove(c.g); R.cars.splice(j, 1); continue; }
+        const blockedAhead = walkers.some(w => Math.abs(w.z - p.z) < 1.9 && (w.x - p.x) * c.dir > 0 && Math.abs(w.x - p.x) < 5.5) || R.cars.some(o2 => o2 !== c && o2.dir === c.dir && (o2.g.position.x - p.x) * c.dir > 0 && Math.abs(o2.g.position.x - p.x) < 4.4);
+        if (blockedAhead) continue;
+        if (waiting && before) { const d = c.stop - p.x; p.x += Math.sign(d) * Math.min(Math.abs(d), R.speed * dt); continue; }
+        p.x += c.dir * R.speed * dt;
+      }
+      if (quiet) continue;
+      R.t -= dt; if (R.t <= 0 && R.cars.length < 3) { R.t = 4 + Math.random() * 7; const dir = Math.random() < .5 ? 1 : -1, start = dir > 0 ? R.x0 : R.x1; if (!R.cars.some(c => c.dir === dir && Math.abs(c.g.position.x - start) < 7)) trafficCar(R, dir); }
+    }
+  }
+  /* lily pads for a pond that has none */
+  function pads(scene, cx, cz, r, y) {
+    for (let i = 0; i < 5; i++) { const a = i * 1.37 + .4, d = r * (.35 + (i % 3) * .22), x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d, pr = .45 + (i % 3) * .12;
+      const pm = new THREE.MeshStandardMaterial({ color: lin('#4E9A45'), roughness: .85 }), pad = new THREE.Mesh(new THREE.CircleGeometry(pr, 16, .5, 5.6), pm); pad.rotation.x = -Math.PI / 2; pad.rotation.z = i * 1.3; pad.position.set(x, y, z); pad.userData.fx = true; scene.add(pad);
+      seasonal(pad, ['spring', 'summer', 'autumn'], null, sn => { pm.color = lin(sn === 'autumn' ? '#9A7B45' : sn === 'spring' ? '#7CC25E' : '#4E9A45'); });
+      if (i % 2 === 0) { const f = new THREE.Mesh(new THREE.SphereGeometry(.15, 8, 6), tm(i % 4 ? '#FFFFFF' : '#FF9EC0')); f.scale.y = .6; f.position.set(x, y + .07, z); f.userData.fx = true; scene.add(f); seasonal(f, ['summer']); } }
+  }
+
+  /* ---------- koi in a pond: a few fish circling just under the surface ---------- */
+  const fishes = [];
+  function koi(scene, cx, cz, r, y) {
+    if (LOW) return;
+    [['#F28B30', '#FFFFFF'], ['#FFFFFF', '#E8574A'], ['#E8574A', '#F28B30'], ['#F6D36B', '#FFFFFF']].forEach((col, i) => {
+      const g = new THREE.Group(), body = new THREE.Mesh(new THREE.SphereGeometry(.2, 10, 8), tm(col[0])), spot = new THREE.Mesh(new THREE.SphereGeometry(.11, 8, 6), tm(col[1])), tail = new THREE.Mesh(new THREE.ConeGeometry(.1, .22, 6), tm(col[0]));
+      body.scale.set(.55, .22, 1.5); spot.scale.set(.6, .24, .8); spot.position.set(0, .012, .08); tail.rotation.x = Math.PI / 2; tail.scale.set(1, 1, .3); tail.position.z = -.36; g.add(body, spot, tail); g.userData.fx = true; scene.add(g);
+      fishes.push({ g, tail, scene, cx, cz, r: r * (.35 + i * .2), y, sp: (.28 + i * .06) * (i % 2 ? -1 : 1), ph: i * 1.7 }); seasonal(g, ['spring', 'summer', 'autumn']);
+    });
+  }
+  function koiTick(t) {
+    for (let i = 0; i < fishes.length; i++) { const f = fishes[i]; if (f.scene !== here.scene) continue;
+      const a = t * f.sp + f.ph, r = f.r + Math.sin(t * .4 + f.ph) * .5, x = f.cx + Math.cos(a) * r, z = f.cz + Math.sin(a) * r;
+      f.g.rotation.y = Math.atan2(x - f.g.position.x, z - f.g.position.z); f.g.position.set(x, f.y, z); f.tail.rotation.y = Math.sin(t * 7 + f.ph) * .5; }
+  }
+
   /* ---------- once per frame ---------- */
   function tick(dt, t) {
     U.t.value = t;
@@ -1886,11 +2039,11 @@ void main() {
     for (let i = 0; i < pool.length; i++) { const q = pool[i]; if (q.life <= 0) continue; q.life -= dt; const s = q.s, k = Math.max(0, q.life / q.max);
       s.position.x += q.vx * dt; s.position.y += q.vy * dt; s.position.z += q.vz * dt; q.vy -= dt * (q.grow > .5 ? .6 : 1.6);
       s.scale.setScalar(q.size * (1 + (1 - k) * q.grow)); s.material.opacity = k * (q.grow > .5 ? .55 : 1); if (q.life <= 0) s.visible = false; }
-    G0.clock = t; beastsTick(dt, t); shotDrift();
+    G0.clock = t; beastsTick(dt, t); shotDrift(); koiTick(t); trafficTick(dt); seasonTick(dt, t, outdoor);
     butterflies(dt, t, outdoor && (fair || wx === 'cloudy')); nearSounds(dt); weatherTick(dt, t, outdoor, ph); soundscape(dt, t, outdoor, ph); scatter(outdoor); if (outdoor) shoreTick(dt);
     // now and then a bird by day, a cricket in the evening; never over a voice or a conversation
     S.amb -= dt;
-    if (S.amb <= 0) { S.amb = 7 + Math.random() * 9; if (outdoor && (fair || wx === 'cloudy') && !UI.talking && !UI.busy && !(window.speechSynthesis && speechSynthesis.speaking)) Sfx.play(S.day > .5 ? 'chirp' : 'cricket', .4); }
+    if (S.amb <= 0) { S.amb = 7 + Math.random() * 9; if (outdoor && (fair || wx === 'cloudy') && !UI.talking && !UI.busy && !(window.speechSynthesis && speechSynthesis.speaking)) { const sn = Life.season(), r = Math.random(); if (S.day > .5) { if (sn === 'summer' && r < .45) Sfx.play('cicada', .5); else if (sn === 'autumn' && r < .4) Sfx.play('cricket', .4); else if (r < ({ spring: 1, summer: 1, autumn: .45, winter: .12 }[sn] || 1)) Sfx.play('chirp', .4); } else if (sn === 'summer' || sn === 'autumn') Sfx.play('cricket', .4); } }
     // slow frames on the high tier: first drop the bloom, then the resolution
     if (S.post && FXQ !== 'lock') {
       const now = performance.now(); if (S.last) { S.slowT += now - S.last; S.frames++; } S.last = now;
@@ -1901,7 +2054,7 @@ void main() {
 
   if (SHADER_FX) patchChunks();
   try { localWeather(false); } catch (e) { }
-  return { setup, resize, render, water, sway, rim, tick, cam, people, gain, shake, dust, voice, music, speaker, line, react, creature, timeForced: on => { N.lessonTime = on; }, weather, weatherMode, wxLook, precip, precipSet,
+  return { setup, resize, render, water, sway, rim, tick, cam, people, gain, shake, dust, voice, music, speaker, line, react, creature, koi, pads, traffic, seasonal, remark, timeForced: on => { N.lessonTime = on; }, weather, weatherMode, wxLook, precip, precipSet,
     stats: () => { const st = here && SC.get(here); return { audio: A.ctx ? A.ctx.state : 'none', clips: Object.keys(A.buf).map(k => k + ':' + A.buf[k].filter(Boolean).length).join(' '), musicSteps: A.step, music: A.on, tufts: st ? st.tuft.count : 0, rocks: st ? st.rock.count : 0, blooms: st ? st.bloom.count : 0, cells: st ? st.cells.size : 0, voices: voices.length, post: !!S.post, bloom: !!(S.post && S.post.bloom), night: (() => { const o = { on: isNight(), home: [], out: [], sleepers: [], err: N.err || '', errand: N.errand ? [N.errand.from, N.errand.to, N.errand.w[0]] : null, modes: {} }; for (const k in PEOPLE) { const c = PEOPLE[k]; if (!c) continue; if (c.fxD) { o.modes[c.fxD.mode] = (o.modes[c.fxD.mode] || 0) + 1; if (c.fxD.mode === 'home') o.home.push(k); else o.out.push(k); } if (c.fxZ && c.fxZ.visible) o.sleepers.push(k); } return o; })(), weather: weather(), surface: S.surface || '', ground: PEOPLE.me ? ground(ME().obj.position, !!(here && here.sky)) : '', wet: +U.wet.value.toFixed(2), blend: !!dayBlend(), wxMode: WX.mode, wxNote: WX.note, rainOn: !!(PR && PR.g.visible && PR.rain.visible), snowOn: !!(PR && PR.g.visible && PR.snow.visible) }; } };   // read by the automated play-through test
 })();
 
@@ -2562,7 +2715,7 @@ function buildTown() {
   // the pond for fishing
   sp.pond = { x: 20, z: 15, r: 5.4 };
   const water = new THREE.Mesh(new THREE.CircleGeometry(sp.pond.r, 48), new THREE.MeshStandardMaterial({ color: lin('#5FB0E0'), roughness: .25, metalness: .1, transparent: true, opacity: .92 }));
-  water.rotation.x = -Math.PI / 2; water.position.set(sp.pond.x, .04, sp.pond.z); S.add(water); sp.water = water; FX.water(water, { rim: [sp.pond.x, sp.pond.z, sp.pond.r] });
+  water.rotation.x = -Math.PI / 2; water.position.set(sp.pond.x, .04, sp.pond.z); S.add(water); sp.water = water; FX.water(water, { rim: [sp.pond.x, sp.pond.z, sp.pond.r] }); FX.koi(S, sp.pond.x, sp.pond.z, sp.pond.r * .62, .09);
   const rr = mulberry(3); for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; mk(new THREE.DodecahedronGeometry(.45 + rr() * .25, 0), '#B9B2A2', sp.pond.x + Math.cos(a) * (sp.pond.r + .3), .2, sp.pond.z + Math.sin(a) * (sp.pond.r + .3)); }
   [[0, .4], [1.4, -.8], [-1.6, 1.6]].forEach(([dx, dz]) => { const p = mk(new THREE.CylinderGeometry(.6, .6, .04, 16), '#5E9A57', sp.pond.x + dx, .07, sp.pond.z + dz, null, false); });
   // nature: round trees and little flowers, like the cute-town lesson
@@ -2622,7 +2775,7 @@ function makeBird(col, x, y, z, parent) {
   return g;
 }
 function flyBird(g, t, k, vx) { g.rotation.y = vx >= 0 ? Math.PI / 2 : -Math.PI / 2; g.userData.wings.forEach(w => { w.rotation.z = w.userData.k * Math.sin(t * 14 + k) * .7; }); }
-function chatWith(k) { const c = (B5.CHATS || {})[k], line = c && c.length ? c[Math.floor(Math.random() * c.length)] : ['你好！', 'Hello!']; return talk(k, [line]); }
+function chatWith(k) { const c = (B5.CHATS || {})[k], line = FX.remark(k) || (c && c.length ? c[Math.floor(Math.random() * c.length)] : ['你好！', 'Hello!']); return talk(k, [line]); }
 function cuteFace(parent, x, y, z, r, ry = 0, o = {}) {
   const f = new THREE.Group(); f.position.set(x, y, z); f.rotation.y = ry; parent.add(f);
   const on = (px, py, k = 1) => Math.sqrt(Math.max(0, r * r - px * px - py * py)) * k;
@@ -2649,6 +2802,7 @@ function flowers(x, z, y, n, seed, cols0, spread) {
   const inst = (geo, mat, count) => { const m = new THREE.InstancedMesh(geo, mat, count); m.frustumCulled = false; W.scene.add(m); return m; };
   const petals = inst(ball, FX.sway(new THREE.MeshStandardMaterial({ roughness: .75 }), y), N * 5), cores = inst(ball, FX.sway(new THREE.MeshStandardMaterial({ roughness: .7 }), y), N);
   const stems = inst(stick, FX.sway(tm('#4E9A45').clone(), y), N), leaves = inst(ball, FX.sway(tm('#5FAE4E').clone(), y), N * 2);
+  [petals, cores, stems, leaves].forEach(m => FX.seasonal(m, ['spring', 'summer', 'autumn']));
   const Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1), qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), m4 = new THREE.Matrix4(), p = new THREE.Vector3(), sc = new THREE.Vector3();
   const put = (mesh, i, px, py, pz, yaw, tilt, sx, sy, sz) => { qa.setFromAxisAngle(Y, yaw); qb.setFromAxisAngle(Z, tilt); qa.multiply(qb); m4.compose(p.set(px, py, pz), qa, sc.set(sx, sy, sz)); mesh.setMatrixAt(i, m4); };
   spots.forEach((f, i) => {
@@ -3310,7 +3464,7 @@ function tickGame(dt, t) {
   tickFishing(dt, t);
   if (UI.fishing) return;
   if (UI.busy) { $('act').classList.add('hidden'); return; }
-  const n = nearby(); if (n) { actFn = n.fn; $('act').innerHTML = `${n.zh}<small class="en-only">${n.en}</small>`; $('act').classList.remove('hidden'); } else { actFn = null; $('act').classList.add('hidden'); }
+  const n = nearby(); if (n) { actFn = n.fn; const lab = `${n.zh}<small class="en-only">${n.en}</small>`; if ($('act').dataset.lab !== lab) { $('act').dataset.lab = lab; $('act').innerHTML = lab; } $('act').classList.remove('hidden'); } else { actFn = null; $('act').classList.add('hidden'); }
   if (here.name === 'market' && G.quest >= 4 && G.quest < 9 && !sectionActive) { const [x, z] = SECTIONS[G.sec].at, me = ME().obj.position; if (Math.hypot(me.x - x, me.z - z) < 2.4) { sectionActive = true; Sfx.play('pop'); markTarget(); const id = want(); Voice.speak(ITEMS[id].zh + '在哪儿？'); } }
 }
 /* every room shows its way out: a doormat with an arrow and an 出口 sign where the 出去 button appears */
@@ -5248,7 +5402,7 @@ const B1 = (() => {
   function build(S) {
     const Z = Isle1.Z;
     Q.yard = { x: 16, z: -1 }; Q.pond = { x: 28.5, z: -1, r: 2.4 };
-    const pond = mk(cyl(Q.pond.r, Q.pond.r, .1, 28), '#7FC4E8', Q.pond.x, .06, Q.pond.z, null, false); FX.water(pond, { rim: [Q.pond.x, Q.pond.z, Q.pond.r] });
+    const pond = mk(cyl(Q.pond.r, Q.pond.r, .1, 28), '#7FC4E8', Q.pond.x, .06, Q.pond.z, null, false); FX.water(pond, { rim: [Q.pond.x, Q.pond.z, Q.pond.r] }); FX.koi(W.scene, Q.pond.x, Q.pond.z, Q.pond.r * .6, .15);
     for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; mk(sph(.32, 8), '#C9C2B6', Q.pond.x + Math.cos(a) * (Q.pond.r + .25), .12, Q.pond.z + Math.sin(a) * (Q.pond.r + .25), null, false).scale.y = .6; }
     sp().solids.push([Q.pond.x - Q.pond.r, Q.pond.z - Q.pond.r, Q.pond.x + Q.pond.r, Q.pond.z + Q.pond.r]);
     Q.crow = scarecrow(Z.field[0], Z.field[1] - .5);
@@ -6206,7 +6360,8 @@ const Isle2 = (() => {
     const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea, { shore: 1 });
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#86C766', Y.grass));
     // streets: the main avenue and the north-south street cross in the middle
-    plane(64, 4.4, '#8E8C92', 0, Y.road, Z.cross[1]); plane(4.4, 25.4, '#8E8C92', 0, Y.road, -10.9); plane(4.4, 23.8, '#8E8C92', 0, Y.road, 18.1);   // the two halves stop at the avenue's edges, so no road lies on another
+    plane(64, 4.4, '#8E8C92', 0, Y.road, Z.cross[1]); plane(4.4, 25.4, '#8E8C92', 0, Y.road, -10.9); plane(4.4, 23.8, '#8E8C92', 0, Y.road, 18.1);
+    FX.traffic('isle2', { z: Z.cross[1], x0: -31, x1: 31, cx: 0, quiet: () => { const p7 = B5.prog(207); return !!(p7.story && !p7.task); } });   // the two halves stop at the avenue's edges, so no road lies on another
     for (let k = -3; k <= 3; k++) { plane(.5, 3, '#FFFFFF', k * .7, Y.stripe, Z.cross[1] + 3.4); plane(.5, 3, '#FFFFFF', k * .7, Y.stripe, Z.cross[1] - 3.4); plane(3, .5, '#FFFFFF', 3.4, Y.stripe, Z.cross[1] + k * .7); plane(3, .5, '#FFFFFF', -3.4, Y.stripe, Z.cross[1] + k * .7); }
     for (let x = -30; x <= 30; x += 4) if (Math.abs(x) > 5) plane(1.8, .16, '#F3E7C4', x, Y.stripe, Z.cross[1]);
     // pavements in front of the buildings
@@ -6223,7 +6378,7 @@ const Isle2 = (() => {
     building(Z.clinic[0], Z.clinic[1], 11, 7, 4.8, '#FFFFFF', '#E8574A', '医院', '#E8574A');
     // garden plot, lotus pond, and the terrain-model yard (each filled in by its lesson)
     plane(10, 6, '#9A6B45', Z.garden[0], Y.plot, Z.garden[1]); sign('菜园', Z.garden[0] + 6, Z.garden[1] - 2.6, '#7DA35A');
-    const pond = mk(cyl(5, 5, .1, 36), '#6FB7DA', Z.pond[0], .08, Z.pond[1], null, false); FX.water(pond, { rim: [Z.pond[0], Z.pond[1], 5] }); sp.solids.push([Z.pond[0] - 4.6, Z.pond[1] - 4.6, Z.pond[0] + 4.6, Z.pond[1] + 4.6]); sign('荷花池', Z.pond[0] - 6, Z.pond[1] - 3.6, '#5E9A57');
+    const pond = mk(cyl(5, 5, .1, 36), '#6FB7DA', Z.pond[0], .08, Z.pond[1], null, false); FX.water(pond, { rim: [Z.pond[0], Z.pond[1], 5] }); FX.koi(W.scene, Z.pond[0], Z.pond[1], 3.2, .17); sp.solids.push([Z.pond[0] - 4.6, Z.pond[1] - 4.6, Z.pond[0] + 4.6, Z.pond[1] + 4.6]); sign('荷花池', Z.pond[0] - 6, Z.pond[1] - 3.6, '#5E9A57');
     plane(16, 10, '#D9CDB4', Z.model[0], Y.plaza, Z.model[1]); sign('江河模型', Z.model[0] - 9, Z.model[1] + 4.6, '#4F86C6');
     // trees, flowers and street lamps
     const T0 = TREES.length;
@@ -7221,7 +7376,8 @@ const Isle3 = (() => {
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#8ACB68', Y.grass));
     // a market street with a crossroads, and the pier street
     const [cx, cz] = Z.cross; plane(36, 4.4, '#8E8C92', cx, Y.road, cz); plane(4.4, 22.8, '#8E8C92', cx, Y.road, cz + 13.6); plane(4.4, 4.6, '#8E8C92', cx, Y.road, cz - 4.5);
-    for (let k = -3; k <= 3; k++) { plane(3, .5, '#FFFFFF', cx - 3.4, Y.stripe, cz + k * .7); plane(3, .5, '#FFFFFF', cx + 3.4, Y.stripe, cz + k * .7); }
+    /* one zebra crossing right across, including the middle where the footpath meets the road */
+    for (let k = -3; k <= 3; k++) { plane(3, .5, '#FFFFFF', cx - 3.4, Y.stripe, cz + k * .7); plane(3, .5, '#FFFFFF', cx + 3.4, Y.stripe, cz + k * .7); plane(3.8, .5, '#FFFFFF', cx, Y.stripe, cz + k * .7); }
     plane(.3, 4.4, '#FFFFFF', cx - 6, Y.stripe, cz); plane(.3, 4.4, '#FFFFFF', cx + 6, Y.stripe, cz);
     [[Z.bookstore[0], Z.bookstore[1] + 5.4], [Z.clinic[0], Z.clinic[1] + 5.4]].forEach(([x, z]) => plane(11, 2.4, '#E9D9B4', x, Y.plaza, z));
     // pier and ferry
@@ -7234,7 +7390,10 @@ const Isle3 = (() => {
     building(Z.cottage[0], Z.cottage[1], 8, 6, 3.8, '#EADCC2', '#8C5B3A', '瓦特的家', '#8C5B3A');
     building(Z.workshop[0], Z.workshop[1], 8, 6, 3.6, '#E9D9B4', '#B98A3A', '造纸坊', '#B98A3A');
     building(Z.home[0], Z.home[1], 7, 6, 3.8, '#FFF6E2', '#E8574A', '我的家', '#8C5B3A');
-    FX.water(disc(6, '#6FB7DA', Z.lake[0], .09, Z.lake[1]), { rim: [Z.lake[0], Z.lake[1], 6] }); sp.solids.push([Z.lake[0] - 5.6, Z.lake[1] - 5.6, Z.lake[0] + 5.6, Z.lake[1] + 5.6]); sign('湖', Z.lake[0] + 7, Z.lake[1] + 2, '#4F86C6');
+    FX.water(disc(6, '#6FB7DA', Z.lake[0], .09, Z.lake[1]), { rim: [Z.lake[0], Z.lake[1], 6] });
+    { const lx = Z.lake[0], lz = Z.lake[1];
+      FX.pads(W.scene, lx, lz, 4.4, .125);
+      FX.koi(W.scene, lx, lz, 4.3, .13); } sp.solids.push([Z.lake[0] - 5.6, Z.lake[1] - 5.6, Z.lake[0] + 5.6, Z.lake[1] + 5.6]); sign('湖', Z.lake[0] + 7, Z.lake[1] + 2, '#4F86C6');
     FX.water(plane(4, 60.5, '#6FB7DA', Z.river[0], .1, Z.river[1] - .25)); sp.solids.push([Z.river[0] - 2, -30.5, Z.river[0] + 2, 31]);
     { const fall = mk(new THREE.PlaneGeometry(4, 2.4), new THREE.MeshStandardMaterial({ color: lin('#8FCBEF'), roughness: .2 }), Z.river[0], 1.2, -30.36, null, false); FX.water(fall, { flow: 1 });
       FX.water(plane(4, 3.2, '#6FB7DA', Z.river[0], 2.49, -32.1));
@@ -7343,9 +7502,13 @@ const B3 = (() => {
   function tick(dt) {
     let left = 0;
     // cars always give way to a person: they wait at the stop line while you are on the crossing, and brake when you are in the road ahead of them
-    const me = ME().obj.position, mine = ME().space === 'isle3', [kx, kz] = Isle3.Z.cross, onCross = mine && Math.abs(me.x - kx) < 5.4 && Math.abs(me.z - kz) < 2.6;
+    const me = ME().obj.position, mine = ME().space === 'isle3', [kx, kz] = Isle3.Z.cross, onCross = mine && Math.abs(me.x - kx) < 5.4 && Math.abs(me.z - kz) < 4.3;   /* on the crossing, or waiting at the kerb beside it: cars stop at the line, as on the Book 5 island */
+    const walkers = []; for (const k in PEOPLE) { const w = PEOPLE[k]; if (w && w.obj && k !== 'me' && w.space === 'isle3' && w.obj.visible && Math.abs(w.obj.position.z - kz) < 2.3 && Math.abs(w.obj.position.x - kx) < 18) walkers.push(w.obj.position); }
     Q.cars.forEach(c => { if (c.gone) return; left++; const p = c.g.position, ahead = c.dir > 0 ? p.x < c.stop : p.x > c.stop;
+      /* the road is 36 m long: a car is only seen while it is on it */
+      { const edge = 18.2 - Math.abs(p.x - kx); c.g.visible = edge > 0; if (edge > 0) c.g.scale.setScalar(Math.max(.05, Math.min(1, edge / 1.4))); }
       c.held = mine && Math.abs(me.z - p.z) < 1.9 && (me.x - p.x) * c.dir > 0 && Math.abs(me.x - p.x) < 5.5   // you are in the road ahead
+        || walkers.some(w => (w.x - p.x) * c.dir > 0 && Math.abs(w.x - p.x) < 5.5)   // or a neighbour is
         || Q.cars.some(o => o !== c && !o.gone && o.held && Math.abs(o.g.position.z - p.z) < .5 && (o.g.position.x - p.x) * c.dir > 0 && Math.abs(o.g.position.x - p.x) < 4.2);   // or the car in front has stopped for you
       if (c.held) return;
       if ((Q.carGreen && !onCross) || !ahead) { p.x += c.dir * 9 * dt; if (Math.abs(p.x - Isle3.Z.cross[0]) > 26) { c.gone = true; I().scene.remove(c.g); } }
@@ -7509,7 +7672,7 @@ const B3b = (() => {
     Q.phoneAt = 2; const ph = new THREE.Group(); const pb = Q.bushes[Q.phoneAt]; ph.position.set(pb.x + .7, y, pb.z + .9); S.add(ph); mk(rbox(.5, .25, .4, .05), '#E8443A', 0, .12, 0, ph); mk(cyl(.05, .05, .5, 8), '#E8443A', 0, .3, 0, ph).rotation.z = Math.PI / 2; Q.phone = ph; ph.visible = !!G.phoneFound;
     Q.flowers = [[gx - 3.2, gz + 1.4, '#FF8FB0'], [gx - 1, gz + 2, '#FFD84D'], [gx + 1.4, gz + 1.6, '#B79CFF'], [gx + 3.6, gz + 2.2, '#FF9A5A']].map(([x, z, c], i) => { const g = new THREE.Group(); g.position.set(x, y, z); S.add(g); mk(cyl(.04, .04, .7, 6), '#4E9A45', 0, .35, 0, g, false); for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; mk(sph(.13, 8), c, Math.cos(a) * .17, .75, Math.sin(a) * .17, g, false).scale.y = .4; } mk(sph(.09, 8), '#F2B233', 0, .78, 0, g, false); return { x, z, g, i }; });
     Q.hive = { x: gx + 6.6, z: gz + 1 }; mk(rbox(.9, 1.1, .9, .08), '#E2B65A', Q.hive.x, .55, Q.hive.z); mk(rbox(1.1, .15, 1.1, .05), '#B98A3A', Q.hive.x, 1.15, Q.hive.z); I().solids.push([Q.hive.x - .6, Q.hive.z - .6, Q.hive.x + .6, Q.hive.z + .6]);
-    Q.bees = [0, 1, 2, 3].map(k => { const g = new THREE.Group(); S.add(g); bee(g); g.userData.a = k * 1.6; return g; }); FX.voice(Q.bees[0], 'buzz', 7, .75);
+    Q.bees = [0, 1, 2, 3].map(k => { const g = new THREE.Group(); S.add(g); bee(g); g.userData.a = k * 1.6; FX.seasonal(g, ['spring', 'summer'], [303, 304]); return g; }); FX.voice(Q.bees[0], 'buzz', 7, .75);
     Q.helper = new THREE.Group(); bee(Q.helper); Q.helper.scale.setScalar(1.6); Q.helper.visible = false; S.add(Q.helper);
   }
   function ring() { if (!Q.ringing) return; Sfx.note(1320); setTimeout(() => Sfx.note(1320), 140); const p = ME().obj.position, d = Math.hypot(p.x - (Q.bushes[Q.phoneAt].x + .7), p.z - (Q.bushes[Q.phoneAt].z + .9)); showToast(d < 3 ? '丁零零！就在附近！' : d < 7 ? '丁零零……越来越近了' : '丁零零……', d < 3 ? 'Ring-a-ling! Very close!' : d < 7 ? 'Ring-a-ling… getting closer' : 'Ring-a-ling…', 1200); }
@@ -8114,7 +8277,7 @@ const Isle4 = (() => {
     hall(Z.gugong[0], Z.gugong[1], 8, 4, 2.6); sign('故宫', Z.gugong[0] + 6, Z.gugong[1] + 3.6, '#B8332A');
     hall(Z.tam[0], Z.tam[1], 9, 3.6, 3); plane(12, 7, '#D9D2C2', Z.square[0], Y.plaza, Z.square[1]); sign('天安门', Z.tam[0] + 6.6, Z.tam[1] + 3.4, '#B8332A');
     // the Summer Palace: Kunming Lake with its island, Longevity Hill, the Long Corridor, the east gate
-    const [lx, lz] = Z.lake; const lake = mk(new THREE.CircleGeometry(1, 48), '#6FB7DA', lx, Y.water, lz, null, false); lake.rotation.x = -Math.PI / 2; lake.scale.set(8, 5.4, 1); FX.water(lake);
+    const [lx, lz] = Z.lake; const lake = mk(new THREE.CircleGeometry(1, 48), '#6FB7DA', lx, Y.water, lz, null, false); lake.rotation.x = -Math.PI / 2; lake.scale.set(8, 5.4, 1); FX.water(lake); FX.pads(W.scene, lx + 3.4, lz, 3, Y.water + .035); FX.koi(W.scene, lx + 3.4, lz, 2.4, Y.water + .04);
     sp.solids.push([lx - 7.6, lz - 5, lx + 7.6, lz + 5]);
     mk(cyl(1.4, 1.6, .5, 24), '#8ACB68', lx - 2, .25, lz, null, false); hall(lx - 2, lz, 1.2, 1.2, .8);
     const hill = mk(new THREE.SphereGeometry(6, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), '#6DAF52', Z.hill[0], -2, Z.hill[1], null, false); hill.scale.y = .6; sp.solids.push([Z.hill[0] - 5, Z.hill[1] - 4, Z.hill[0] + 5, Z.hill[1] + 4]);
