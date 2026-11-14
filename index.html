@@ -1559,15 +1559,15 @@ void main() {
      A visitor from another island (away: true) simply goes back for the night. */
   const HOMES = {
     town: [{ zh: '我的家', en: 'My home', use: '进家', who: ['mom', 'dad', 'yeye'] }, { zh: '云云的家', en: "Yunyun's home", who: ['yunyun'] }, { zh: '王阿姨的家', en: "Auntie Wang's home", who: ['wangayi'], col: '#F3E3EC', roof: '#B5668F' },
-      { zh: '古人的院子', en: 'The old courtyard', who: ['caochong', 'lishizhen', 'zhang'], old: true, w: 7 }, { zh: '博物馆', en: 'The museum', wall: true, who: ['director', 'yangliwei', 'beiyuming'] }, { zh: '船屋', en: 'Boathouse', who: ['captain5'], boat: true }],
+      { zh: '古人的院子', en: 'The old courtyard', who: ['caochong', 'lishizhen', 'zhang'], old: true, w: 7 }, { zh: '博物馆宿舍', en: 'The museum dormitory', who: ['director', 'yangliwei', 'beiyuming'], w: 6.4, col: '#E8E4DA', roof: '#7A6F9A' }, { zh: '船屋', en: 'Boathouse', who: ['captain5'], boat: true }],
     isle1: [{ zh: '我的家', en: 'My home', use: '进家', who: ['imom', 'idad', 'iyeye', 'inainai', 'xiaoming'] }, { zh: '教师宿舍', en: "The teachers' house", who: ['laoshi', 'siji'], col: '#E6EEF5', roof: '#4F78A8' }, { zh: '农舍', en: 'The farmhouse', who: ['nongfu', 'nongnv'], col: '#EFE2C4', roof: '#9A6B45' },
       { zh: '石匠的家', en: "The stonemason's home", who: ['shijiang'], col: '#DADADA', roof: '#6E6E78' }, { zh: '同学的家', en: "A classmate's home", who: ['tongxue'] }, { zh: '船屋', en: 'Boathouse', who: ['captain'], boat: true }],
     isle2: [{ zh: '我的家', en: 'My home', use: '进家', who: ['baba2', 'yeye2', 'meimei'] }, { zh: '邻居阿姨的家', en: "The neighbour's home", who: ['linju', 'didi', 'lr2'], beside: '进家', col: '#F3E3EC', roof: '#B5668F' }, { zh: '警察局', en: 'Police station', who: ['jiaojing'], col: '#DCE6F2', roof: '#3D5C9A' },
       { zh: '医院', en: 'The hospital', use: '进医院', who: ['yisheng'] }, { zh: '小雨的家', en: "Xiaoyu's home", who: ['xiaoyu', 'lr3', 'lr1'], col: '#E3F1E6', roof: '#4F9A6A' }, { away: true, to: 'town', zh: '第五册岛', en: 'the Book 5 island', who: ['yunyun2'] }, { zh: '船屋', en: 'Boathouse', who: ['captain2'], boat: true }],
     isle3: [{ zh: '我的家', en: 'My home', use: '进家', who: ['baba3', 'yeye3', 'didi3', 'meimei3'] }, { zh: '瓦特的家', en: "Watt's home", use: '进屋', who: ['nainai3'] }, { zh: '诊所', en: 'The clinic', use: '进诊所', who: ['yisheng3'] }, { zh: '警察局', en: 'Police station', who: ['warden'], col: '#DCE6F2', roof: '#3D5C9A' },
       { zh: '养蜂小屋', en: "The beekeeper's hut", who: ['yangfeng'], w: 4.2, d: 3.6, col: '#F3E6B8', roof: '#C99A2E' }, { zh: '农舍', en: 'The farmhouse', who: ['cunmin', 'fangyang'], col: '#EFE2C4', roof: '#9A6B45' }, { zh: '造纸坊', en: 'The paper workshop', who: ['cailun'], old: true, own: () => { const w = Isle3.Z.workshop; return [w[0], w[1] + 3.7]; } }, { zh: '船屋', en: 'Boathouse', who: ['captain3'], boat: true }],
-    isle4: [{ zh: '我的家', en: 'My home', use: '进家', who: ['nainai4', 'yeye4'] }, { zh: '四合院', en: 'The courtyard house', who: ['nainai9', 'yeye9'], old: true, w: 7 }, { zh: '邮局', en: 'Post office', who: ['youdi'], col: '#EAF3E6', roof: '#3F8F5A' },
-      { zh: '招待所', en: 'The guest house', who: ['daoyou', 'guan4', 'xiangdao', 'zhihui'], w: 7, col: '#E6EEF5', roof: '#4F78A8' }, { zh: '学堂', en: 'The school house', who: ['simaguang', 'zhangheng', 'wenwen', 'pal80', 'pal81', 'pal82', 'kids8'], old: true, w: 7 }, { zh: '农舍', en: 'The farmhouse', who: ['nongfu4'], col: '#EFE2C4', roof: '#9A6B45' }, { zh: '船屋', en: 'Boathouse', who: ['captain4'], boat: true }]
+    isle4: [{ zh: '我的家', en: 'My home', use: '进家', who: ['nainai4', 'yeye4'] }, { zh: '学堂', en: 'The school house', who: [], near: ['simaguang', 'zhangheng', 'wenwen', 'pal80', 'pal81', 'pal82', 'kids8'], old: true, w: 7, court: true, save: '学堂大院' }, { zh: '古人的房间', en: "The scholars' room", who: ['simaguang', 'zhangheng'], old: true, wing: ['学堂', -1] }, { zh: '小朋友的房间', en: "The children's room", who: ['wenwen', 'pal80', 'pal81', 'pal82', 'kids8'], old: true, wing: ['学堂', 1] }, { zh: '四合院', en: 'The courtyard house', who: ['nainai9', 'yeye9'], old: true, w: 7 }, { zh: '邮局', en: 'Post office', who: ['youdi'], col: '#EAF3E6', roof: '#3F8F5A', own: () => { const q = Isle4.Z.post; return [q[0], q[1] + 4.1]; } },
+      { zh: '招待所', en: 'The guest house', who: ['daoyou', 'guan4', 'xiangdao', 'zhihui'], w: 7, col: '#E6EEF5', roof: '#4F78A8' }, { zh: '农舍', en: 'The farmhouse', who: ['nongfu4'], col: '#EFE2C4', roof: '#9A6B45' }, { zh: '船屋', en: 'Boathouse', who: ['captain4'], boat: true }]
   };
   const HM = { done: {}, of: {}, clear: [] };   /* clear: places a new house must not cover (flower beds) */
   /* is the ground here grass (judged by its own colour, not its seasonal one), flat and facing up? */
@@ -1601,7 +1601,7 @@ void main() {
     const w = h.w || 5.2, d = h.d || 4.2, need = Math.max(w, d) / 2 + 3.6 - (h.tight || 0), f0 = sp.floor ? sp.floor(ax, az) : 0;
     const ok = (x, z) => {
       if (Math.abs(x) > (sp.name === 'town' ? 42 : 35) - w / 2 || Math.abs(z) > (sp.name === 'town' ? 42 : 34) - d / 2) return false;
-      for (let i = 0; i < keep.length; i++) if (Math.hypot(keep[i][0] - x, keep[i][1] - z) < need) return false;
+      for (let i = 0; i < keep.length; i++) if (Math.hypot(keep[i][0] - x, keep[i][1] - z) < need || (h.court && Math.abs(keep[i][0] - x) < w / 2 + 1.5 && Math.abs(keep[i][1] - z) < d / 2 + 1.5)) return false;
       if (crowded(sp, h, x, z)) return false;
       for (let px = -w / 2 - 1.2; px <= w / 2 + 1.2; px += 1) for (let pz = -d / 2 - 1.2; pz <= d / 2 + 2.6; pz += 1) if (blocked(x + px, z + pz)) return false;
       if (sp.floor) { const fy = sp.floor(x, z); for (const [px, pz] of [[-w / 2, -d / 2], [w / 2, -d / 2], [-w / 2, d / 2 + 1.6], [w / 2, d / 2 + 1.6]]) if (Math.abs(sp.floor(x + px, z + pz) - fy) > .12) return false; }
@@ -1621,17 +1621,24 @@ void main() {
       if (h.use) { const e = entries.find(a => a.zh === h.use); if (e) { h.door = { x: e.x + 1.6, z: e.z + .4 }; if (h.use === '进家') { try { upstairs(sp, h, e); } catch (er) { } } } return; }
       /* the island already has this very building: its people live there, and no second one is put up */
       if (h.own) { try { const o = h.own(); h.door = { x: o[0], z: o[1] }; } catch (er) { } if (h.door) return; }
-      const res = h.who.map(k => PEOPLE[k]).filter(c => c && c.obj && c.space === sp.name); if (!res.length) return;
+      /* a side room of a courtyard school: it stands in front of the school house, to the left or the right of its yard */
+      if (h.wing) { const m = list.find(q => q.zh === h.wing[0]); if (!m || !m.at) return; h.w = 4; h.d = 3.6; h.at = [m.at[0] + h.wing[1] * 4.5, m.at[1] + 2.7]; h.door = houseAt(sp, h, h.at[0], h.at[1]); return; }
+      const res = (h.near || h.who).map(k => PEOPLE[k]).filter(c => c && c.obj && c.space === sp.name); if (!res.length) return;
+      /* a courtyard school is placed as one block: the school house at the back, a paved yard, and a room on either side at the front */
+      const cw = h.court ? [h.w || 5.2, h.d || 4.2] : null; if (cw) { h.w = 13.6; h.d = 9.4; h.tight = 3.4; }
       let ax = res.reduce((t, c) => t + c.obj.position.x, 0) / res.length, az = res.reduce((t, c) => t + c.obj.position.z, 0) / res.length;
       if (h.beside) { const e = entries.find(a => a.zh === h.beside); if (e) { ax = e.x; az = e.z; } }
-      let at = mine[h.zh]; if (at && (blocked(at[0], at[1]) || !grassAt(at[0], at[1], h.boat) || crowded(sp, h, at[0], at[1]))) at = null;
+      let at = mine[h.save || h.zh]; if (at && (blocked(at[0], at[1]) || !grassAt(at[0], at[1], h.boat) || crowded(sp, h, at[0], at[1]))) at = null;
       /* a boathouse belongs by the pier: one that had to be put far from the captain is tried again close by, as a smaller hut */
       if (at && h.boat && Math.hypot(at[0] - ax, at[1] - az) > 12) at = null;
-      if (!at && h.boat) { const w0 = h.w, d0 = h.d; h.w = 4.2; h.d = 3.4; h.tight = 1.7; h.maxR = 11; at = findSpot(sp, h, ax, az, keep); h.maxR = 0; if (!at) { h.w = w0; h.d = d0; h.tight = 0; } else { mine[h.zh] = at; store.set('zhongwen-town.homes2', saved); } }
-      if (!at) { at = findSpot(sp, h, ax, az, keep); if (!at) { h.w = Math.min(h.w || 5.2, 4.4); h.d = 3.6; h.tight = 1.7; at = findSpot(sp, h, ax, az, keep); }
+      if (!at && h.boat) { const w0 = h.w, d0 = h.d; h.w = 4.2; h.d = 3.4; h.tight = 1.7; h.maxR = 11; at = findSpot(sp, h, ax, az, keep); h.maxR = 0; if (!at) { h.w = w0; h.d = d0; h.tight = 0; } else { mine[h.save || h.zh] = at; store.set('zhongwen-town.homes2', saved); } }
+      if (!at) { at = findSpot(sp, h, ax, az, keep); if (!at && cw) at = findSpot(sp, h, 0, 0, keep); if (!at && !cw) { h.w = Math.min(h.w || 5.2, 4.4); h.d = 3.6; h.tight = 1.7; at = findSpot(sp, h, ax, az, keep); }
         if (!at) { const fam = entries.find(a => a.zh === '进家'); if (fam) at = findSpot(sp, h, fam.x, fam.z, keep); } if (!at) at = findSpot(sp, h, 0, 0, keep);
-        if (at) { mine[h.zh] = at; store.set('zhongwen-town.homes2', saved); } }
+        if (at) { mine[h.save || h.zh] = at; store.set('zhongwen-town.homes2', saved); } }
+      if (cw) { h.w = cw[0]; h.d = cw[1]; h.tight = 0; }
       if (!at) return;
+      if (cw) { const y = sp.floor ? sp.floor(at[0], at[1]) : 0, yard = mk(new THREE.BoxGeometry(13, .08, 9.2), '#D9D3C6', at[0], y + .04, at[1] + .1, sp.scene, false); yard.userData.home = true; yard.receiveShadow = true;
+        h.door = houseAt(sp, h, at[0], at[1] - 2.5); h.at = at; keep.push([at[0], at[1]]); return; }
       h.door = houseAt(sp, h, at[0], at[1]); h.at = at; keep.push([at[0], at[1]]);
     });
   }
@@ -1733,6 +1740,8 @@ void main() {
       if (!isHuman(c) && !ROAM[k]) continue;
       const mine = D ? D.home0 === sp.name : c.space === sp.name; if (!mine || !out) continue; idx++;
       const o = c.obj;
+      /* nobody's day begins until the island's homes stand: someone met first during the ferry's arrival used to be left without a house for good, and at night their door label then hung where they had been standing */
+      if (!D && sp.sky && HOMES[sp.name] && !HM.done[sp.name]) continue;
       if (!D) { D = c.fxD = { home0: sp.name, spot: { x: o.position.x, z: o.position.z, r: o.rotation.y }, mode: 'rest', t: 4 + Math.random() * 14, px: o.position.x, pz: o.position.z, door: null, noHome: false, idx }; const hm = homeOf(k); D.house = hm && (hm.door || hm.away) ? hm : null; D.away = !!(hm && hm.away); D.door = D.house && hm.door ? { x: hm.door.x + ((idx % 3) - 1) * .5, z: hm.door.z } : D.away || !isHuman(c) ? null : doorFor(c, sp, idx); if (!D.door && !D.away && isHuman(c)) D.noHome = true;
         if (!isHuman(c)) { D.beast = true; D.pace = ROAM[k]; D.rig = !!(c.mixer && typeof c.mixer.clipAction === 'function'); D.fwd = D.rig ? 0 : facing(o); D.hop = D.rig ? 0 : HOP[k] || .045; D.pad = { hex: groundHex(o.position.x, o.position.z), x: o.position.x, z: o.position.z }; D.spot.r = o.rotation.y; D.yOff = o.position.y - (sp.floor ? sp.floor(o.position.x, o.position.z) : 0); D.wide = ROAM[k] <= .6 || /ma|niu/.test(k) ? .9 : .5; if (!c.play) c.play = () => { }; addLegs(k, o, D); } }
       if (D.noHome) { D.mode = 'rest'; continue; }
@@ -2222,19 +2231,19 @@ void main() {
     for (let i = 0; i < n; i++) { sp.push((Math.random() - .5) * 44, Math.random() * H, (Math.random() - .5) * 44); ss.push(Math.random()); }
     const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); rg.setAttribute('aEnd', new THREE.Float32BufferAttribute(re, 1));
     const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg.setAttribute('aSeed', new THREE.Float32BufferAttribute(ss, 1));
-    const u = { uT: { value: 0 }, uA: { value: 0 }, uPx: { value: Math.min(2, devicePixelRatio || 1) } };
+    const u = { uT: { value: 0 }, uA: { value: 0 }, uPx: { value: Math.min(2, devicePixelRatio || 1) }, uO: { value: new THREE.Vector2() } };
     const rain = new THREE.LineSegments(rg, new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false,
-      vertexShader: 'attribute float aEnd; uniform float uT; void main() { vec3 p = position; p.y = mod( position.y - uT * 24.0, 18.0 ) + aEnd * 0.85; p.x += aEnd * 0.1; gl_Position = projectionMatrix * modelViewMatrix * vec4( p, 1.0 ); }',
+      vertexShader: 'attribute float aEnd; uniform float uT; uniform vec2 uO; void main() { vec3 p = position; p.xz = mod( position.xz - uO + 22.0, 44.0 ) - 22.0; p.y = mod( position.y - uT * 24.0, 18.0 ) + aEnd * 0.85; p.x += aEnd * 0.1; gl_Position = projectionMatrix * modelViewMatrix * vec4( p, 1.0 ); }',
       fragmentShader: 'uniform float uA; void main() { gl_FragColor = vec4( 0.8, 0.87, 1.0, 0.5 * uA ); }' }));
     const snow = new THREE.Points(sg, new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false,
-      vertexShader: 'attribute float aSeed; uniform float uT; uniform float uPx; void main() { vec3 p = position; p.y = mod( position.y - uT * ( 1.3 + aSeed * 0.9 ), 18.0 ); p.x += sin( uT * 0.7 + aSeed * 6.28 ) * 0.8; p.z += cos( uT * 0.5 + aSeed * 9.4 ) * 0.5; vec4 mv = modelViewMatrix * vec4( p, 1.0 ); gl_PointSize = ( 2.5 + aSeed * 3.0 ) * uPx * 22.0 / max( 1.0, -mv.z ); gl_Position = projectionMatrix * mv; }',
+      vertexShader: 'attribute float aSeed; uniform float uT; uniform float uPx; uniform vec2 uO; void main() { vec3 p = position; p.xz = mod( position.xz - uO + 22.0, 44.0 ) - 22.0; p.y = mod( position.y - uT * ( 1.3 + aSeed * 0.9 ), 18.0 ); p.x += sin( uT * 0.7 + aSeed * 6.28 ) * 0.8; p.z += cos( uT * 0.5 + aSeed * 9.4 ) * 0.5; vec4 mv = modelViewMatrix * vec4( p, 1.0 ); gl_PointSize = ( 2.5 + aSeed * 3.0 ) * uPx * 22.0 / max( 1.0, -mv.z ); gl_Position = projectionMatrix * mv; }',
       fragmentShader: 'uniform float uA; void main() { float d = length( gl_PointCoord - 0.5 ); gl_FragColor = vec4( 1.0, 1.0, 1.0, smoothstep( 0.5, 0.15, d ) * 0.9 * uA ); }' }));
     const g = new THREE.Group(); g.userData.fx = true; rain.frustumCulled = snow.frustumCulled = false; rain.userData.fx = snow.userData.fx = true; g.add(rain, snow); if (scene) scene.add(g);
     return { g, rain, snow, u };
   }
   function precipSet(P, w, dt, t, x, y, z) {
     const wet = w === 'rain' || w === 'storm', sn = w === 'snow'; P.rain.visible = wet; P.snow.visible = sn;
-    P.u.uT.value = t; P.u.uA.value += ((wet || sn ? 1 : 0) - P.u.uA.value) * Math.min(1, dt * 1.5); P.g.visible = P.u.uA.value > .01 && (wet || sn); P.g.position.set(x, y, z);
+    P.u.uT.value = t; P.u.uA.value += ((wet || sn ? 1 : 0) - P.u.uA.value) * Math.min(1, dt * 1.5); P.g.visible = P.u.uA.value > .01 && (wet || sn); P.g.position.set(x, y, z); P.u.uO.value.set(x, z);   /* drops stay put in the world as the box moves with you */
   }
   /* Around each change of the time of day (5, 10, 17 and 20 o'clock) the sky, fog and light slide from one look to the
      next over about fifty minutes instead of jumping. A lesson that sets its own time of day is left alone. */
@@ -2338,7 +2347,7 @@ void main() {
      Something a lesson needs is brought back while that lesson is in progress, whatever the season.
      In winter people wear a woolly hat and a scarf, and when you chat they may talk about the season or the weather. */
   const _lq = new THREE.Quaternion(), _le = new THREE.Euler(), _lm = new THREE.Matrix4(), _l1 = new THREE.Vector3(1, 1, 1), _lv = new THREE.Vector3();
-  const SEA = { lists: [], t: 0, items: [], wear: [], now: '', trees: -1, geese: null, gt: 20, ground: {} };
+  const SEA = { lists: [], t: 0, items: [], wear: [], now: '', trees: -1, geese: null, gt: 20, ground: {}, scan: {}, greens: [] };
   const LEAF = { spring: ['#8BD46A', '#9EDC7E'], summer: ['#5FB354', '#6DBF5A'], autumn: ['#E8A33A', '#D9653B'], winter: ['#EEF4F6', '#DCE7EA'] };
   const RANGE = { town: [2, 12], isle1: [101, 112], isle2: [201, 212], isle3: [301, 312], isle4: [401, 412] };
   U.ice = { value: 0 };
@@ -2349,7 +2358,8 @@ void main() {
   const CHARS = { qingwa: ['frog', [211]], kedou: ['tadpole', [211]], oriole: ['oriole', [105]], flower: ['flowerbed', [105]], grass: ['grassfolk', [105]], wugui: ['tortoise', [306]] };
   const placeOf = scene => { for (const k in RANGE) if (SP[k] && SP[k].scene === scene) return k; return ''; };
   /* seasons: when it is shown. lessons: lesson numbers that bring it back; without a list, any lesson in progress on its island does */
-  function seasonal(obj, kind, lessons, also) { if (obj) SEA.items.push({ obj, kind: typeof kind === 'string' ? kind : null, seasons: typeof kind === 'string' ? null : kind, lessons: lessons || null, also: also || null, place: null }); return obj; }
+  function seasonal(obj, kind, lessons, also) { if (obj) obj.userData.fxSeason = true;   /* never merged into the fixed scenery: it has to be able to come and go */
+    if (obj) SEA.items.push({ obj, kind: typeof kind === 'string' ? kind : null, seasons: typeof kind === 'string' ? null : kind, lessons: lessons || null, also: also || null, place: null }); return obj; }
   function seasonNow() { return Life.season(); }
   function seasonTick(dt, t, outdoor) {
     geeseTick(dt, t, outdoor); try { airTick(dt, t, outdoor); } catch (e) { if (!SEA.err) { SEA.err = String(e && e.message); console.error('air: ' + SEA.err); } }
@@ -2361,6 +2371,18 @@ void main() {
     for (const k in RANGE) { busyIsle[k] = false; for (let n = RANGE[k][0]; n <= RANGE[k][1]; n++) if (lessonOn(n)) { busyIsle[k] = true; break; } }
     for (let i = 0; i < SEA.items.length; i++) { const it = SEA.items[i]; if (it.place === null) { let r = it.obj; while (r.parent) r = r.parent; it.place = placeOf(r); if (!it.place && !r.isScene) it.place = null; }
       const on = (it.kind ? alive(it.kind) : it.seasons.indexOf(sn) >= 0) || (it.lessons ? it.lessons.some(lessonOn) : !!busyIsle[it.place]); it.obj.visible = on; if (it.also) it.also(sn, on); }
+    /* Leafy crowns that are not ordinary island trees (the trees a lesson put up: by the river, in the orchard, the monkeys'
+       tree) are found once per island by their shape and leaf-green colour, and turn with the seasons like the rest;
+       while a lesson of that island is running they are green again. Animals, signs, roofs and pads are not touched. */
+    if (here && here.sky && here.scene && !SEA.scan[here.name] && PEOPLE.me) { SEA.scan[here.name] = true; try {
+      const owners = new Set(); for (const k in PEOPLE) if (PEOPLE[k] && PEOPLE[k].obj) owners.add(PEOPLE[k].obj);
+      const hsl = {}, cc = new THREE.Color(), bb = new THREE.Box3(), found = [];
+      here.scene.traverse(o => { if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || !o.geometry || !/^(Sphere|Icosahedron|Cone|Dodecahedron)/.test(o.geometry.type) || !o.material || Array.isArray(o.material) || !o.material.color) return;
+        cc.copy(o.material.color).convertLinearToSRGB().getHSL(hsl); if (hsl.h < .24 || hsl.h > .42 || hsl.s < .28) return;
+        for (let q = o; q; q = q.parent) if (owners.has(q) || q.userData.fx || q.userData.fxSeason || q.userData.mats || q.userData.fxBeast || q.userData.home) return;
+        bb.setFromObject(o); if (bb.min.y < .9 || bb.max.x - bb.min.x < .7) return; found.push(o); });
+      found.forEach((o, i) => { o.material = o.material.clone(); SEA.greens.push({ m: o.material, c0: o.material.color.clone(), place: here.name, i }); }); } catch (e) { } }
+    for (let i = 0; i < SEA.greens.length; i++) { const g = SEA.greens[i], turn = (sn === 'autumn' || sn === 'winter') && !busyIsle[g.place]; g.m.color.copy(turn ? lin(g.i % 2 ? '#D9653B' : '#E8A33A') : g.c0); }
     U.ice.value = sn === 'winter' ? 1 : 0;
     for (let i = 0; i < SEA.wear.length; i++) SEA.wear[i].visible = sn === 'winter';
     /* leaves on every island (trees built after the first island was set up used to stay summer green) */
@@ -2450,8 +2472,9 @@ void main() {
       const tex = canvasTex(64, 64, x => { x.fillStyle = '#fff'; x.beginPath(); [[32, 4], [37, 16], [46, 12], [43, 24], [56, 22], [49, 32], [60, 38], [46, 40], [48, 50], [36, 44], [33, 60], [31, 60], [28, 44], [16, 50], [18, 40], [4, 38], [15, 32], [8, 22], [21, 24], [18, 12], [27, 16]].forEach(([px, py], i) => i ? x.lineTo(px, py) : x.moveTo(px, py)); x.closePath(); x.fill(); });
       AIR.leaves = new THREE.InstancedMesh(new THREE.PlaneGeometry(.36, .36), new THREE.MeshLambertMaterial({ map: tex, alphaTest: .5, side: THREE.DoubleSide }), NL); AIR.leaves.frustumCulled = false; AIR.leaves.userData.fx = true;
       AIR.lp = []; const pal = ['#E8A33A', '#D9653B', '#F2C24F', '#B5462F', '#E07B2E']; for (let i = 0; i < NL; i++) { AIR.lp.push([(Math.random() - .5) * 26, Math.random() * 7, (Math.random() - .5) * 26, Math.random() * 6]); AIR.leaves.setColorAt(i, lin(pal[i % 5])); } AIR.leaves.instanceColor.needsUpdate = true; }
-    if (AIR.leaves) { AIR.leaves.visible = lv; if (lv) { if (AIR.leaves.parent !== here.scene) here.scene.add(AIR.leaves); AIR.leaves.position.set(p.x, p.y, p.z);
-        for (let i = 0; i < NL; i++) { const L = AIR.lp[i]; L[1] -= dt * (.65 + (i % 5) * .08); L[0] += Math.sin(t * 1.3 + L[3]) * dt * .7; L[2] += Math.cos(t * 1.1 + L[3] * .7) * dt * .5; if (L[1] < 0) { L[1] = 6 + Math.random() * 2; L[0] = (Math.random() - .5) * 26; L[2] = (Math.random() - .5) * 26; }
+    if (AIR.leaves) { AIR.leaves.visible = lv; if (lv) { if (AIR.leaves.parent !== here.scene) here.scene.add(AIR.leaves); AIR.leaves.position.set(0, p.y, 0);   /* the leaves belong to the world, not to the screen: walking past them moves them across the view */
+        for (let i = 0; i < NL; i++) { const L = AIR.lp[i]; L[1] -= dt * (.65 + (i % 5) * .08); L[0] += Math.sin(t * 1.3 + L[3]) * dt * .7; L[2] += Math.cos(t * 1.1 + L[3] * .7) * dt * .5; if (L[1] < 0) { L[1] = 6 + Math.random() * 2; L[0] = p.x + (Math.random() - .5) * 26; L[2] = p.z + (Math.random() - .5) * 26; }
+          L[0] = p.x + ((L[0] - p.x + 13) % 26 + 26) % 26 - 13; L[2] = p.z + ((L[2] - p.z + 13) % 26 + 26) % 26 - 13;
           _lq.setFromEuler(_le.set(t * 1.7 + L[3], t * .9 + L[3] * 2, Math.sin(t * 2 + L[3]) * .9)); _lm.compose(_lv.set(L[0], L[1], L[2]), _lq, _l1); AIR.leaves.setMatrixAt(i, _lm); } AIR.leaves.instanceMatrix.needsUpdate = true; } }
     /* fireflies: slow drifting lights that swell and fade */
     const ff = ok && alive('firefly');
@@ -2459,8 +2482,8 @@ void main() {
       const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
       const tex = canvasTex(32, 32, x => { const g2 = x.createRadialGradient(16, 16, 0, 16, 16, 16); g2.addColorStop(0, 'rgba(255,255,255,1)'); g2.addColorStop(.4, 'rgba(255,255,255,.5)'); g2.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g2; x.fillRect(0, 0, 32, 32); });
       AIR.flies = new THREE.Points(geo, new THREE.PointsMaterial({ size: .36, map: tex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); AIR.flies.frustumCulled = false; AIR.flies.userData.fx = true; }
-    if (AIR.flies) { AIR.flies.visible = ff; if (ff) { if (AIR.flies.parent !== here.scene) here.scene.add(AIR.flies); AIR.flies.position.set(p.x, p.y, p.z); const a = AIR.flies.geometry.attributes.position, arr = a.array, cc = AIR.flies.geometry.attributes.color, ca = cc.array;
-        for (let i = 0; i < arr.length; i += 3) { arr[i] += Math.sin(t * .5 + i) * dt * .5; arr[i + 1] += Math.sin(t * .8 + i * 1.7) * dt * .25; arr[i + 2] += Math.cos(t * .45 + i * .6) * dt * .5; const k = Math.pow(Math.max(0, Math.sin(t * 1.1 + i * 2.1)), 2); ca[i] = .8 * k; ca[i + 1] = 1 * k; ca[i + 2] = .3 * k; } a.needsUpdate = true; cc.needsUpdate = true; } }
+    if (AIR.flies) { AIR.flies.visible = ff; if (ff) { if (AIR.flies.parent !== here.scene) here.scene.add(AIR.flies); AIR.flies.position.set(0, p.y, 0); const a = AIR.flies.geometry.attributes.position, arr = a.array, cc = AIR.flies.geometry.attributes.color, ca = cc.array;
+        for (let i = 0; i < arr.length; i += 3) { arr[i] = p.x + ((arr[i] - p.x + 10) % 20 + 20) % 20 - 10; arr[i + 2] = p.z + ((arr[i + 2] - p.z + 10) % 20 + 20) % 20 - 10; arr[i] += Math.sin(t * .5 + i) * dt * .5; arr[i + 1] += Math.sin(t * .8 + i * 1.7) * dt * .25; arr[i + 2] += Math.cos(t * .45 + i * .6) * dt * .5; const k = Math.pow(Math.max(0, Math.sin(t * 1.1 + i * 2.1)), 2); ca[i] = .8 * k; ca[i + 1] = 1 * k; ca[i + 2] = .3 * k; } a.needsUpdate = true; cc.needsUpdate = true; } }
     /* dragonflies: dart, then hover */
     const want = ok && alive('dragonfly') ? (sn === 'summer' ? 5 : 2) : 0;
     while (AIR.drags.length < want) { const d = dragonfly(['#D9412F', '#3F78C8', '#2FA79A'][AIR.drags.length % 3]); AIR.drags.push({ g: d.g, wings: d.wings, tx: 0, tz: 0, ty: 1.5, wait: 0, off: Math.random() * 9 }); }
@@ -2899,7 +2922,7 @@ function mergeStatic(sp) {
   S.traverse(m => {
     if (!m.isMesh || m.isInstancedMesh || m.isSkinnedMesh || !m.userData.st || m.children.length || !shared.has(m.material)) return;
     const g = m.geometry; if (!g.attributes.position || !g.attributes.normal) return;
-    for (let q = m; q && q !== S; q = q.parent) if (!q.visible || skip.has(q) || q.userData.noMerge || q.userData.fade !== undefined) return;   // nothing on a tree (its fruit) is merged away from it
+    for (let q = m; q && q !== S; q = q.parent) if (!q.visible || skip.has(q) || q.userData.noMerge || q.userData.fxSeason || q.userData.fade !== undefined) return;   // nothing on a tree (its fruit) is merged away from it
     const key = m.material.uuid + '|' + m.castShadow + '|' + m.receiveShadow; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(m);
   });
   let removed = 0; groups.forEach(list => { if (list.length < 2) return; bakeMerge(list, S, true).userData.merged = list.length; removed += list.length - 1; });
@@ -3321,7 +3344,7 @@ function buildTown() {
   const water = new THREE.Mesh(new THREE.CircleGeometry(sp.pond.r, 48), new THREE.MeshStandardMaterial({ color: lin('#5FB0E0'), roughness: .25, metalness: .1, transparent: true, opacity: .92 }));
   water.rotation.x = -Math.PI / 2; water.position.set(sp.pond.x, .04, sp.pond.z); S.add(water); sp.water = water; FX.water(water, { rim: [sp.pond.x, sp.pond.z, sp.pond.r] }); FX.koi(S, sp.pond.x, sp.pond.z, sp.pond.r * .62, .09);
   const rr = mulberry(3); for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; mk(new THREE.DodecahedronGeometry(.45 + rr() * .25, 0), '#B9B2A2', sp.pond.x + Math.cos(a) * (sp.pond.r + .3), .2, sp.pond.z + Math.sin(a) * (sp.pond.r + .3)); }
-  [[0, .4], [1.4, -.8], [-1.6, 1.6]].forEach(([dx, dz]) => { const p = mk(new THREE.CylinderGeometry(.6, .6, .04, 16), '#5E9A57', sp.pond.x + dx, .07, sp.pond.z + dz, null, false); FX.seasonal(p, 'pad'); });
+  [[0, .4], [1.4, -.8], [-1.6, 1.6]].forEach(([dx, dz]) => { const p = mk(new THREE.CylinderGeometry(.6, .6, .04, 16), '#5E9A57', sp.pond.x + dx, .07, sp.pond.z + dz, null, false); p.material = p.material.clone(); FX.seasonal(p, 'pad', null, sn => { p.material.color.set(sn === 'autumn' && !FX.alive('lotus') ? '#9A7B45' : '#5E9A57').convertSRGBToLinear(); }); });   /* withered in late autumn like the pads of the other islands */
   // nature: round trees and little flowers, like the cute-town lesson
   const r = mulberry(21);
   const treeAt = (x, z, y = 0) => { const s = 1.2 + r() * .35, col = ['#6DBF5A', '#5FB354', '#7CC85E'][Math.floor(r() * 3)]; roundTree(x, y, z, s, col); };
@@ -3742,7 +3765,17 @@ function showToast(zh, en, ms = 2400) { const t = $('toast'); t.innerHTML = `<sp
     if (e.target.closest && e.target.closest('#talk, button, .veil, input')) return;
     const tb = $('talkBox'), say = $('say'); if (tb.onclick) tb.onclick(); else if (say.onclick) say.onclick();
   }, true); }
+/* One conversation at a time. There is a single talk box, and a second talk opened over a first used to take the box
+   away from it: the first never finished, and whatever was waiting on it (a lesson about to be marked done, for one)
+   waited for ever. Now a talk asked for while another is on screen waits its turn. A talk that was closed from outside
+   (its box hidden without an answer) holds nobody up. */
+let TALKQ = null;
 function talk(who, lines, choices) {
+  const run = () => talk0(who, lines, choices), open = TALKQ && UI.talking && !$('talk').classList.contains('hidden');
+  const q = open ? TALKQ.then(run, run) : run(), clear = () => { if (TALKQ === tail) TALKQ = null; }, tail = q.then(clear, clear);
+  TALKQ = tail; return q;
+}
+function talk0(who, lines, choices) {
   FX.speaker(who);
   UI.talking = true; UI.busy = true; $('act').classList.add('hidden');
   const box = $('talk'), say = $('say'), en = $('sayEn'), ch = $('choices'), more = $('more');
@@ -4598,9 +4631,14 @@ const B5 = (() => {
     const VX = 31, VZ = 24; P.vine = { x: VX, z: VZ };
     [[-3, -1.5], [3, -1.5], [-3, 1.5], [3, 1.5]].forEach(([dx, dz]) => mk(cyl(.12, .14, 4.2, 8), '#8A6A4A', VX + dx, 2.1, VZ + dz));
     for (let i = -3; i <= 3; i += .75) mk(cyl(.05, .05, 3.2, 6), '#8A6A4A', VX + i, 4.2, VZ).rotation.x = Math.PI / 2;
-    for (let i = 0; i < 26; i++) { const lf = mk(sph(.42, 10), i % 3 ? '#5E9A57' : '#6FB25F', VX - 3 + (i % 9) * .75, 4.35, VZ - 1.3 + Math.floor(i / 9) * 1.3); lf.scale.y = .45; }
+    /* vine leaves: yellow in autumn, gone in winter, and green again while the fox's lesson is running */
+    { const vl = new THREE.Group(); S.add(vl); const vm = [tm('#5E9A57').clone(), tm('#6FB25F').clone()];
+      for (let i = 0; i < 26; i++) { const lf = mk(sph(.42, 10), vm[i % 3 ? 0 : 1], VX - 3 + (i % 9) * .75, 4.35, VZ - 1.3 + Math.floor(i / 9) * 1.3, vl); lf.scale.y = .45; }
+      FX.seasonal(vl, ['spring', 'summer', 'autumn'], [5]);
+      /* the colour goes by the grapes (told below, once it is known whether they are out): yellow once the grapes are over, unless the lesson has brought them back */
+      P.vineCol = (sn, grapesOut) => { const fall = sn === 'autumn' && !grapesOut; vm[0].color.set(fall ? '#D9A441' : '#5E9A57').convertSRGBToLinear(); vm[1].color.set(fall ? '#C9853A' : '#6FB25F').convertSRGBToLinear(); }; }
     P.grapes = [];
-    for (let i = 0; i < 6; i++) { const gx = VX - 2.4 + i * .95, gz = VZ + (i % 2 ? .5 : -.5), g = new THREE.Group(); g.position.set(gx, 3.9, gz); S.add(g); for (let k = 0; k < 9; k++) mk(sph(.13, 8), '#7B4FA8', (k % 3 - 1) * .2, -Math.floor(k / 3) * .22, (k % 2) * .08, g); P.grapes.push(g); FX.seasonal(g, 'grapes', [5]); }
+    for (let i = 0; i < 6; i++) { const gx = VX - 2.4 + i * .95, gz = VZ + (i % 2 ? .5 : -.5), g = new THREE.Group(); g.position.set(gx, 3.9, gz); S.add(g); for (let k = 0; k < 9; k++) mk(sph(.13, 8), '#7B4FA8', (k % 3 - 1) * .2, -Math.floor(k / 3) * .22, (k % 2) * .08, g); P.grapes.push(g); FX.seasonal(g, 'grapes', [5], i ? null : (sn, on) => { if (P.vineCol) P.vineCol(sn, on); }); }
     sp.solids.push([VX - 3.3, VZ - 1.8, VX - 2.7, VZ + 1.8], [VX + 2.7, VZ - 1.8, VX + 3.3, VZ + 1.8]);
     const vs = signBoard('葡萄园', 2.2, .6, '#7B4FA8'); vs.position.set(VX + 4.4, 1.4, VZ + 3.4); S.add(vs); mk(cyl(.06, .06, 1.4, 6), '#8A6A4A', VX + 4.4, .7, VZ + 3.4);   // to one side: it used to stand between the camera and the fox
     // the sea and the dock for Lesson 10 and the ferry
@@ -6440,7 +6478,7 @@ const B1c = (() => {
     const F = Isle1.Z.farm, I = sp(); Q.f = { x: F[0], z: F[1] };
     const trough = mk(cyl(1.4, 1.4, .1, 24), '#7FC4E8', F[0] - 5.4, .08, F[1] + 4, null, false); I.solids.push([F[0] - 6.8, F[1] + 2.6, F[0] - 4, F[1] + 5.4]);
     [[F[0] + 3, F[1] - 6.6], [F[0] + 5, F[1] - 7.4], [F[0] + 1, F[1] - 7.6]].forEach(([x, z], i) => roundTree(x, 0, z, .55 + i * .05, '#5EA94E'));   // a little wood behind the farm, so it never hides you
-    Q.grove = TREES.splice(TREES.length - 3); Q.grassPatch = { x: F[0] + 5.4, z: F[1] + 1.6 };
+    Q.grove = TREES.splice(TREES.length - 3); FX.trees(Q.grove);   /* the little wood follows the seasons too */ Q.grassPatch = { x: F[0] + 5.4, z: F[1] + 1.6 };
     for (let k = 0; k < 9; k++) mk(new THREE.ConeGeometry(.14, .7, 5), '#5EA94E', Q.grassPatch.x + (k % 3 - 1) * .3, .35, Q.grassPatch.z + (Math.floor(k / 3) - 1) * .3, null, false);
     Q.animals = [['马', 'horse', F[0] - 3, F[1] - 1], ['牛', 'cow', F[0] + 1.2, F[1] - 1.8], ['羊', 'sheep', F[0] + 3.8, F[1] + .4], ['鸟', 'bird', F[0] - 4.9, F[1] + 1.6], ['鱼', 'fish', F[0] - 5.4, F[1] + 4], ['虫', 'bug', F[0] + 1.8, F[1] + 2.6]].map(([zh, en, x, z]) => {
       const g = animal(zh, x, z); if (zh === '鸟') g.position.y = 1; if (zh === '鱼') g.position.y = .15;
@@ -7470,11 +7508,12 @@ const B2c = (() => {
   /* ---------- Lesson 6: wash the clothes, tidy the toys, sweep, feed the cat ---------- */
   const chores = () => (G.chores = G.chores || { toys: {}, dust: {} });
   T[206] = async () => {
+    if (allChores(chores())) { await praise6(); return; }
     chores(); Q.s6 = true;
     await talk('nainai2', [['你会做什么事？做给奶奶看看吧！', 'What can you do? Show Grandma!'], ['洗衣、收拾、打扫，还有……小猫好像饿了！', 'Washing clothes, tidying up, sweeping, and… the kitten looks hungry!']]);
     let meows = 0; clearInterval(Q.meow); Q.meow = setInterval(() => { if (chores().cat || meows >= 3) { clearInterval(Q.meow); return; } if (here.name === 'home2' && !UI.talking) { meows++; sayIt('喵！', 1); gsap.fromTo(Q.cat.scale, { y: 1.1 }, { y: 1, duration: .3 }); } }, 15000);
   };
-  async function wash() { const c = chores(); c.wash = (c.wash || 0) + 1; Sfx.play('pop'); sayIt('洗衣');
+  async function wash() { const c = chores(); if (c.wash === 'done') return; c.wash = (c.wash || 0) + 1; Sfx.play('pop'); sayIt('洗衣');
     for (let k = 0; k < 6; k++) { const b = mk(sph(.08 + Math.random() * .06, 8), new THREE.MeshBasicMaterial({ color: '#FFFFFF', transparent: true, opacity: .9 }), -5.8 + (Math.random() - .5) * .8, .55, -1.4 + (Math.random() - .5) * .8, null, false); H().scene.add(b); gsap.to(b.position, { y: 1.4, duration: .9 }); gsap.to(b.material, { opacity: 0, duration: .9, onComplete: () => H().scene.remove(b) }); }
     if (c.wash >= 3) { Q.clothes.forEach(pop); c.wash = 'done'; saveG(); await check('我会洗衣！', 'I can wash clothes!'); } }
   async function tidy(t) { const c = chores(); c.toys[t.i] = true; saveG(); Sfx.play('whoosh'); gsap.to(t.m.position, { x: -5.6 + (t.i - 1.5) * .25, y: .66, z: 3.6, duration: .5 }); if (Q.toys.every(x => c.toys[x.i])) await check('我会收拾！', 'I can tidy up!'); }
@@ -7482,7 +7521,17 @@ const B2c = (() => {
   async function feed() { const c = chores(); c.cat = true; saveG(); sayIt('我会喂小猫'); const f = mk(sph(.1, 8), '#F28C28', 5, .14, -.6, null, false); f.scale.x = 1.6; gsap.to(Q.cat.position, { x: 5.1, z: -.9, duration: .6 }); await wait(1200); H().scene.remove(f); gsap.to(Q.cat.position, { x: 5.6, z: -1.4, duration: .6 }); await check('小猫吃饱了！', 'The kitten is full!'); }
   async function check(zh, en) {
     showToast(zh, en, 1600); sayIt(zh); const c = chores();
-    if (c.wash === 'done' && Q.toys.every(x => c.toys[x.i]) && Q.dust.every(x => c.dust[x.i]) && c.cat) { Q.s6 = false; clearInterval(Q.meow); await wait(1200); await talk('nainai2', [['你会做的事真不少！', 'You can do so many things!']]); done(206, '跟奶奶说「回答问题」', 'Talk to Grandma to answer questions.'); }
+    if (allChores(c)) await praise6();
+  }
+  /* Every chore done: Grandma's praise, then the lesson moves on. Reached from the last chore, and also when the
+     activity is asked for again with nothing left to do (the praise could be lost if something else was tapped just
+     as the last chore finished, and the lesson then had no way forward). */
+  const allChores = c => { try { return c.wash === 'done' && Q.toys.every(x => c.toys[x.i]) && Q.dust.every(x => c.dust[x.i]) && !!c.cat; } catch (e) { return false; } };
+  async function praise6() {
+    if (Q.end6) return; Q.end6 = true; Q.s6 = false; clearInterval(Q.meow);
+    /* the lesson is marked first: Grandma's praise can be lost when she is already being talked to, and must not take the progress with it */
+    done(206, '跟奶奶说「回答问题」', 'Talk to Grandma to answer questions.');
+    try { await wait(1200); if (!UI.talking && !UI.busy) await talk('nainai2', [['你会做的事真不少！', 'You can do so many things!']]); } catch (e) { } Q.end6 = false;
   }
 
   function nearbyHome(add) {
@@ -7494,6 +7543,8 @@ const B2c = (() => {
     if (Q.s5 && Q.s5.gift) add(2.6, 3, 2, '拆礼物', 'Open the present', gift, 1);
     if (Q.s5 && Q.s5.candle != null) add(3.6, 3.2, 2.4, `点蜡烛（${Q.s5.candle + 1}）`, `Light a candle (${Q.s5.candle + 1})`, candle, 1);
     if (Q.s5 && Q.s5.blow) add(3.6, 3.2, 2.4, '吹蜡烛', 'Blow out the candles', blow, 1);
+    /* a game saved with every chore done but the lesson not moved on (see praise6) mends itself here */
+    try { if (!Q.s6 && !Q.end6 && !UI.talking && !UI.busy && allChores(chores()) && B5.prog(206).story && !B5.prog(206).task) praise6(); } catch (e) { }
     if (Q.s6) { const c = chores();
       if (c.wash !== 'done') add(-5.8, -.2, 1.8, '洗衣服', 'Wash clothes', wash, 1);
       Q.toys.forEach(t => { if (!c.toys[t.i]) add(t.x, t.z + .5, 1.2, '收起来', 'Put away', () => tidy(t), 1); });
@@ -8896,7 +8947,8 @@ const Isle4 = (() => {
   function hall(x, z, w, d, h, roofCol = '#E2B24A') {
     const g = new THREE.Group(); g.position.set(x, 0, z); g.userData.noMerge = 1; W.scene.add(g);
     mk(rbox(w + 1, .8, d + 1, .1), '#E9E2CC', 0, .4, 0, g); mk(rbox(w, h, d, .1), '#B8332A', 0, .8 + h / 2, 0, g);
-    [0, 1].forEach(k => { const r = mk(rbox(w + 1.6 - k * 1.8, .4, d + 1.4 - k * 1.2, .15), roofCol, 0, .8 + h + .2 + k * 1, 0, g); const t = mk(new THREE.ConeGeometry(1, .9, 4), roofCol, 0, .8 + h + .7 + k * 1, 0, g); t.rotation.y = Math.PI / 4; t.scale.set((w + 1 - k * 1.8) * .72, 1, (d + .8 - k * 1.2) * .72); });
+    [0, 1].forEach(k => { const r = mk(rbox(w + 1.6 - k * 1.8, .4, d + 1.4 - k * 1.2, .15), roofCol, 0, .8 + h + .2 + k * 1, 0, g); const t = mk(new THREE.ConeGeometry(1, .9, 4).rotateY(Math.PI / 4), roofCol, 0, .8 + h + .7 + k * 1, 0, g);   /* turned in the shape itself: turning the object and then stretching it sheared the roof into shards */
+      t.scale.set((w + 1 - k * 1.8) * .72, 1, (d + .8 - k * 1.2) * .72); });
     for (let k = 0; k < 3; k++) mk(rbox(1.1, 2, .2, .1), '#7A1E1A', (k - 1) * (w / 3.2), 1.8, d / 2 + .02, g);
     sp.solids.push([x - w / 2 - .6, z - d / 2 - .6, x + w / 2 + .6, z + d / 2 + .6]); halls.push({ g, w, d }); return g;
   }
