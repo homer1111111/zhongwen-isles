@@ -1276,11 +1276,12 @@ void main() {
   const homeSign = (k, D, sp) => sign(D.house ? 'home:' + sp.name + D.house.zh : k, D.house ? D.house.door : D.door, sp, D.house ? D.house.zh : null);
   function sign(k, door, sp, text) {
     if (N.signs[k]) return N.signs[k];
-    const t = canvasTex(256, 96, c => { c.fillStyle = 'rgba(255,246,214,.96)'; c.beginPath(); const r = 22; c.moveTo(r, 4); c.arcTo(252, 4, 252, 92, r); c.arcTo(252, 92, 4, 92, r); c.arcTo(4, 92, 4, 4, r); c.arcTo(4, 4, 252, 4, r); c.fill(); c.fillStyle = '#5B4A2E'; c.font = '700 40px sans-serif'; c.textAlign = 'center'; c.fillText('🚪 ' + (text || nm(k, 0)), 128, 62); });
-    const sgn = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false })); sgn.scale.set(2.3, .86, 1); sgn.userData.fx = true; sgn.position.set(door.x, (sp.floor ? sp.floor(door.x, door.z) : 0) + (text ? 3.6 : 2.3 + (((PEOPLE[k] && PEOPLE[k].fxD && PEOPLE[k].fxD.idx) || 0) % 2) * .95), door.z); sp.scene.add(sgn); return (N.signs[k] = sgn);
+    const words = text || nm(k, 0), cw = Math.max(256, 110 + [...words].length * 42);   /* the label is as wide as its words: a long name used to be cut off at the edge */
+    const t = canvasTex(cw, 96, c => { c.fillStyle = 'rgba(255,246,214,.96)'; c.beginPath(); const r = 22; c.moveTo(r, 4); c.arcTo(cw - 4, 4, cw - 4, 92, r); c.arcTo(cw - 4, 92, 4, 92, r); c.arcTo(4, 92, 4, 4, r); c.arcTo(4, 4, cw - 4, 4, r); c.fill(); c.fillStyle = '#5B4A2E'; c.font = '700 40px sans-serif'; c.textAlign = 'center'; c.fillText('🚪 ' + words, cw / 2, 62); });
+    const sgn = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false })); sgn.scale.set(2.3 * cw / 256, .86, 1); sgn.userData.fx = true; sgn.position.set(door.x, (sp.floor ? sp.floor(door.x, door.z) : 0) + (text ? 3.6 : 2.3 + (((PEOPLE[k] && PEOPLE[k].fxD && PEOPLE[k].fxD.idx) || 0) % 2) * .95), door.z); sp.scene.add(sgn); return (N.signs[k] = sgn);
   }
   function review() {   // every question and word from lessons already finished
-    const qs = [], ws = []; Object.keys(B5.HOSTS || {}).concat(['1']).forEach(n => { try { if (!B5.prog(+n).done) return; const L = B5.lesson(+n); (L.quiz || []).forEach(q => { if (q && q.q && q.a && q.w && q.w.length) qs.push(q); }); Object.entries(L.words || {}).forEach(([w, v]) => { if (v && v[1]) ws.push([w, v[0], v[1]]); }); } catch (e) { } });
+    const qs = [], ws = []; Object.keys(B5.HOSTS || {}).concat(['1']).forEach(n => { try { if (!B5.prog(+n).done) return; const L = B5.lesson(+n); (L.quiz || []).forEach(q => { if (q && q.q && q.a && q.w && q.w.length) qs.push(q); }); Object.entries(L.words || {}).forEach(([w, v]) => { if (v && v[1]) ws.push([w, v[0], v[1], +n]); }); } catch (e) { } });
     return { qs, ws };
   }
   const pickOne = a => a[(Math.random() * a.length) | 0], shuffled = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
@@ -1311,7 +1312,7 @@ void main() {
       let right = 0;
       for (let round = 0; round < 6 && right < 2; round++) {
         if (R.qs.length && (Math.random() < .65 || R.ws.length < 3)) { const q = pickOne(R.qs); if (await askOne(who, q.q, q.a, q.w, q.qe || '')) right++; }
-        else { const w = pickOne(R.ws), wrong = shuffled(R.ws.filter(x => x[2] !== w[2])).map(x => x[2]); if (await askOne(who, '「' + w[0] + '」是什么意思？', w[2], wrong, 'What does “' + w[0] + '” (' + w[1] + ') mean?')) right++; }
+        else { const w = Learn.weakest(R.ws), wrong = shuffled(R.ws.filter(x => x[2] !== w[2])).map(x => x[2]), ok = await askOne(who, '「' + w[0] + '」是什么意思？', w[2], wrong, 'What does “' + w[0] + '” (' + w[1] + ') mean?'); Learn.mark(w[3], w[0], ok, 'mean'); if (ok) right++; }
       }
       setPassed(who); setStars(G.stars + 3);
       await N.talk0(who, [['好，答得不错！', 'Well done!']]);
@@ -1353,7 +1354,11 @@ void main() {
   }
   function hookGame() {
     N.hooked = true; N.talk0 = talk;
-    { const choose0 = Ferry.choose; Ferry.choose = function (from) { if (N.ferryAway === from) { showToast('船长送朋友回家了，马上就回来。', 'The captain is taking a friend home. He will be right back.', 3200); return; } return choose0.apply(this, arguments); }; }
+    { const choose0 = Ferry.choose; Ferry.choose = function (from) {
+      /* no ferry without its captain: at night he must be at his post, or have been woken. While he was still on his way home to bed the boat could be taken with nobody at the helm. */
+      { const ck = Object.keys(PEOPLE).find(k => isCaptain(k) && PEOPLE[k] && PEOPLE[k].fxD && PEOPLE[k].fxD.home0 === from), cd = ck && PEOPLE[ck].fxD;
+        if (cd && isNight() && !passed(ck) && (cd.mode === 'home' || cd.then === 'home')) { showToast(nm(ck, 0) + '回家了，去' + (cd.house ? cd.house.zh : '船屋') + '敲敲门吧。', nm(ck, 1) + ' has gone home. Knock on the door' + (cd.house ? ' of ' + cd.house.en : '') + '.', 4200); return; } }
+      if (N.ferryAway === from) { showToast('船长送朋友回家了，马上就回来。', 'The captain is taking a friend home. He will be right back.', 3200); return; } return choose0.apply(this, arguments); }; }
     /* only a tap on the action button can be stopped by the night gate: lines spoken inside a lesson never are */
     talk = function (who, lines, choices) {
       const tapped = performance.now() - N.fromAct < 60, c = PEOPLE[who]; N.fromAct = 0;
@@ -1561,7 +1566,7 @@ void main() {
     town: [{ zh: '我的家', en: 'My home', use: '进家', who: ['mom', 'dad', 'yeye'] }, { zh: '云云的家', en: "Yunyun's home", who: ['yunyun'] }, { zh: '王阿姨的家', en: "Auntie Wang's home", who: ['wangayi'], col: '#F3E3EC', roof: '#B5668F' },
       { zh: '古人的院子', en: 'The old courtyard', who: ['caochong', 'lishizhen', 'zhang'], old: true, w: 7 }, { zh: '博物馆宿舍', en: 'The museum dormitory', who: ['director', 'yangliwei', 'beiyuming'], w: 6.4, col: '#E8E4DA', roof: '#7A6F9A' }, { zh: '船屋', en: 'Boathouse', who: ['captain5'], boat: true }],
     isle1: [{ zh: '我的家', en: 'My home', use: '进家', who: ['imom', 'idad', 'iyeye', 'inainai', 'xiaoming'] }, { zh: '教师宿舍', en: "The teachers' house", who: ['laoshi', 'siji'], col: '#E6EEF5', roof: '#4F78A8' }, { zh: '农舍', en: 'The farmhouse', who: ['nongfu', 'nongnv'], col: '#EFE2C4', roof: '#9A6B45' },
-      { zh: '石匠的家', en: "The stonemason's home", who: ['shijiang'], col: '#DADADA', roof: '#6E6E78' }, { zh: '同学的家', en: "A classmate's home", who: ['tongxue'] }, { zh: '船屋', en: 'Boathouse', who: ['captain'], boat: true }],
+      { zh: '石匠的家', en: "The stonemason's home", who: ['shijiang'], col: '#DADADA', roof: '#6E6E78' }, { zh: '同学的家', en: "A classmate's home", who: ['tongxue'], own: () => { const q = Isle1.Z.neighbor; return [q[0], q[1] + 4.4]; } }, { zh: '船屋', en: 'Boathouse', who: ['captain'], boat: true }],
     isle2: [{ zh: '我的家', en: 'My home', use: '进家', who: ['baba2', 'yeye2', 'meimei'] }, { zh: '邻居阿姨的家', en: "The neighbour's home", who: ['linju', 'didi', 'lr2'], beside: '进家', col: '#F3E3EC', roof: '#B5668F' }, { zh: '警察局', en: 'Police station', who: ['jiaojing'], col: '#DCE6F2', roof: '#3D5C9A' },
       { zh: '医院', en: 'The hospital', use: '进医院', who: ['yisheng'] }, { zh: '小雨的家', en: "Xiaoyu's home", who: ['xiaoyu', 'lr3', 'lr1'], col: '#E3F1E6', roof: '#4F9A6A' }, { away: true, to: 'town', zh: '第五册岛', en: 'the Book 5 island', who: ['yunyun2'] }, { zh: '船屋', en: 'Boathouse', who: ['captain2'], boat: true }],
     isle3: [{ zh: '我的家', en: 'My home', use: '进家', who: ['baba3', 'yeye3', 'didi3', 'meimei3'] }, { zh: '瓦特的家', en: "Watt's home", use: '进屋', who: ['nainai3'] }, { zh: '诊所', en: 'The clinic', use: '进诊所', who: ['yisheng3'] }, { zh: '警察局', en: 'Police station', who: ['warden'], col: '#DCE6F2', roof: '#3D5C9A' },
@@ -1605,7 +1610,7 @@ void main() {
       if (crowded(sp, h, x, z)) return false;
       for (let px = -w / 2 - 1.2; px <= w / 2 + 1.2; px += 1) for (let pz = -d / 2 - 1.2; pz <= d / 2 + 2.6; pz += 1) if (blocked(x + px, z + pz)) return false;
       if (sp.floor) { const fy = sp.floor(x, z); for (const [px, pz] of [[-w / 2, -d / 2], [w / 2, -d / 2], [-w / 2, d / 2 + 1.6], [w / 2, d / 2 + 1.6]]) if (Math.abs(sp.floor(x + px, z + pz) - fy) > .12) return false; }
-      for (const [px, pz] of [[0, 0], [-w / 2, -d / 2], [w / 2, -d / 2], [-w / 2, d / 2 + 1.4], [w / 2, d / 2 + 1.4], [0, d / 2 + 1.4]]) if (!grassAt(x + px, z + pz, h.boat)) return false;
+      for (const [px, pz] of [[0, 0], [-w / 2, -d / 2], [w / 2, -d / 2], [-w / 2, d / 2 + 1.4], [w / 2, d / 2 + 1.4], [0, d / 2 + 1.4]]) if (!grassAt(x + px, z + pz, false)) return false;
       return true; };
     for (let r = h.beside ? 6 : h.boat ? 4 : 5; r <= (h.maxR || 44); r += 1.5) for (let k = 0; k < 20; k++) { const a = k / 20 * 6.283 + r * .37, x = Math.round((ax + Math.cos(a) * r) * 2) / 2, z = Math.round((az + Math.sin(a) * r) * 2) / 2; if (ok(x, z)) return [x, z]; }
     return null;
@@ -1628,7 +1633,7 @@ void main() {
       const cw = h.court ? [h.w || 5.2, h.d || 4.2] : null; if (cw) { h.w = 13.6; h.d = 9.4; h.tight = 3.4; }
       let ax = res.reduce((t, c) => t + c.obj.position.x, 0) / res.length, az = res.reduce((t, c) => t + c.obj.position.z, 0) / res.length;
       if (h.beside) { const e = entries.find(a => a.zh === h.beside); if (e) { ax = e.x; az = e.z; } }
-      let at = mine[h.save || h.zh]; if (at && (blocked(at[0], at[1]) || !grassAt(at[0], at[1], h.boat) || crowded(sp, h, at[0], at[1]))) at = null;
+      let at = mine[h.save || h.zh]; if (at && (blocked(at[0], at[1]) || !grassAt(at[0], at[1], false) || (h.boat && [[-1.9, 0], [1.9, 0], [0, 2.2]].some(q => !grassAt(at[0] + q[0], at[1] + q[1], false))) || crowded(sp, h, at[0], at[1]))) at = null;
       /* a boathouse belongs by the pier: one that had to be put far from the captain is tried again close by, as a smaller hut */
       if (at && h.boat && Math.hypot(at[0] - ax, at[1] - az) > 12) at = null;
       if (!at && h.boat) { const w0 = h.w, d0 = h.d; h.w = 4.2; h.d = 3.4; h.tight = 1.7; h.maxR = 11; at = findSpot(sp, h, ax, az, keep); h.maxR = 0; if (!at) { h.w = w0; h.d = d0; h.tight = 0; } else { mine[h.save || h.zh] = at; store.set('zhongwen-town.homes2', saved); } }
@@ -2150,6 +2155,13 @@ void main() {
     st.tuft.visible = !winter; st.bloom.visible = alive('wildflower'); if (winter) return;
     const cap = st.tuft.instanceMatrix.count; if (st.tuft.count >= cap) return;
     const p = ME().obj.position; _ray.camera = camera;
+    /* every tuft, flower and pebble is checked where it will actually stand: the thing on top there must be lawn at that
+       height. Without this, grass strayed over the edge onto sand and paths, and came up through the planks of a pier. */
+    const lawn = (x, z, y) => { _ray.set(_o.set(x, 40, z), _down); _ray.far = 45; const hs = _ray.intersectObjects(here.scene.children, true);
+      for (let i = 0; i < hs.length; i++) { const o = hs[i].object; if (!(o.isMesh && !o.userData.fx && o.material && o.material.side !== THREE.BackSide && !(o.parent && o.parent.userData.fx) && shown(o))) continue;
+        if (Math.abs(hs[i].point.y - y) > .12 || o.isInstancedMesh || !hs[i].face) return false; const m = Array.isArray(o.material) ? o.material[hs[i].face.materialIndex || 0] : o.material; if (!m || !m.color || m.transparent) return false;
+        _c.copy(m.userData.fx0 || m.color).convertLinearToSRGB().getHSL(_hsl); return _hsl.h >= .19 && _hsl.h <= .42 && _hsl.s >= .22; } return false; };
+    const plant0 = plant, plantOn = (mesh, x, y, z, sc, col) => { const c2 = col.clone(); if (lawn(x, z, mesh === st.rock ? y - .02 : y)) plant0(mesh, x, y, z, sc, c2); };
     for (let probe = 0, tries = 0; probe < (HI ? 2 : 1) && tries < 10; tries++) {
       const a = Math.random() * 6.283, r = 1.5 + Math.random() * 21, x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r, cx = Math.round(x / .95), cz = Math.round(z / .95), key = cx + ',' + cz;
       if (st.cells.has(key)) continue; probe++;
@@ -2170,14 +2182,14 @@ void main() {
         const nb = st.cells.get((cx + [1, -1, 0, 0][k]) + ',' + (cz + [0, 0, 1, -1][k]));
         if (!nb || nb.t === 'x' || nb.t === cell.t || nb.wet || cell.wet || Math.abs(nb.y - y) > .25) continue;
         const g = green ? cell : nb, o = green ? nb : cell, dx = o.x - g.x, dz = o.z - g.z, n = HI ? 5 : 3;
-        for (let q = 0; q < n; q++) { const f = .3 + Math.random() * .22, side = (Math.random() - .5) * .9; plant(st.tuft, g.x + dx * f - dz * side, g.y, g.z + dz * f + dx * side, .45 + Math.random() * .35, _c.setHSL(g.h + (Math.random() - .5) * .03, Math.min(1, g.s * 1.05), g.l * (.66 + Math.random() * .18)).convertSRGBToLinear()); }
-        if (Math.random() < .3) plant(st.rock, g.x + dx * .55, Math.max(g.y, o.y) + .02, g.z + dz * .55, .5 + Math.random() * .5, _c.setHSL(.1, .06, .52 + Math.random() * .14).convertSRGBToLinear());
+        for (let q = 0; q < n; q++) { const f = .3 + Math.random() * .22, side = (Math.random() - .5) * .9; plantOn(st.tuft, g.x + dx * f - dz * side, g.y, g.z + dz * f + dx * side, .45 + Math.random() * .35, _c.setHSL(g.h + (Math.random() - .5) * .03, Math.min(1, g.s * 1.05), g.l * (.66 + Math.random() * .18)).convertSRGBToLinear()); }
+        if (Math.random() < .3) plantOn(st.rock, g.x + dx * .55, Math.max(g.y, o.y) + .02, g.z + dz * .55, .5 + Math.random() * .5, _c.setHSL(.1, .06, .52 + Math.random() * .14).convertSRGBToLinear());
       }
       if (!green || st.tuft.count > cap * .78) continue;   // the last part of the budget is kept for the borders
       const roll = Math.random();
-      if (roll < .07) plant(st.rock, x, y + .02, z, .7 + Math.random() * .9, _c.setHSL(.1, .06, .5 + Math.random() * .16).convertSRGBToLinear());
-      else if (roll < .2) plant(st.bloom, x, y, z, .8 + Math.random() * .6, _c.set(['#FFFFFF', '#FFE46B', '#FFC2DA', '#D8C8FF'][(Math.random() * 4) | 0]).convertSRGBToLinear());
-      else { const n = 2 + ((Math.random() * 3) | 0); for (let k = 0; k < n; k++) plant(st.tuft, x + (Math.random() - .5) * .8, y, z + (Math.random() - .5) * .8, .8 + Math.random() * .7, _c.setHSL(cell.h + (Math.random() - .5) * .03, Math.min(1, cell.s * 1.05), cell.l * (.78 + Math.random() * .2)).convertSRGBToLinear()); }
+      if (roll < .07) plantOn(st.rock, x, y + .02, z, .7 + Math.random() * .9, _c.setHSL(.1, .06, .5 + Math.random() * .16).convertSRGBToLinear());
+      else if (roll < .2) plantOn(st.bloom, x, y, z, .8 + Math.random() * .6, _c.set(['#FFFFFF', '#FFE46B', '#FFC2DA', '#D8C8FF'][(Math.random() * 4) | 0]).convertSRGBToLinear());
+      else { const n = 2 + ((Math.random() * 3) | 0); for (let k = 0; k < n; k++) plantOn(st.tuft, x + (Math.random() - .5) * .8, y, z + (Math.random() - .5) * .8, .8 + Math.random() * .7, _c.setHSL(cell.h + (Math.random() - .5) * .03, Math.min(1, cell.s * 1.05), cell.l * (.78 + Math.random() * .2)).convertSRGBToLinear()); }
     }
   }
 
@@ -2861,7 +2873,7 @@ const Heights = (() => {
     s2.forEach(c => { stairs(S, c, zB, zB - D, y2, y3, W - .1); sp.raised.push({ kind: 'ramp', x0: c - W / 2 + .1, x1: c + W / 2 - .1, z0: zB - D, z1: zB, top: y3, bottom: y2 }); });
     // level 2: a row of trees at the back, benches looking out over the island, flowers
     for (let x = -30; x <= 30; x += 10) if (!s2.some(c => Math.abs(c - x) < 3)) roundTree(x, y2, zB + 2.2, .9, '#6DBF5A');
-    [-20, -4, 4, 20].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const bz = zA - 3.2; mk(rbox(2.4, .12, .7, .05), '#B98A5A', x, y2 + .55, bz, S); [-1, 1].forEach(q => mk(box(.12, .5, .6), '#8A6A4A', x + q, y2 + .25, bz, S)); Sit.add(sp.name, x - .6, bz, y2 + .61, 0, true); Sit.add(sp.name, x + .6, bz, y2 + .61, 0, true); flowers(x + (k % 2 ? 2.6 : -2.6), bz - 1.4, y2 + .06, 7, 900 + k, null, 1.6); });
+    [-20, -4, 4, 20].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const bz = zA - 3.2; mk(rbox(2.4, .12, .7, .05), '#B98A5A', x, y2 + .55, bz, S); [-1, 1].forEach(q => mk(box(.12, .5, .6), '#8A6A4A', x + q, y2 + .25, bz, S)); Sit.add(sp.name, x - .6, bz, y2 + .61, 0, true); Sit.add(sp.name, x + .6, bz, y2 + .61, 0, true); sp.solids.push([x - 1.25, bz - .38, x + 1.25, bz + .38]);   /* a bench is sat on, not walked through */ flowers(x + (k % 2 ? 2.6 : -2.6), bz - 1.4, y2 + .06, 7, 900 + k, null, 1.6); });
     // level 3: the hill with the telescope in the middle, flowers either side
     hill(sp, S, 0, zC + 3.4, 2.6, y3);
     flowers(-14, zC + 4, y3 + .06, 10, 990, null, 1.6); flowers(14, zC + 4, y3 + .06, 10, 991, null, 1.6);
@@ -3712,6 +3724,52 @@ const Players = {
 };
 let G_KEY = Players.key(Players.active());
 const G = Object.assign(G0(), store.get(G_KEY, {}));
+
+/* ---------- Learning record: what the child really knows ----------
+   Every word of every lesson keeps its own tally: times right, times wrong, the kinds of question it has been got right
+   in, and when it is next due. A word is "learned" once it has been answered correctly in two different kinds of
+   question; a wrong answer sends it back. Quizzes and the night review ask the words that are new, shaky or due first,
+   instead of picking at random, and the bag shows a page of all this for a parent to read. */
+const Learn = (() => {
+  const DAY = 864e5, KINDS = ['mean', 'listen', 'word', 'pinyin'];
+  const all = () => G.learn || (G.learn = { w: {} });
+  const peek = (n, w) => all().w[n + ':' + w] || null;
+  const rec = (n, w) => all().w[n + ':' + w] || (all().w[n + ':' + w] = { r: 0, x: 0, k: '', s: 0, due: 0, lv: 0 });
+  const words = n => { try { return Object.entries(B5.lesson(n).words || {}).filter(([k, v]) => v && v[0] && v[1]).map(([k, v]) => [k, v[0], v[1], n]); } catch (e) { return []; } };
+  /* lower is asked sooner: never asked, then more wrong than right, then due again, then the rest */
+  function rank(n, w) { const r = peek(n, w); if (!r || !(r.r + r.x)) return Math.random() * .5; if (r.lv < 2) return 1 - Math.min(.9, Math.max(0, r.x - r.r) * .1) + Math.random() * .05; return (r.due <= Date.now() ? 2 : 3) + Math.random() * .5; }
+  function mark(n, w, ok, kind) {
+    const r = rec(n, w), c = (kind || 'mean')[0];
+    if (ok) { r.r++; if (r.k.indexOf(c) < 0) r.k += c; r.s = Math.min(3, (r.s || 0) + 1); r.due = Date.now() + [0, 1, 3, 7][r.s] * DAY; r.lv = r.k.length >= 2 ? 2 : 1; }
+    else { r.x++; r.s = 0; r.k = ''; r.due = Date.now(); r.lv = r.r ? 1 : 0; }
+    try { saveG(); } catch (e) { }
+  }
+  const shuf = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+  /* one question about one word, in a kind it has not yet been got right in */
+  function question(W, pool, turn) {
+    const [w, py, mean, n] = W, r = peek(n, w), fresh = KINDS.filter(k => !r || r.k.indexOf(k[0]) < 0), kind = (fresh.length ? fresh : KINDS)[turn % (fresh.length || KINDS.length)];
+    const others = shuf(pool.filter(o => o[0] !== w && o[2] !== mean && o[1] !== py)); if (others.length < 2) return null;
+    const o2 = others.slice(0, 2);
+    if (kind === 'mean') return { q: `「${w}」是什么意思？`, a: mean, w: o2.map(o => o[2]), qe: `What does “${w}” (${py}) mean?`, word: w, kind, n };
+    if (kind === 'word') return { q: `哪一个词是 “${mean}”？`, a: w, w: o2.map(o => o[0]), qe: `Which word means “${mean}”?`, word: w, kind, n };
+    if (kind === 'pinyin') return { q: `「${py}」是哪一个词？`, a: w, w: o2.map(o => o[0]), qe: `Which word is read “${py}”?`, word: w, kind, n };
+    return { q: '听一听，是哪一个词？（点这里再听一次）', a: w, w: o2.map(o => o[0]), qe: 'Listen: which word is it? (Tap here to hear it again.)', say: w, word: w, kind, n };
+  }
+  function forQuiz(n, count) { const pool = words(n); if (pool.length < 3) return []; return pool.slice().sort((a, b) => rank(n, a[0]) - rank(n, b[0])).slice(0, count).map((W, i) => question(W, pool, i)).filter(Boolean); }
+  /* from a list of [word, pinyin, meaning, lesson]: the one most in need of asking */
+  function weakest(list) { let best = null, bv = 9; list.forEach(W => { const v = W[3] != null ? rank(W[3], W[0]) : 5; if (v < bv) { bv = v; best = W; } }); return best || list[0]; }
+  function tally(n) { const t = { yes: 0, some: 0, no: 0, weak: [] }; words(n).forEach(W => { const r = peek(n, W[0]); if (r && r.lv >= 2) t.yes++; else if (r && r.r) { t.some++; if (r.x > 0) t.weak.push(W[0]); } else { t.no++; if (r && r.x) t.weak.push(W[0]); } }); return t; }
+  /* the page a parent reads, at the foot of the bag */
+  function rows(g) {
+    try { const ns = Object.keys(B5.HOSTS || {}).map(Number).concat([1]).filter(n => { try { return B5.prog(n).done; } catch (e) { return false; } }).sort((a, b) => a - b); if (!ns.length) return;
+      const box = document.createElement('div'); box.style.cssText = 'grid-column:1/-1;text-align:left;padding:10px 6px 4px;line-height:1.6;font-size:15px;border-top:2px dashed rgba(0,0,0,.12);margin-top:8px';
+      let h = '<div style="font-weight:700;font-size:17px;margin-bottom:4px">学习记录<small class="en-only"> Learning record</small></div><div style="opacity:.7;font-size:13px;margin-bottom:6px">每个词要用两种不同的问法答对，才算学会。<span class="en-only"><br>A word counts as learned once it is answered correctly in two different kinds of question.</span></div>';
+      ns.forEach(n => { const L = B5.lesson(n), t = tally(n), big = B5.prog(n).big || 0, book = n > 100 ? '一二三四'[Math.floor(n / 100) - 1] : '五', ln = n > 100 ? n % 100 : n;
+        h += `<div style="margin:5px 0"><b>第${book}册 第${ln}课《${L ? L.t : ''}》</b> <span style="color:#E9A90F">${'★'.repeat(big)}</span><span style="opacity:.3">${'★'.repeat(3 - big)}</span><br>学会 ${t.yes}　有点会 ${t.some}　还没考过或不会 ${t.no}<span class="en-only"> · learned ${t.yes}, getting there ${t.some}, not yet ${t.no}</span>${t.weak.length ? `<br><span style="color:#C8453B">常错：${t.weak.slice(0, 8).join('、')}</span>` : ''}</div>`; });
+      box.innerHTML = h; g.appendChild(box); } catch (e) { }
+  }
+  return { mark, forQuiz, weakest, tally, rows, words, peek };
+})();
 const saveG = () => store.set(G_KEY, G);
 const UI = { busy: false, talking: false, fishing: null };
 const NAMES = { mom: ['妈妈', 'Mom'], dad: ['爸爸', 'Dad'] };
@@ -4027,7 +4085,7 @@ function openBag() {
   if (metHome) ITEM_ORDER.forEach(id => { const got = !!G.found[id], it = ITEMS[id], d = document.createElement('div'); d.className = 'cell' + (got ? ' got' : '');
     d.innerHTML = `<img src="${thumb(id)}" alt="" style="width:64px;height:64px;object-fit:contain;${got ? '' : 'filter:brightness(0);opacity:.15'}"><div class="n">${got ? it.zh : '？'}</div><div class="c">${got ? VOCAB[it.zh][0] : ''}</div>`;
     if (got) d.onclick = () => Voice.speak(it.zh, .6); g.appendChild(d); });
-  Life.bagRows(g); storyRows(g);
+  Life.bagRows(g); storyRows(g); Learn.rows(g);
   if (!g.children.length) g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:18px 6px;line-height:1.7">背包还是空的。<br>听完故事、做完活动，就会有东西放进来哦！<span class="en-only"><br>Your bag is empty. Finish stories and activities to fill it!</span></div>';
   $('albumVeil').classList.remove('hidden'); UI.busy = true;
 }
@@ -4707,37 +4765,43 @@ const B5 = (() => {
     const opts = [];
     if (!p.task) opts.push([task[0], task[1]]);   // once the play is finished, only the questions remain
     if (p.task && !p.done) opts.push(['回答问题', 'Answer questions']);
+    if (p.done) opts.push(['再考一次', 'Take the quiz again']);
     opts.push(['聊聊天', 'Chat'], ['再见', 'Bye']);
     const c = await talk(host, [hello], opts), pick = opts[c] && opts[c][0];
     if (!pick || pick === '再见') return;
     if (pick === '聊聊天') { await talk(host, [chatLine(host)]); return; }
     if (pick === task[0]) { TASKS[n](); return; }
-    if (pick === '回答问题') quiz(n, host);
+    if (pick === '回答问题' || pick === '再考一次') quiz(n, host);
   }
+  /* The questions at the end of a lesson: two about the text, then four about its words (the new, shaky and due ones
+     first, each in a kind of question that word has not yet been got right in). Getting some wrong still finishes the
+     lesson; the share got right first time decides one, two or three big stars, and the quiz can be taken again. */
   function quiz(n, host) {
-    const L = lesson(n), qs = L.quiz.slice(0, 2); let i = 0, right = 0;
-    const ws = Object.entries(L.words || {}).filter(([k, v]) => v && v[1]).shuf();
-    if (ws.length >= 3 && new Set(ws.slice(0, 3).map(w => w[1][1])).size === 3) qs.push({ q: `「${ws[0][0]}」是什么意思？`, a: ws[0][1][1], w: [ws[1][1][1], ws[2][1][1]], qe: `What does “${ws[0][0]}” (${ws[0][1][0]}) mean?`, ae: '', we: [] });
+    const L = lesson(n), E0 = BOOK5_QUIZ_EN[n] || [], qs = L.quiz.slice(0, 2).map((q, k) => ({ q: q.q, a: q.a, w: q.w, E: E0[k] || null }));
+    Learn.forQuiz(n, 4).forEach(x => { x.E = { q: x.qe, a: '', w: [] }; qs.push(x); });
+    let i = 0, right = 0;
     const next = () => {
-      if (i >= qs.length) { closeVeil('qVeil'); finish(n, host, right); return; }
-      const q0 = qs[i], E = (BOOK5_QUIZ_EN[n] || [])[i] || (q0.qe ? { q: q0.qe, a: q0.ae, w: q0.we } : null), q = qs[i++]; $('qWho').textContent = `${NAMES[host][0]}问你：`; $('qText').textContent = q.q; $('qEn').textContent = E ? E.q : '';
-      const en = E ? [E.a].concat(E.w) : [];
-      const c = $('qFish').getContext('2d'); c.clearRect(0, 0, 180, 120); c.font = `700 70px ${KAI}`; c.textAlign = 'center'; c.fillStyle = '#E9A90F'; c.fillText('？', 90, 92);
+      if (i >= qs.length) { $('qText').onclick = null; closeVeil('qVeil'); finish(n, host, right, qs.length); return; }
+      const q = qs[i++], E = q.E; $('qWho').textContent = `${NAMES[host][0]}问你：（${i}/${qs.length}）`; $('qText').textContent = q.q; $('qEn').textContent = E ? E.q : '';
+      const en = E ? [E.a].concat(E.w) : [], hear = () => Voice.speak(q.say || q.q, q.say ? .6 : .72, host); $('qText').onclick = q.say ? hear : null;
+      const c = $('qFish').getContext('2d'); c.clearRect(0, 0, 180, 120); c.font = `700 70px ${KAI}`; c.textAlign = 'center'; c.fillStyle = '#E9A90F'; c.fillText(q.say ? '♪' : '？', 90, 92);
       const box = $('qOpts'); box.innerHTML = ''; box.classList.remove('pics');
       [q.a].concat(q.w).map((o, k) => ({ o, e: en[k], ok: k === 0 })).shuf().forEach(({ o, e, ok }) => {
         const b = document.createElement('button'); b.className = 'qbtn'; b.textContent = o; if (ok) b.dataset.ok = '1';
         if (e) { const sm = document.createElement('small'); sm.className = 'en-only'; sm.textContent = e; b.appendChild(sm); }
-        b.onclick = async () => { box.querySelectorAll('button').forEach(x => x.disabled = true); if (ok) { right++; b.classList.add('right'); Sfx.play('found'); await Voice.speak('答对了！', .72, host); } else { b.classList.add('wrong'); Sfx.play('nope'); [...box.children].find(x => x.dataset.ok).classList.add('right'); await Voice.speak('答案是：' + q.a, .72, host); } await wait(600); next(); };
+        b.onclick = async () => { box.querySelectorAll('button').forEach(x => x.disabled = true); if (q.word) Learn.mark(q.n, q.word, ok, q.kind);
+          if (ok) { right++; b.classList.add('right'); Sfx.play('found'); await Voice.speak('答对了！', .72, host); } else { b.classList.add('wrong'); Sfx.play('nope'); [...box.children].find(x => x.dataset.ok).classList.add('right'); await Voice.speak('答案是：' + q.a, .72, host); } await wait(600); next(); };
         box.appendChild(b);
       });
-      $('qVeil').classList.remove('hidden'); UI.busy = true; Voice.speak(q.q, .72, host);
+      $('qVeil').classList.remove('hidden'); UI.busy = true; hear();
     };
     next();
   }
-  function finish(n, host, right) {
-    const p = prog(n); p.done = true; addFriend(host, 30); setStars(G.stars + 100); saveG(); Mail.check();
+  function finish(n, host, right, total) {
+    const p = prog(n), first = !p.done, share = total ? right / total : 1, big = share >= .85 ? 3 : share >= .5 ? 2 : 1, was = p.big || 0, stars = (first ? 100 : 0) + Math.max(0, big - was) * 30;
+    p.done = true; p.big = Math.max(was, big); if (first) addFriend(host, 30); setStars(G.stars + stars); saveG(); Mail.check();
     const L = Stage.lessonOf(n), book = n > 100 ? '一二三四'[Math.floor(n / 100) - 1] : '五', ln = n > 100 ? n % 100 : n;
-    reward(`第${book}册 第${ln}课《${L ? L.t : ''}》完成了！`, `答对 ${right} 题。得到 100 颗小星星，${NAMES[host][0]}的好感度 +30。`);
+    reward(`第${book}册 第${ln}课《${L ? L.t : ''}》${first ? '完成了！' : '又考了一次！'}`, `答对 ${right}/${total} 题　${'★'.repeat(p.big)}${'☆'.repeat(3 - p.big)}　得到 ${stars} 颗小星星${first ? `，${NAMES[host][0]}的好感度 +30` : ''}。${p.big < 3 ? '再来考一次，可以拿到三颗大星！' : ''}`);
   }
   /* ---------- Lesson 4: the leaf shows which way the water flows ---------- */
   const TASKS = {};
@@ -5975,7 +6039,7 @@ const Isle1 = (() => {
     sp.ferry = ferry(4.8, 41.2);
     // landmarks
     home(Z.home[0], Z.home[1], '#FFF6E2', '#E8574A', '#8C5B3A'); sign('我的家', Z.home[0] + 5.6, Z.home[1] + 5.2, '#8C5B3A', 1.6);
-    home(Z.neighbor[0], Z.neighbor[1], '#E9F0DC', '#4F86C6', '#6E4A2E', Math.PI);
+    home(Z.neighbor[0], Z.neighbor[1], '#E9F0DC', '#4F86C6', '#6E4A2E', Math.PI); sign('同学的家', Z.neighbor[0] - 5.8, Z.neighbor[1] + 4.6, '#4F86C6', 1.8);   /* the blue house beside ours is the classmate's: it had no name, and a second house was being put up for him by the pier */
     school(Z.school[0], Z.school[1]);
     sign('校车站', 6, 20.4, '#F2B233', 1.6); mk(rbox(2.6, .1, 1.2, .04), '#B8B4AA', 6, 2.6, 19.8);
     const field = mk(new THREE.PlaneGeometry(10, 7), '#B98A5A', Z.field[0], .1, Z.field[1], null, false); field.rotation.x = -Math.PI / 2;
@@ -5988,7 +6052,7 @@ const Isle1 = (() => {
     sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 6.6, Z.meadow[1] - 5.4, '#5E9A57'); sign('日出山坡', Z.hill[0] + 6, Z.hill[1] + 2.4, '#F28C28', 2.2);
     // trees and flowers
     const T0 = TREES.length;
-    [[-33, 26], [-34, -4], [-30, -28], [34, -26], [34, 2], [12, 26], [-8, 26], [-4, -6], [10, 4], [30, -12]].forEach(([x, z], i) => roundTree(x, 0, z, .9 + (i % 3) * .15, i % 2 ? '#6DBF5A' : '#5EA94E'));
+    [[-33, 26], [-34, -4], [-30, -28], [34, -26], [34, 2], [12, 26], [-13, 26.5], [-4, -6], [10, 4], [30, -12]].forEach(([x, z], i) => roundTree(x, 0, z, .9 + (i % 3) * .15, i % 2 ? '#6DBF5A' : '#5EA94E'));
     trees.push(...TREES.splice(T0)); FX.trees(trees);
     flowers(6, 14, 0, 10, 103); flowers(-6, 4, 0, 10, 104);
     [[-6, 18], [6, 6], [-35, 4], [26, 4]].forEach(([x, z]) => lamp(x, z));
@@ -7140,8 +7204,8 @@ const B2 = (() => {
     // art frames on the walls on both sides, and the reading corner at the back
     Q.frames = [[-7, -1.6], [-7, 1.8], [7, -1.6], [7, 1.8]].map(([x, z], i) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.1), new THREE.MeshBasicMaterial({ map: artTex(i) })); m.position.set(x + (x < 0 ? .22 : -.22), 2.6, z); m.rotation.y = x < 0 ? Math.PI / 2 : -Math.PI / 2; m.visible = !!c2().art[i]; S.add(m); return { m, x, z, i }; });
     Q.shelf = new THREE.Group(); Q.shelf.position.set(-6.5, 0, 3.7); Q.shelf.rotation.y = Math.PI / 2; S.add(Q.shelf);
-    mk(rbox(2.6, 2.2, .7, .06), '#8C5B3A', 0, 1.1, 0, Q.shelf); [.6, 1.3].forEach(y => mk(box(2.4, .06, .6), '#B98A5A', 0, y, .05, Q.shelf));
-    Q.books = []; for (let k = 0; k < 12; k++) { const b = mk(box(.16, .5, .45), ['#E8574A', '#4F86C6', '#F2B233', '#5E9A57'][k % 4], -1 + (k % 6) * .36, k < 6 ? .9 : 1.6, .05, Q.shelf, false); b.visible = k < c2().books * 4; Q.books.push(b); }
+    mk(rbox(2.6, 2.2, .7, .06), '#8C5B3A', 0, 1.1, 0, Q.shelf); [.6, 1.3].forEach(y => mk(box(2.4, .06, .6), '#B98A5A', 0, y, .1, Q.shelf));
+    Q.books = []; for (let k = 0; k < 12; k++) { const b = mk(box(.16, .5, .45), ['#E8574A', '#4F86C6', '#F2B233', '#5E9A57'][k % 4], -1 + (k % 6) * .36, k < 6 ? .9 : 1.6, .2, Q.shelf, false);   /* proud of the case front: sunk inside it they flickered */ b.visible = k < c2().books * 4; Q.books.push(b); }
     sp.solids.push([-7, 2.3, -6, 5.1]); const tag = signBoard('图书角', 1.4, .45, '#5E9A57'); tag.position.set(-6.3, 2.6, 3.7); tag.rotation.y = Math.PI; S.add(tag);
     Q.pile = mk(rbox(1.2, .5, .8, .05), '#B98A5A', 4.8, .25, 4.2); sp.solids.push([4.1, 3.7, 5.5, 4.7]);
     Q.marks = { front: new THREE.Object3D(), back: new THREE.Object3D() }; Q.marks.front.position.set(0, 0, -4.2); Q.marks.back.position.set(-4.6, 0, 4.4); S.add(Q.marks.front, Q.marks.back);
@@ -7650,7 +7714,7 @@ const B2d = (() => {
     const kid = mk(new THREE.PlaneGeometry(6.4, 7), '#9FD3C8', 3.5, .02, 0, null, false); kid.rotation.x = -Math.PI / 2;
     [[14.4, 5, .4, 0, 2.5, -5.7], [.4, 5, 11.4, -7.2, 2.5, 0], [.4, 5, 11.4, 7.2, 2.5, 0]].forEach(([w, h, d, x, y, z]) => mk(new THREE.BoxGeometry(w, h, d), '#EFE6D6', x, y, z));
     [[14.4, 9, .4, 0, 9.5, -5.7], [.4, 9, 11.4, -7.2, 9.5, 0], [.4, 9, 11.4, 7.2, 9.5, 0]].forEach(([w, h, d, x, y, z]) => mk(new THREE.BoxGeometry(w, h, d), '#E6DCC8', x, y, z, null, false));
-    const shelf = (x, z, w, label, col, ry = 0) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; S.add(g); mk(rbox(w, 2.2, .6, .05), '#8C5B3A', 0, 1.1, 0, g); for (let k = 0; k < Math.floor(w / .22); k++) [.55, 1.25, 1.9].forEach((y, j) => mk(box(.16, .5, .4), [col, '#FFFFFF', '#5E9A57', '#E8843A'][(k + j) % 4], -w / 2 + .2 + k * .22, y, .05, g, false)); if (label) { const s = signBoard(label, 1.4, .45, col); s.position.set(0, 2.5, .3); g.add(s); } return g; };
+    const shelf = (x, z, w, label, col, ry = 0) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; S.add(g); mk(rbox(w, 2.2, .6, .05), '#8C5B3A', 0, 1.1, 0, g); for (let k = 0; k < Math.floor(w / .22); k++) [.55, 1.25, 1.9].forEach((y, j) => mk(box(.16, .5, .4), [col, '#FFFFFF', '#5E9A57', '#E8843A'][(k + j) % 4], -w / 2 + .2 + k * .22, y, .17, g, false)); if (label) { const s = signBoard(label, 1.4, .45, col); s.position.set(0, 2.5, .3); g.add(s); } return g; };
     shelf(-4.2, -5.1, 4.4, '大人的书', '#5A6A8A'); sp.solids.push([-6.5, -5.5, -1.9, -4.7]);
     Q.kinds = KINDS.map(([zh, en, col], i) => { const x = 1.6 + (i % 2) * 3.4, z = i < 2 ? -4.6 : .8; shelf(x, z, 2.4, zh, col); sp.solids.push([x - 1.3, z - .4, x + 1.3, z + .4]); return { zh, en, x, z, i }; });
     const ks = signBoard('儿童区', 1.8, .55, '#3F7F78'); ks.position.set(3.5, 3.6, -5.45); S.add(ks);
@@ -7988,7 +8052,7 @@ const IHome = (() => {
     // a table with two stools, a bookshelf and a plant
     mk(rbox(2.2, .12, 1.4, .05), '#D9B48A', 1.2, .8, .6); [[-.9, -.5], [.9, -.5], [-.9, .5], [.9, .5]].forEach(([a, b]) => mk(cyl(.06, .06, .8, 6), '#8A6A4A', 1.2 + a, .4, .6 + b)); sp.solids.push([0, -.2, 2.4, 1.4]);
     [-.6, 3].forEach(x => mk(cyl(.3, .3, .45, 12), '#C99A66', x, .23, .6));
-    mk(rbox(2.6, 2.2, .6, .06), '#8C5B3A', 4.8, 1.1, -5.1); for (let k = 0; k < 10; k++) [.6, 1.3, 1.9].forEach((y, j) => mk(box(.16, .46, .4), ['#E8574A', '#4F86C6', '#F2B233', '#5E9A57'][(k + j) % 4], 3.8 + k * .22, y, -5, null, false)); sp.solids.push([3.4, -5.5, 6.2, -4.6]);
+    mk(rbox(2.6, 2.2, .6, .06), '#8C5B3A', 4.8, 1.1, -5.1); for (let k = 0; k < 10; k++) [.6, 1.3, 1.9].forEach((y, j) => mk(box(.16, .46, .4), ['#E8574A', '#4F86C6', '#F2B233', '#5E9A57'][(k + j) % 4], 3.8 + k * .22, y, -4.93, null, false)); sp.solids.push([3.4, -5.5, 6.2, -4.6]);
     mk(cyl(.3, .24, .5, 12), '#C96A4A', -6, .25, 3.6); mk(sph(.5, 12), '#5EA94E', -6, .95, 3.6); sp.solids.push([-6.5, 3.1, -5.5, 4.1]);
     if (isle !== 'isle1') { const k = 'hmom' + isle.slice(-1), c = isle === 'isle3' ? '#C96A88' : '#C8453B', c2 = isle === 'isle3' ? '#A84E6E' : '#9E2E26';
       PEOPLE[k] = makeChar('mom', { '3,0': c, '7,0': c2, '6,0': c2, '4,0': c, '7,1': '#3E4A52', '0,1': '#4C4A5A', '2,1': '#4C4A5A', '1,1': '#4C4A5A', '1,0': '#2B2420' }, 1, { hairCol: '#2B2420' }); putIn(PEOPLE[k], sp, 3.4, -2.2, 0); if (G.friend[k] == null) G.friend[k] = 0; }
@@ -8237,7 +8301,7 @@ const B3 = (() => {
     const fl = mk(new THREE.PlaneGeometry(14, 18), '#C9A27A', 0, 0, 3.5, null, false); fl.rotation.x = -Math.PI / 2; sp.walk.push(fl);
     [[14.4, 5, .4, 0, 2.5, -5.7], [.4, 5, 11.4, -7.2, 2.5, 0], [.4, 5, 11.4, 7.2, 2.5, 0]].forEach(([w, h, d, x, y, z]) => mk(new THREE.BoxGeometry(w, h, d), '#F2E9D8', x, y, z));
     [[14.4, 9, .4, 0, 9.5, -5.7], [.4, 9, 11.4, -7.2, 9.5, 0], [.4, 9, 11.4, 7.2, 9.5, 0]].forEach(([w, h, d, x, y, z]) => mk(new THREE.BoxGeometry(w, h, d), '#E8DCC4', x, y, z, null, false));
-    Q.shelves = SHELVES.map(([zh, en, col], i) => { const x = -4 + i * 4, z = -5; const g = new THREE.Group(); g.position.set(x, 0, z); S.add(g); mk(rbox(3, 2.2, .6, .05), '#8C5B3A', 0, 1.1, 0, g); for (let k = 0; k < 12; k++) [.55, 1.25, 1.9].forEach((y, j) => mk(box(.16, .5, .4), [col, '#FFFFFF', '#5E9A57'][(k + j) % 3], -1.3 + k * .22, y, .05, g, false)); const s = signBoard(zh, 1.5, .45, col); s.position.set(0, 2.5, .3); g.add(s); sp.solids.push([x - 1.6, -5.5, x + 1.6, -4.6]); return { zh, en, x, z: -3.6, i }; });
+    Q.shelves = SHELVES.map(([zh, en, col], i) => { const x = -4 + i * 4, z = -5; const g = new THREE.Group(); g.position.set(x, 0, z); S.add(g); mk(rbox(3, 2.2, .6, .05), '#8C5B3A', 0, 1.1, 0, g); for (let k = 0; k < 12; k++) [.55, 1.25, 1.9].forEach((y, j) => mk(box(.16, .5, .4), [col, '#FFFFFF', '#5E9A57'][(k + j) % 3], -1.3 + k * .22, y, .17, g, false)); const s = signBoard(zh, 1.5, .45, col); s.position.set(0, 2.5, .3); g.add(s); sp.solids.push([x - 1.6, -5.5, x + 1.6, -4.6]); return { zh, en, x, z: -3.6, i }; });
     mk(rbox(3.6, .8, 1.4, .06), '#B98A5A', 2.6, .4, 2); sp.solids.push([.8, 1.3, 4.4, 2.7]);
     Q.tales = TALES.map(([zh, en], i) => { const b = new THREE.Mesh(new THREE.BoxGeometry(.6, .08, .8), [tm('#FFFFFF'), tm('#FFFFFF'), new THREE.MeshBasicMaterial({ map: bookTex(zh, ['#5E9A57', '#4F86C6', '#8E6BBF'][i]) }), tm('#FFFFFF'), tm('#FFFFFF'), tm('#FFFFFF')]); b.position.set(1.6 + i * 1, .84, 2); S.add(b); const pop = new THREE.Group(); pop.position.set(1.6 + i * 1, .9, 2); pop.visible = false; S.add(pop); scene(pop, i); return { zh, en, i, b, pop, x: 1.6 + i * 1, z: 3.2 }; });
     const clock = new THREE.Mesh(new THREE.CircleGeometry(.55, 32), new THREE.MeshBasicMaterial({ map: canvasTex(128, 128, (c) => { c.fillStyle = '#FFFFFF'; c.beginPath(); c.arc(64, 64, 58, 0, 7); c.fill(); c.strokeStyle = '#2B2420'; c.lineWidth = 6; c.stroke(); c.lineCap = 'round'; c.beginPath(); c.moveTo(64, 64); c.lineTo(64, 24); c.moveTo(64, 64); c.lineTo(64, 14); c.stroke(); }) })); clock.position.set(5.6, 3.6, -5.48); S.add(clock);
