@@ -3574,6 +3574,19 @@ function blocked(x, z, fromY) {
     if (sp.raised && fromY !== undefined && Math.abs(raisedAt(sp, x, z) - Math.max(0, fromY - .2)) > .55 && Math.abs(raisedAt(sp, x, z) - raisedAt(sp, ME().obj.position.x, ME().obj.position.z)) > .55) return true; }
   return sp.solids.some(([a, b, c, d]) => x > a && x < c && z > b && z < d);
 }
+/* How much traffic there is at this hour: all of it by day, thinning out through the evening, none from 9 pm until 6 am. */
+function carShare() { const d = new Date(), h = d.getHours() + d.getMinutes() / 60; return h < 6 ? 0 : h < 7 ? h - 6 : h < 18 ? 1 : h < 21 ? (21 - h) / 3 : 0; }
+/* A garage at the end of a road: cars drive in and out of it instead of appearing from nowhere. mx is where its doorway
+   is, d which way the building lies from there (+1 towards +x), z the middle of the road. */
+function garage(S, solids, mx, z, d) {
+  const wall = '#DCD5C6', dark = '#3B3733', roofC = '#6B7080', cx = mx + d * 2.3;
+  mk(new THREE.BoxGeometry(.3, 2.9, 6), wall, mx + d * 4.45, 1.45, z, S); mk(new THREE.BoxGeometry(.06, 2.7, 5.4), dark, mx + d * 4.27, 1.4, z, S, false);
+  [-2.85, 2.85].forEach(dz => { mk(new THREE.BoxGeometry(4.6, 2.9, .3), wall, cx, 1.45, z + dz, S); mk(new THREE.BoxGeometry(4.3, 2.7, .06), dark, cx, 1.4, z + dz * .94, S, false); });
+  mk(new THREE.BoxGeometry(.3, .7, 6), wall, mx + d * .15, 2.55, z, S); mk(new THREE.BoxGeometry(.34, .16, 6.04), '#E8574A', mx + d * .15, 2.2, z, S, false);
+  mk(new THREE.BoxGeometry(5.2, .3, 6.6), roofC, cx, 3.05, z, S); mk(new THREE.BoxGeometry(4.2, .04, 5.4), dark, cx, .1, z, S, false);
+  try { const b = signBoard('车库', 1.7, .7, '#5B6272'); b.position.set(cx, 2.1, z + 3.04); (S || W.scene).add(b); } catch (e) { }   /* named on the wall that faces the camera */
+  solids.push([Math.min(mx, mx + d * 4.6), z - 3, Math.max(mx, mx + d * 4.6), z + 3]);
+}
 /* cars are solid: you cannot walk into one (and a car, for its part, stops for anybody in the road ahead of it) */
 const AUTOS = [];
 function carAt(x, z) {
@@ -6993,7 +7006,7 @@ const Isle2 = (() => {
     const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea, { shore: 1 });
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#86C766', Y.grass));
     // streets: the main avenue and the north-south street cross in the middle
-    plane(64, 4.4, '#8E8C92', 0, Y.road, Z.cross[1]); plane(4.4, 25.4, '#8E8C92', 0, Y.road, -10.9); plane(4.4, 23.8, '#8E8C92', 0, Y.road, 18.1);   // the two halves stop at the avenue's edges, so no road lies on another
+    plane(64, 4.4, '#8E8C92', 0, Y.road, Z.cross[1]); garage(null, sp.solids, -27.2, Z.cross[1], -1); garage(null, sp.solids, 27.2, Z.cross[1], 1); plane(4.4, 25.4, '#8E8C92', 0, Y.road, -10.9); plane(4.4, 23.8, '#8E8C92', 0, Y.road, 18.1);   // the two halves stop at the avenue's edges, so no road lies on another
     for (let k = -3; k <= 3; k++) { plane(.5, 3, '#FFFFFF', k * .7, Y.stripe, Z.cross[1] + 3.4); plane(.5, 3, '#FFFFFF', k * .7, Y.stripe, Z.cross[1] - 3.4); plane(3, .5, '#FFFFFF', 3.4, Y.stripe, Z.cross[1] + k * .7); plane(3, .5, '#FFFFFF', -3.4, Y.stripe, Z.cross[1] + k * .7); }
     for (let x = -30; x <= 30; x += 4) if (Math.abs(x) > 5) plane(1.8, .16, '#F3E7C4', x, Y.stripe, Z.cross[1]);
     // pavements in front of the buildings
@@ -7532,7 +7545,7 @@ const B2d = (() => {
       const pl = signBoard('车', .5, .34, '#4C4A5A'); pl.position.set(x, 3, z + .22); S.add(pl);
       I().solids.push([x - .2, z - .2, x + .2, z + .2]); return { r: L[0], g: L[2] };
     });
-    Q.cars = [[-30, cz - 1.1, 'x', '#E8574A'], [cx + 1.1, 25, 'z', '#4F86C6']].map(([x, z, ax, col]) => { const g = new THREE.Group(); g.position.set(x, 0, z); S.add(g); mk(rbox(1.8, .8, 3.2, .3), col, 0, .7, 0, g); mk(rbox(1.5, .6, 1.6, .2), '#9FD0E6', 0, 1.3, -.2, g); [[-.85, -1], [.85, -1], [-.85, 1], [.85, 1]].forEach(([a, b]) => { const w = mk(cyl(.32, .32, .25, 12), '#2B2420', a, .32, b, g); w.rotation.z = Math.PI / 2; }); if (ax === 'x') g.rotation.y = Math.PI / 2; g.userData.auto = ax; AUTOS.push(g); return { g, ax }; });
+    Q.cars = [[-31, cz - 1.1, 1, '#E8574A'], [31, cz + 1.1, -1, '#4F86C6']].map(([x, z, dir, col], n) => { const g = new THREE.Group(); g.position.set(x, 0, z); S.add(g); mk(rbox(1.8, .8, 3.2, .3), col, 0, .7, 0, g); mk(rbox(1.5, .6, 1.6, .2), '#9FD0E6', 0, 1.3, -.2, g); [[-.85, -1], [.85, -1], [-.85, 1], [.85, 1]].forEach(([a, b]) => { const w = mk(cyl(.32, .32, .25, 12), '#2B2420', a, .32, b, g); w.rotation.z = Math.PI / 2; }); g.rotation.y = dir * Math.PI / 2; g.userData.auto = 'x'; AUTOS.push(g); g.visible = false; return { g, ax: 'x', dir, n, parked: true, rest: 1 + n * 4 }; });   /* each waits in its garage and drives the avenue to the garage at the other end */
     setLight(false);
   }
   function setLight(green) { Q.green = green; Q.t = 0; Q.heads.forEach(h => { h.r.material.color = lin(green ? '#5A1E1E' : '#FF4A3A'); h.g.material.color = lin(green ? '#3AE06A' : '#1E4A2A'); });
@@ -7542,10 +7555,14 @@ const B2d = (() => {
     const [cx, cz] = C(), v = 9 * dt;   // on the walk signal a car drives up to its stop line and waits there; one already in the junction drives on out
     // cars always give way to a person: they wait at the stop line while you are on a crossing, and brake when you are in the road ahead of them
     const me = ME().obj.position, mine = ME().space === 'isle2', onCross = mine && Math.abs(me.x - cx) < 5.4 && Math.abs(me.z - cz) < 5.4, wait = Q.green || onCross;
-    const carX = Q.cars.find(c => c.ax === 'x'), carZ = Q.cars.find(c => c.ax === 'z'), xIn = !!carX && Math.abs(carX.g.position.x - cx) < 9.5, xNear = !!carX && carX.g.position.x > cx - 17 && carX.g.position.x < cx + 9.5, zIn = !!carZ && carZ.g.position.z < cz + 6.9 && carZ.g.position.z > cz - 9.5;
-    Q.cars.forEach(c => { const p = c.g.position;
-      if (c.ax === 'x') { if (mine && Math.abs(me.z - p.z) < 1.9 && me.x - p.x > 1.9 && me.x - p.x < 5.5) return; let nx = p.x + v; if ((wait || zIn) && p.x <= cx - 7 && nx > cx - 7) nx = cx - 7; p.x = nx > 32 ? -32 : nx; }
-      else { if (mine && Math.abs(me.x - p.x) < 1.9 && p.z - me.z > 1.9 && p.z - me.z < 5.5) return; let nz = p.z - v; if ((wait || xNear) && p.z >= cz + 7 && nz < cz + 7) nz = cz + 7; p.z = nz < -17.5 ? 25 : nz; } });
+    const share = carShare();
+    Q.cars.forEach(c => { const p = c.g.position, d = c.dir;
+      /* in the garage: out again after a rest that grows longer as the evening goes on; the second car stops first, and by night none leaves */
+      if (c.parked) { c.rest -= dt; if (c.rest > 0 || share <= c.n * .5) return; c.parked = false; }
+      if (mine && Math.abs(me.z - p.z) < 1.9 && (me.x - p.x) * d > 1.9 && (me.x - p.x) * d < 5.5) return;
+      let nx = p.x + v * d; const stop = cx - 7 * d; if (wait && (stop - p.x) * d >= 0 && (stop - nx) * d < 0) nx = stop;
+      p.x = nx; c.g.visible = Math.abs(p.x) < 29.6;
+      if (p.x * d > 31) { p.x = -31 * d; c.parked = true; c.g.visible = false; c.rest = 3 + Math.random() * 5 + (1 - share) * 30; } });
     Q.clear = !Q.cars.some(c => c.ax === 'x' ? Math.abs(c.g.position.x - cx) < 6.9 : Math.abs(c.g.position.z - cz) < 6.9);
   }
 
@@ -8009,7 +8026,7 @@ const Isle3 = (() => {
     const sea = mk(new THREE.PlaneGeometry(900, 900), new THREE.MeshStandardMaterial({ color: lin('#5AB4E0'), roughness: .3, metalness: .1 }), 0, -.08, 0, null, false); sea.rotation.x = -Math.PI / 2; sp.water = sea; FX.water(sea, { shore: 1 });
     sp.walk.push(flat(86, 74, 14, '#F2E2B8', Y.sand), flat(80, 66, 12, '#8ACB68', Y.grass));
     // a market street with a crossroads, and the pier street
-    const [cx, cz] = Z.cross; plane(36, 4.4, '#8E8C92', cx, Y.road, cz); plane(4.4, 22.8, '#8E8C92', cx, Y.road, cz + 13.6); plane(4.4, 4.6, '#8E8C92', cx, Y.road, cz - 4.5);
+    const [cx, cz] = Z.cross; plane(36, 4.4, '#8E8C92', cx, Y.road, cz); garage(null, sp.solids, cx - 15.4, cz, -1); garage(null, sp.solids, cx + 15.4, cz, 1); plane(4.4, 22.8, '#8E8C92', cx, Y.road, cz + 13.6); plane(4.4, 4.6, '#8E8C92', cx, Y.road, cz - 4.5);
     /* one zebra crossing right across, including the middle where the footpath meets the road */
     for (let k = -3; k <= 3; k++) { plane(3, .5, '#FFFFFF', cx - 3.4, Y.stripe, cz + k * .7); plane(3, .5, '#FFFFFF', cx + 3.4, Y.stripe, cz + k * .7); plane(3.8, .5, '#FFFFFF', cx, Y.stripe, cz + k * .7); }
     plane(.3, 4.4, '#FFFFFF', cx - 6, Y.stripe, cz); plane(.3, 4.4, '#FFFFFF', cx + 6, Y.stripe, cz);
@@ -8139,8 +8156,8 @@ const B3 = (() => {
     const me = ME().obj.position, mine = ME().space === 'isle3', [kx, kz] = Isle3.Z.cross, onCross = mine && Math.abs(me.x - kx) < 5.4 && Math.abs(me.z - kz) < 4.3;   /* on the crossing, or waiting at the kerb beside it: cars stop at the line, as on the Book 5 island */
     const walkers = []; for (const k in PEOPLE) { const w = PEOPLE[k]; if (w && w.obj && k !== 'me' && w.space === 'isle3' && w.obj.visible && Math.abs(w.obj.position.z - kz) < 2.3 && Math.abs(w.obj.position.x - kx) < 18) walkers.push(w.obj.position); }
     Q.cars.forEach(c => { if (c.gone) return; left++; const p = c.g.position, ahead = c.dir > 0 ? p.x < c.stop : p.x > c.stop;
-      /* the road is 36 m long: a car is only seen while it is on it */
-      { const edge = 18.2 - Math.abs(p.x - kx); c.g.visible = edge > 0; if (edge > 0) c.g.scale.setScalar(Math.max(.05, Math.min(1, edge / 1.4))); }
+      /* the road runs from garage to garage: a car is seen from the moment it leaves one until it is inside the other */
+      c.g.visible = Math.abs(p.x - kx) < 17.8;   /* beyond that it is inside a garage */
       c.held = mine && Math.abs(me.z - p.z) < 1.9 && (me.x - p.x) * c.dir > 1.9 && Math.abs(me.x - p.x) < 5.5   // you are in the road ahead (beside the car does not count: it may drive on past you)
         || walkers.some(w => (w.x - p.x) * c.dir > 0 && Math.abs(w.x - p.x) < 5.5)   // or a neighbour is
         || Q.cars.some(o => o !== c && !o.gone && o.held && Math.abs(o.g.position.z - p.z) < .5 && (o.g.position.x - p.x) * c.dir > 0 && Math.abs(o.g.position.x - p.x) < 4.2);   // or the car in front has stopped for you
@@ -8154,7 +8171,8 @@ const B3 = (() => {
       if (!Q.carGreen) setCars(true);
       if (Q.cars.some(c => c.gone)) Q.cars = Q.cars.filter(c => !c.gone);
       Q.trafficT = (Q.trafficT == null ? 2 : Q.trafficT) - dt;
-      if (Q.trafficT <= 0 && Q.cars.length < 3) { Q.trafficT = 4 + Math.random() * 6; const dir = Math.random() < .5 ? 1 : -1; if (!Q.cars.some(c => c.dir === dir && Math.abs(c.g.position.x - (Isle3.Z.cross[0] - dir * 22)) < 6)) car(dir, 0); }
+      const share = carShare();   /* fewer cars as the evening goes on, none at night */
+      if (Q.trafficT <= 0 && share > 0 && Q.cars.length < Math.ceil(3 * share)) { Q.trafficT = (4 + Math.random() * 6) / share; const dir = Math.random() < .5 ? 1 : -1; if (!Q.cars.some(c => c.dir === dir && Math.abs(c.g.position.x - (Isle3.Z.cross[0] - dir * 22)) < 6)) car(dir, 0); }
     }
   }
 
