@@ -179,6 +179,7 @@ body:not(.playing) .hud, body:not(.playing) .zoomBtn { visibility: hidden; }
   <canvas id="gl" aria-label="中文群岛"></canvas>
   <div class="hud">
     <span class="chip" aria-label="Stars"><span class="star">★</span><span id="stars">0</span></span>
+    <button class="chip" id="dailyBtn" style="display:none;border:0;cursor:pointer;font:inherit" aria-label="Daily challenge">📅 今日挑战</button>
     <button class="chip hidden" id="exitBtn" aria-label="Go out" style="cursor:pointer;font-size:16px;white-space:nowrap">🚪 出去<span class="en-only" style="font-weight:400;font-size:13px">Out</span></button>
     <span class="sp"></span>
     <button class="rb" id="voiceBtn" aria-label="Voices"><svg><use href="#i-speak"/></svg></button>
@@ -2225,7 +2226,13 @@ void main() {
       /* nor within a step of a pond, lake or stream: the bank is left bare */
       const wet = nearPond(x, z, h.point.y), afloat = wet || (!!G0.ponds && hits.some(q => G0.ponds.has(q.object) && q.point.y <= h.point.y + .05 && q.point.y > h.point.y - 1.5));
       _c.copy(mat.userData.fx0 || mat.color).convertLinearToSRGB().getHSL(_hsl); const y = h.point.y, green = !afloat && _hsl.h >= .19 && _hsl.h <= .42 && _hsl.s >= .22;
-      Object.assign(cell, { t: green ? 'g' : 'p', wet, y, h: _hsl.h, s: _hsl.s, l: _hsl.l });   // 'g' grass, 'p' any other flat ground (path, road, sand, water), 'x' not ground
+      Object.assign(cell, { t: green ? 'g' : 'p', wet, y, h: _hsl.h, s: _hsl.s, l: _hsl.l });
+      /* here and there a soft patch of lighter or darker grass, so the lawn is not one flat colour; only where the whole patch lies on lawn */
+      if (green && !wet && (st.patches = st.patches || 0) < 48 && Math.random() < .35) { let r = 1.3 + Math.random() * 1.9; const fits = q => [[q, 0], [-q, 0], [0, q], [0, -q]].every(([ax, az]) => lawn(x + ax, z + az, y));
+        if (!fits(r * .85)) r *= .5; if (fits(r * .85)) { st.patches++;
+          if (!SEA.patch) { const pt = canvasTex(128, 128, c => { const gr = c.createRadialGradient(64, 64, 6, 64, 64, 62); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.6, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(0, 0, 128, 128); });
+            SEA.patch = { geo: new THREE.CircleGeometry(1, 24), dark: new THREE.MeshBasicMaterial({ map: pt, color: 0x2E5A1E, transparent: true, opacity: .16, depthWrite: false }), light: new THREE.MeshBasicMaterial({ map: pt, color: 0xFFF7B0, transparent: true, opacity: .2, depthWrite: false }) }; }
+          const pm = new THREE.Mesh(SEA.patch.geo, Math.random() < .5 ? SEA.patch.dark : SEA.patch.light); pm.rotation.x = -Math.PI / 2; pm.rotation.z = Math.random() * 3; pm.scale.set(r, r * (.65 + Math.random() * .35), 1); pm.position.set(x, y + .016, z); pm.userData.fx = true; here.scene.add(pm); } }   // 'g' grass, 'p' any other flat ground (path, road, sand, water), 'x' not ground
       /* where grass meets a path, a road or a pond, it grows thicker and shorter along the border, so the edge is not a ruled line */
       for (let k = 0; k < 4; k++) {
         const nb = st.cells.get((cx + [1, -1, 0, 0][k]) + ',' + (cz + [0, 0, 1, -1][k]));
@@ -2788,7 +2795,7 @@ const Sit = (() => {
   return { add, nearby, up, apply: () => cur && apply(), get sitting() { return !!cur; }, seats: sp => SEATS[sp] || [] };
 })();
 const Guide = (() => {
-  let last = -9, tt = 0, list = {};
+  let last = -9, tt = 0, list = {}, listAt = '';
   const marks = {};
   const RANGE = { town: [2, 12], isle1: [101, 112], isle2: [201, 212], isle3: [301, 312], isle4: [401, 412] };
   function pick() {
@@ -2834,8 +2841,16 @@ const Guide = (() => {
       const placed = []; shown.map(q => [q, rect(q[4])]).sort((a, b) => a[1][4] - b[1][4]).forEach(([q, r]) => { let n = 0; while (n < 4 && r[4] < 1 && placed.some(o => Math.abs(o[0] - r[0]) < o[2] + r[2] && Math.abs(o[1] - r[1]) < o[3] + r[3])) { q[4].position.y += .8; q[3] += .94; r = rect(q[4]); n++; } placed.push(r); }); } catch (e) { }
     stack = shown;
   }
+  /* the task panel names the next lesson on this island and who to go and find for it */
+  function board() {
+    const q = $('quest'); if (!q || (G.quest > 0 && G.quest < 9)) return;   // the first shopping quest writes the panel itself
+    const r = RANGE[here.name]; let n = 0; if (r && !(here.name === 'town' && G.quest < 9)) for (let k = r[0]; k <= r[1]; k++) if (B5.HOSTS[k] && !B5.prog(k).done) { n = k; break; }
+    const nm = n && NAMES[B5.HOSTS[n]], L = n && B5.lesson(n); if (!nm || !L) { q.classList.add('hidden'); return; }
+    const ask = B5.prog(n).task;
+    $('questZh').textContent = `第${n % 100}课《${L.t}》：${ask ? `去找${nm[0]}回答问题` : `去找${nm[0]}`}`; $('questEn').textContent = `Lesson ${n % 100} · ${ask ? 'Answer the questions' : 'Find'}: ${nm[1]}`; q.classList.remove('hidden');
+  }
   function tick(dt) {
-    tt += dt; if (tt - last > 1.2) { last = tt; list = open(); }
+    tt += dt; if (tt - last > 1.2 || listAt !== here.name) { last = tt; listAt = here.name; list = open(); try { board(); } catch (e) { } }
     Object.values(marks).forEach(m => { m.visible = false; }); nameTags();
     if (UI.talking) return;
     Object.entries(list).forEach(([h, ch]) => {
@@ -3330,7 +3345,7 @@ const makeLook = key => { const L = LOOKS[key]; return makeChar(L.base, L.pal, L
 /* your own character from the choices on the title screen */
 function makeKid(l) {
   const list = HAIRSTYLES[l.gender] || HAIRSTYLES.girl, st = list[Math.min(l.style || 0, list.length - 1)];
-  return makeChar('kid', kidPal({ hair: HAIRS[l.hair], shirt: SHIRTS[l.shirt], pants: PANTS[l.pants], skin: SKINS[l.skin] }), .8, { head: st.head, extra: st.extra, glasses: !!l.glasses, hairCol: HAIRS[l.hair] });
+  return makeChar('kid', kidPal({ hair: HAIRS[l.hair], shirt: l.shirtCol || SHIRTS[l.shirt], pants: l.pantsCol || PANTS[l.pants], skin: SKINS[l.skin] }), .8, { head: st.head, extra: st.extra, glasses: !!l.glasses, hairCol: HAIRS[l.hair] });
 }
 const PEOPLE = {};
 function putIn(ch, sp, x, z, ry = 0) { sp.scene.add(ch.obj); ch.space = sp.name; gsap.killTweensOf(ch.obj.position); ch.obj.position.set(x, sp.floor(x, z), z); ch.obj.rotation.y = ry; ch.play('idle'); }
@@ -3950,7 +3965,7 @@ const G = Object.assign(G0(), store.get(G_KEY, {}));
    question; a wrong answer sends it back. Quizzes and the night review ask the words that are new, shaky or due first,
    instead of picking at random, and the bag shows a page of all this for a parent to read. */
 const Learn = (() => {
-  const DAY = 864e5, KINDS = ['mean', 'listen', 'word', 'pinyin'];
+  const DAY = 864e5, KINDS = ['mean', 'listen', 'cloze', 'word', 'pinyin'];
   const all = () => G.learn || (G.learn = { w: {} });
   const peek = (n, w) => all().w[n + ':' + w] || null;
   const rec = (n, w) => all().w[n + ':' + w] || (all().w[n + ':' + w] = { r: 0, x: 0, k: '', s: 0, due: 0, lv: 0 });
@@ -3969,11 +3984,41 @@ const Learn = (() => {
     const [w, py, mean, n] = W, r = peek(n, w), fresh = KINDS.filter(k => !r || r.k.indexOf(k[0]) < 0), kind = (fresh.length ? fresh : KINDS)[turn % (fresh.length || KINDS.length)];
     const others = shuf(pool.filter(o => o[0] !== w && o[2] !== mean && o[1] !== py)); if (others.length < 2) return null;
     const o2 = others.slice(0, 2);
+    /* fill the blank: a sentence of the lesson's own text with this word taken out */
+    if (kind === 'cloze') { const st = shuf(sentences(n).filter(t => t.indexOf(w) >= 0 && t.length <= 42))[0], o3 = others.filter(o => !st || st.indexOf(o[0]) < 0).slice(0, 2);
+      if (st && o3.length === 2) return { q: st.replace(w, '＿＿') + '。', a: w, w: o3.map(o => o[0]), qe: 'Which word fills the blank?', word: w, kind, n }; return { q: `「${w}」是什么意思？`, a: mean, w: o2.map(o => o[2]), qe: `What does “${w}” (${py}) mean?`, word: w, kind: 'mean', n }; }
     if (kind === 'mean') return { q: `「${w}」是什么意思？`, a: mean, w: o2.map(o => o[2]), qe: `What does “${w}” (${py}) mean?`, word: w, kind, n };
     if (kind === 'word') return { q: `哪一个词是 “${mean}”？`, a: w, w: o2.map(o => o[0]), qe: `Which word means “${mean}”?`, word: w, kind, n };
     if (kind === 'pinyin') return { q: `「${py}」是哪一个词？`, a: w, w: o2.map(o => o[0]), qe: `Which word is read “${py}”?`, word: w, kind, n };
     return { q: '听一听，是哪一个词？（点这里再听一次）', a: w, w: o2.map(o => o[0]), qe: 'Listen: which word is it? (Tap here to hear it again.)', say: w, word: w, kind, n };
   }
+  const sentences = n => { try { return B5.lesson(n).pages.map(p => p.zh).join('\n').split(/[。！？!?\n]+/).map(t => t.trim().replace(/^[“”"「」]+|[“”"「」]+$/g, '')).filter(t => t.length >= 4); } catch (e) { return []; } };
+  const cut = t => t.length > 24 ? t.slice(0, 23) + '…' : t;
+  /* what comes next in the text: shows whether the story itself has gone in */
+  function nextQ(n) { const S = sentences(n); if (S.length < 4) return null; const i = Math.floor(Math.random() * (S.length - 1)), rest = shuf(S.filter((t, k) => k !== i && k !== i + 1 && t !== S[i + 1])).slice(0, 2); if (rest.length < 2) return null;
+    return { q: `课文里，「${cut(S[i])}」的下一句是？`, a: cut(S[i + 1]), w: rest.map(cut), qe: 'In the text, which sentence comes next?', n }; }
+  const doneLessons = () => { try { return Object.keys(B5.HOSTS || {}).map(Number).concat([1]).filter(n => { try { return B5.prog(n).done; } catch (e) { return false; } }); } catch (e) { return []; } };
+  /* ---- the daily challenge: five words that are due again (one, three and seven days after they were last got right),
+     shaky or never asked, from every finished lesson, and one question about a text. Once a day; days in a row count. */
+  const today = () => new Date().toDateString();
+  function dailyQs() { const L = doneLessons(), pools = {}; let pool = []; L.forEach(n => { pools[n] = words(n); if (pools[n].length >= 3) pool = pool.concat(pools[n]); });
+    const qs = pool.sort((a, b) => rank(a[3], a[0]) - rank(b[3], b[0])).slice(0, 5).map((W, i) => question(W, pools[W[3]], i)).filter(Boolean); const nx = L.length ? nextQ(L[Math.floor(Math.random() * L.length)]) : null; if (nx) qs.push(nx); return qs; }
+  function dailyReady() { try { return all().day !== today() && doneLessons().some(n => words(n).length >= 3); } catch (e) { return false; } }
+  function dueCount() { let c = 0; doneLessons().forEach(n => words(n).forEach(W => { const r = peek(n, W[0]); if (!r || r.lv < 2 || r.due <= Date.now()) c++; })); return c; }
+  function run(who, qs) { return new Promise(res => { let i = 0, right = 0;
+    const next = () => { if (i >= qs.length) { $('qText').onclick = null; closeVeil('qVeil'); res(right); return; }
+      const q = qs[i++], hear = () => Voice.speak(q.say || q.q.replace(/＿+/g, '什么'), q.say ? .6 : .72); $('qWho').textContent = `${who}（${i}/${qs.length}）`; $('qText').textContent = q.q; $('qEn').textContent = q.qe || ''; $('qText').onclick = q.say ? hear : null;
+      const c = $('qFish').getContext('2d'); c.clearRect(0, 0, 180, 120); c.font = '700 70px sans-serif'; c.textAlign = 'center'; c.fillStyle = '#E9A90F'; c.fillText(q.say ? '♪' : '？', 90, 92);
+      const box = $('qOpts'); box.innerHTML = ''; box.classList.remove('pics');
+      shuf([q.a].concat(q.w).map((o, k) => ({ o, ok: k === 0 }))).forEach(({ o, ok }) => { const b = document.createElement('button'); b.className = 'qbtn'; b.textContent = o; if (ok) b.dataset.ok = '1';
+        b.onclick = async () => { box.querySelectorAll('button').forEach(x => x.disabled = true); if (q.word) mark(q.n, q.word, ok, q.kind);
+          if (ok) { right++; b.classList.add('right'); Sfx.play('found'); await Voice.speak('答对了！', .72); } else { b.classList.add('wrong'); Sfx.play('nope'); [...box.children].find(x => x.dataset.ok).classList.add('right'); await Voice.speak('答案是：' + q.a, .72); } await wait(600); next(); };
+        box.appendChild(b); });
+      $('qVeil').classList.remove('hidden'); UI.busy = true; hear(); };
+    next(); }); }
+  async function runDaily() { if (!dailyReady() || UI.busy) return; const qs = dailyQs(); if (!qs.length) return; const right = await run('今日挑战', qs), L = all(), y = new Date(Date.now() - DAY).toDateString();
+    L.streak = L.day === y ? (L.streak || 1) + 1 : 1; L.day = today(); const stars = 20 + Math.min(25, 5 * (L.streak - 1)) + right * 2; setStars(G.stars + stars); try { saveG(); } catch (e) { }
+    reward('今日挑战完成了！', `答对 ${right}/${qs.length} 题　连续 ${L.streak} 天　得到 ${stars} 颗小星星。明天再来！`); }
   function forQuiz(n, count) { const pool = words(n); if (pool.length < 3) return []; return pool.slice().sort((a, b) => rank(n, a[0]) - rank(n, b[0])).slice(0, count).map((W, i) => question(W, pool, i)).filter(Boolean); }
   /* from a list of [word, pinyin, meaning, lesson]: the one most in need of asking */
   function weakest(list) { let best = null, bv = 9; list.forEach(W => { const v = W[3] != null ? rank(W[3], W[0]) : 5; if (v < bv) { bv = v; best = W; } }); return best || list[0]; }
@@ -3982,13 +4027,100 @@ const Learn = (() => {
   function rows(g) {
     try { const ns = Object.keys(B5.HOSTS || {}).map(Number).concat([1]).filter(n => { try { return B5.prog(n).done; } catch (e) { return false; } }).sort((a, b) => a - b); if (!ns.length) return;
       const box = document.createElement('div'); box.style.cssText = 'grid-column:1/-1;text-align:left;padding:10px 6px 4px;line-height:1.6;font-size:15px;border-top:2px dashed rgba(0,0,0,.12);margin-top:8px';
-      let h = '<div style="font-weight:700;font-size:17px;margin-bottom:4px">学习记录<small class="en-only"> Learning record</small></div><div style="opacity:.7;font-size:13px;margin-bottom:6px">每个词要用两种不同的问法答对，才算学会。<span class="en-only"><br>A word counts as learned once it is answered correctly in two different kinds of question.</span></div>';
+      let h = '<div style="font-weight:700;font-size:17px;margin-bottom:4px">学习记录<small class="en-only"> Learning record</small></div><div style="opacity:.7;font-size:13px;margin-bottom:6px">每个词要用两种不同的问法答对，才算学会。<span class="en-only"><br>A word counts as learned once it is answered correctly in two different kinds of question.</span><br>今天该复习的词：' + dueCount() + ' 个　今日挑战连续：' + (all().streak || 0) + ' 天<span class="en-only"> · words due today: ' + dueCount() + ', daily challenge streak: ' + (all().streak || 0) + ' days</span></div>';
       ns.forEach(n => { const L = B5.lesson(n), t = tally(n), big = B5.prog(n).big || 0, book = n > 100 ? '一二三四'[Math.floor(n / 100) - 1] : '五', ln = n > 100 ? n % 100 : n;
         h += `<div style="margin:5px 0"><b>第${book}册 第${ln}课《${L ? L.t : ''}》</b> <span style="color:#E9A90F">${'★'.repeat(big)}</span><span style="opacity:.3">${'★'.repeat(3 - big)}</span><br>学会 ${t.yes}　有点会 ${t.some}　还没考过或不会 ${t.no}<span class="en-only"> · learned ${t.yes}, getting there ${t.some}, not yet ${t.no}</span>${t.weak.length ? `<br><span style="color:#C8453B">常错：${t.weak.slice(0, 8).join('、')}</span>` : ''}</div>`; });
       box.innerHTML = h; g.appendChild(box); } catch (e) { }
   }
-  return { mark, forQuiz, weakest, tally, rows, words, peek };
+  return { mark, forQuiz, weakest, tally, rows, words, peek, nextQ, dailyReady, runDaily, dueCount, streak: () => all().streak || 0 };
 })();
+/* ---------- Star shop: what the stars are for ----------
+   Stars buy clothes (new colours and hats, worn straight away) and things for the family home (they stand in the room
+   from then on). Every finished lesson also gives a sticker for the sticker book, free, showing the big stars earned. */
+const Shop = (() => {
+  const own = () => G.shop || (G.shop = { got: {}, on: {} });
+  const CLOTHES = [
+    { id: 's-orange', zh: '橙色上衣', en: 'Orange top', part: 'shirt', col: '#F28C28', p: 150 }, { id: 's-pink', zh: '粉色上衣', en: 'Pink top', part: 'shirt', col: '#FFB3C7', p: 150 },
+    { id: 's-mint', zh: '薄荷绿上衣', en: 'Mint top', part: 'shirt', col: '#7FDBC8', p: 150 }, { id: 's-night', zh: '深蓝上衣', en: 'Navy top', part: 'shirt', col: '#2B3A67', p: 200 },
+    { id: 's-gold', zh: '金色上衣', en: 'Gold top', part: 'shirt', col: '#E2B93B', p: 300 },
+    { id: 'p-red', zh: '红裤子', en: 'Red trousers', part: 'pants', col: '#C8453B', p: 150 }, { id: 'p-sky', zh: '天蓝裤子', en: 'Sky-blue trousers', part: 'pants', col: '#6FB7DA', p: 150 }, { id: 'p-black', zh: '黑裤子', en: 'Black trousers', part: 'pants', col: '#2E2E38', p: 200 },
+    { id: 'h-straw', zh: '草帽', en: 'Straw hat', part: 'hat', col: '#E3C565', p: 250 }, { id: 'h-cap', zh: '棒球帽', en: 'Cap', part: 'hat', col: '#4F86C6', p: 250 }, { id: 'h-crown', zh: '小皇冠', en: 'Little crown', part: 'hat', col: '#F2C14E', p: 300 }];
+  const FURN = [
+    { id: 'rug', zh: '地毯', en: 'Rug', icon: '🟥', p: 200 }, { id: 'plant', zh: '盆栽', en: 'Potted plant', icon: '🪴', p: 200 }, { id: 'lamp', zh: '台灯', en: 'Lamp', icon: '💡', p: 250 },
+    { id: 'bear', zh: '小熊', en: 'Teddy bear', icon: '🧸', p: 300 }, { id: 'tank', zh: '鱼缸', en: 'Fish tank', icon: '🐟', p: 350 }, { id: 'globe', zh: '地球仪', en: 'Globe', icon: '🌍', p: 400 },
+    { id: 'train', zh: '小火车', en: 'Toy train', icon: '🚂', p: 400 }, { id: 'piano', zh: '小钢琴', en: 'Toy piano', icon: '🎹', p: 500 }];
+  /* put on what is switched on: colours through the character's own palette, the hat on the head */
+  function wear() {
+    const me = PEOPLE.me, S = own(); if (!me || !G.look) return;
+    const pick = part => { const it = CLOTHES.find(c => c.id === S.on[part]); return it && S.got[it.id] ? it : null; }, sh = pick('shirt'), pa = pick('pants'), hat = pick('hat');
+    G.look.shirtCol = sh ? sh.col : null; G.look.pantsCol = pa ? pa.col : null; try { me.recolor(lookPal(G.look)); } catch (e) { }
+    const old = me.obj.userData.shopHat; if (old) { me.obj.remove(old); me.obj.userData.shopHat = null; }
+    if (hat && !me.obj.userData.hat) { const h = new THREE.Group(); h.position.y = 2.0; me.obj.add(h); me.obj.userData.shopHat = h;
+      if (hat.id === 'h-straw') { mk(cyl(.62, .62, .04, 20), hat.col, 0, -.1, 0, h, false); mk(cyl(.3, .38, .24, 18), hat.col, 0, .02, 0, h, false); mk(cyl(.385, .385, .06, 18), '#C8453B', 0, -.06, 0, h, false); }
+      else if (hat.id === 'h-cap') { const d = mk(new THREE.SphereGeometry(.4, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), hat.col, 0, -.14, 0, h, false); d.scale.y = .8; mk(box(.5, .04, .34), hat.col, 0, -.12, .5, h, false); mk(sph(.05, 8), '#FFFFFF', 0, .18, 0, h, false); }
+      else { mk(cyl(.3, .32, .16, 18), hat.col, 0, -.04, 0, h, false); for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283; mk(new THREE.ConeGeometry(.07, .2, 6), hat.col, Math.cos(a) * .27, .12, Math.sin(a) * .27, h, false); mk(sph(.035, 6), k % 2 ? '#E8574A' : '#4F86C6', Math.cos(a) * .31, -.04, Math.sin(a) * .31, h, false); } } }
+  }
+  /* the things bought for the home stand along the front of the room, the rug in the middle */
+  function place(name) {
+    const sp = SP[name]; if (!sp || sp.sky || !/^home/.test(name) || !sp.box) return; const S = own(), b = sp.box, cx = (b[0] + b[2]) / 2, w = b[2] - b[0], zf = b[3] - 2.5, rx = b[0] + 2.6, rz = b[3] - 4.1;   /* a row across the front of the room, inside the view, and the rug on the left */
+    if (sp.__decor) sp.scene.remove(sp.__decor); const g = sp.__decor = new THREE.Group(); g.userData.fx = true; sp.scene.add(g);
+    const at = f => b[0] + w * f, has = id => !!S.got[id];
+    if (has('rug')) { mk(box(2.8, .03, 1.8), '#C8453B', rx, .02, rz, g, false); mk(box(2.5, .035, 1.5), '#F6E7B8', rx, .022, rz, g, false); mk(box(2, .04, 1), '#4F86C6', rx, .024, rz, g, false); }
+    if (has('plant')) { const x = at(.07); mk(cyl(.26, .2, .36, 12), '#B8683A', x, .18, zf, g); [[0, .75, .3], [-.18, .58, .22], [.2, .6, .24], [0, 1.02, .2]].forEach(([dx, y, r]) => mk(sph(r, 10), '#5E9A57', x + dx, y, zf, g)); }
+    if (has('lamp')) { const x = at(.17); mk(cyl(.2, .24, .06, 14), '#8A6A4A', x, .03, zf, g); mk(cyl(.035, .035, 1.5, 8), '#8A6A4A', x, .78, zf, g); mk(new THREE.ConeGeometry(.34, .4, 16, 1, true), '#F6E7B8', x, 1.62, zf, g, false).material.side = THREE.DoubleSide; const bl = new THREE.Mesh(sph(.1, 10), new THREE.MeshBasicMaterial({ color: 0xFFE9A8 })); bl.position.set(x, 1.52, zf); g.add(bl); }
+    if (has('bear')) { const x = at(.27), c = '#B98A5A'; mk(sph(.26, 12), c, x, .26, zf, g); mk(sph(.2, 12), c, x, .62, zf, g); [-1, 1].forEach(k => { mk(sph(.08, 8), c, x + k * .15, .8, zf, g, false); mk(sph(.1, 8), c, x + k * .26, .34, zf + .08, g, false); mk(sph(.11, 8), c, x + k * .16, .08, zf + .16, g, false); mk(sph(.025, 6), '#2B2420', x + k * .07, .66, zf + .18, g, false); }); mk(sph(.07, 8), '#F3E3C8', x, .58, zf + .17, g, false); }
+    if (has('tank')) { const x = at(.7); mk(box(.9, .5, .5), '#8A6A4A', x, .25, zf, g); const gl = new THREE.Mesh(box(.8, .5, .42), new THREE.MeshStandardMaterial({ color: 0x8FCBEF, transparent: true, opacity: .55, roughness: .1 })); gl.position.set(x, .76, zf); g.add(gl); [[-.2, .72, '#F28C28'], [.15, .86, '#E8574A'], [.05, .66, '#F7C948']].forEach(([dx, y, c2]) => mk(sph(.06, 8), c2, x + dx, y, zf, g, false).scale.set(1.5, .9, .6)); mk(box(.84, .04, .46), '#5B4A3A', x, 1.03, zf, g, false); }
+    if (has('globe')) { const x = at(.8); mk(cyl(.2, .24, .06, 14), '#5B4A3A', x, .03, zf, g); mk(cyl(.03, .03, .5, 8), '#5B4A3A', x, .3, zf, g); mk(sph(.3, 16), '#4F86C6', x, .82, zf, g); [[.1, .12, .25], [-.18, -.05, .12], [.05, -.2, .2], [-.05, .22, -.2]].forEach(([dx, dy, dz]) => mk(sph(.12, 8), '#5E9A57', x + dx, .82 + dy, zf + dz, g, false).scale.set(1, .7, 1)); }
+    if (has('train')) { const x = at(.94) - .5; [['#E8574A', 0], ['#4F86C6', .5], ['#F7C948', 1]].forEach(([c2, dx], i) => { mk(box(.42, .28, .3), c2, x + dx, .24, zf, g); [-.13, .13].forEach(wx => mk(cyl(.08, .08, .34, 10), '#2B2420', x + dx + wx, .08, zf, g, false).rotation.x = Math.PI / 2); if (!i) { mk(cyl(.06, .08, .2, 8), '#2B2420', x - .1, .48, zf, g, false); mk(box(.2, .2, .28), c2, x + .1, .48, zf, g, false); } }); }
+    if (has('piano')) { const x = at(.38); mk(box(1.1, .5, .5), '#C8453B', x, .55, zf - .1, g); mk(box(1, .05, .2), '#FFFFFF', x, .82, zf + .12, g, false); for (let k = 0; k < 5; k++) mk(box(.06, .06, .12), '#2B2420', x - .36 + k * .18, .85, zf + .09, g, false); [-.45, .45].forEach(dx => mk(box(.08, .3, .08), '#8E3327', x + dx, .15, zf - .1, g)); }
+  }
+  /* the pages in the bag: sticker book, clothes, things for the home */
+  function rows(g) {
+    const S = own(), head = (zh, en, note) => { const d = document.createElement('div'); d.style.cssText = 'grid-column:1/-1;text-align:left;padding:12px 6px 2px;font-weight:700;font-size:17px;border-top:2px dashed rgba(0,0,0,.12);margin-top:8px'; d.innerHTML = zh + '<small class="en-only"> ' + en + '</small>' + (note ? '<div style="font-weight:400;font-size:13px;opacity:.7">' + note + '</div>' : ''); g.appendChild(d); };
+    /* stickers */
+    let done = []; try { done = Object.keys(B5.HOSTS || {}).map(Number).concat([1]).filter(n => B5.prog(n).done).sort((a, b) => a - b); } catch (e) { }
+    if (done.length) { head('贴纸册', 'Sticker book', '每学完一课，就有一张贴纸。<span class="en-only"> A sticker for every lesson you finish.</span>');
+      done.forEach(n => { const L = B5.lesson(n), big = B5.prog(n).big || 0, bk = n > 100 ? Math.floor(n / 100) : 5, hue = ['#E8574A', '#F28C28', '#5E9A57', '#4F86C6', '#8E6BBF'][bk - 1], d = document.createElement('div'); d.className = 'cell got';
+        d.innerHTML = `<div style="width:64px;height:64px;border-radius:50%;margin:0 auto;background:${hue};border:4px solid #FFF6E2;box-shadow:0 2px 0 rgba(0,0,0,.15);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;line-height:1.05"><span style="font-size:20px;font-weight:700">${(L && L.t ? L.t : '').slice(0, 2)}</span><span style="font-size:11px;color:#FFE9A8">${'★'.repeat(big)}</span></div><div class="n">${L && L.t ? L.t : ''}</div><div class="c">第${'一二三四五'[bk - 1]}册 ${n > 100 ? n % 100 : n}</div>`; g.appendChild(d); }); }
+    const cell = (it, icon, kind) => { const d = document.createElement('div'), got = !!S.got[it.id], on = kind === 'c' && S.on[it.part] === it.id; d.className = 'cell' + (got ? ' got' : '');
+      d.innerHTML = `${icon}<div class="n">${it.zh}</div><div class="c">${got ? (kind === 'c' ? (on ? '穿着 ✓' : '点一下穿上') : '已经在家里') : '★ ' + it.p}</div>`;
+      d.onclick = () => { if (S.got[it.id]) { if (kind === 'c') { S.on[it.part] = on ? null : it.id; saveG(); wear(); openBag(); } return; }
+        if (G.stars < it.p) { d.querySelector('.c').textContent = '星星不够'; Sfx.play('nope'); return; }
+        if (!d.dataset.sure) { d.dataset.sure = '1'; d.querySelector('.c').textContent = '再点一次买下'; return; }
+        S.got[it.id] = 1; if (kind === 'c') S.on[it.part] = it.id; setStars(G.stars - it.p); saveG(); Sfx.play('found'); wear(); try { if (here) place(here.name); } catch (e) { } openBag(); };
+      g.appendChild(d); };
+    head('衣服', 'Clothes', '用星星换新衣服和帽子，点一下就穿上，再点一下脱掉。<span class="en-only"> Buy with stars; tap to wear, tap again to take off.</span>');
+    CLOTHES.forEach(it => cell(it, it.part === 'hat' ? `<div style="font-size:40px;line-height:64px;height:64px">${it.id === 'h-crown' ? '👑' : it.id === 'h-cap' ? '🧢' : '👒'}</div>` : `<div style="width:54px;height:54px;margin:5px auto;border-radius:${it.part === 'shirt' ? '14px 14px 8px 8px' : '6px'};background:${it.col};border:3px solid #FFF6E2;box-shadow:0 2px 0 rgba(0,0,0,.15)"></div>`, 'c'));
+    head('家里的东西', 'Things for home', '买下以后，就会摆在家里。<span class="en-only"> Once bought, it stands in your home.</span>');
+    FURN.forEach(it => cell(it, `<div style="font-size:40px;line-height:64px;height:64px">${it.icon}</div>`, 'f'));
+  }
+  return { wear, place, rows, CLOTHES, FURN };
+})();
+/* ---------- Backup code: the whole game in one piece of text ----------
+   Progress lives only in this browser. The code made here holds every saved thing (players, stars, lessons, what each
+   word's record is, the shop); pasted back in, here or on another device, it restores them all. */
+const Backup = (() => {
+  const PRE = 'ZW1:';
+  function make() { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('zhongwen-town.') === 0) o[k] = localStorage.getItem(k); } return PRE + btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
+  function read(code) { try { const t = String(code || '').trim(); if (t.indexOf(PRE) !== 0) return null; const o = JSON.parse(decodeURIComponent(escape(atob(t.slice(PRE.length).replace(/\s+/g, ''))))); const ks = Object.keys(o); if (!ks.length || !ks.every(k => k.indexOf('zhongwen-town.') === 0 && typeof o[k] === 'string')) return null; return o; } catch (e) { return null; } }
+  function restore(o) { Object.keys(o).forEach(k => localStorage.setItem(k, o[k])); }
+  function rows(g) {
+    const d = document.createElement('div'); d.style.cssText = 'grid-column:1/-1;text-align:left;padding:12px 6px 6px;border-top:2px dashed rgba(0,0,0,.12);margin-top:8px;line-height:1.6;font-size:14px';
+    d.innerHTML = '<div style="font-weight:700;font-size:17px">存档备份<small class="en-only"> Backup</small></div><div style="opacity:.7;font-size:13px">进度只存在这个浏览器里。请爸爸妈妈把备份码存起来，换手机或浏览器清空以后可以贴回来。<span class="en-only"><br>Progress is kept only in this browser. Keep the code somewhere safe; paste it back to restore.</span></div>' +
+      '<div class="row" style="gap:8px;margin:8px 0;flex-wrap:wrap"><button class="pill soft" id="bkMake">做一份备份码<small class="en-only" style="display:block;font-size:11px">Make a backup code</small></button><button class="pill soft" id="bkPaste">用备份码还原<small class="en-only" style="display:block;font-size:11px">Restore from a code</small></button></div>' +
+      '<textarea id="bkText" rows="4" style="display:none;width:100%;box-sizing:border-box;font:12px monospace;border-radius:10px;border:2px solid #E8D9B8;padding:8px;word-break:break-all"></textarea><div id="bkNote" style="font-size:13px;min-height:18px"></div><button class="pill" id="bkGo" style="display:none;margin-top:6px">还原<small class="en-only"> Restore</small></button>';
+    g.appendChild(d);
+    const T = d.querySelector('#bkText'), N = d.querySelector('#bkNote'), GO = d.querySelector('#bkGo');
+    d.querySelector('#bkMake').onclick = async () => { T.style.display = ''; GO.style.display = 'none'; T.readOnly = true; T.value = make(); T.focus(); T.select(); let ok = false; try { await navigator.clipboard.writeText(T.value); ok = true; } catch (e) { try { ok = document.execCommand('copy'); } catch (e2) { } }
+      N.textContent = ok ? '已经复制好了，贴到备忘录或传给自己保存。 Copied. Paste it into your notes to keep it.' : '请长按上面的文字，全选后复制保存。 Press and hold the text above, select all, and copy it.'; };
+    d.querySelector('#bkPaste').onclick = () => { T.style.display = ''; T.readOnly = false; T.value = ''; T.placeholder = '把备份码贴在这里 Paste the code here'; GO.style.display = ''; GO.dataset.sure = ''; N.textContent = ''; T.focus(); };
+    GO.onclick = () => { const o = read(T.value); if (!o) { N.textContent = '这不是完整的备份码，请再贴一次。 That is not a complete backup code.'; GO.dataset.sure = ''; return; }
+      if (!GO.dataset.sure) { GO.dataset.sure = '1'; N.textContent = '还原会换掉现在这台的进度。确定的话，再点一次「还原」。 Restoring replaces the progress on this device. Tap Restore again to go ahead.'; return; }
+      restore(o); N.textContent = '还原好了，重新打开中…… Restored. Reloading…'; setTimeout(() => location.reload(), 600); };
+  }
+  return { make, read, restore, rows };
+})();
+setInterval(() => { try { const b = document.getElementById('dailyBtn'); if (!b) return; if (!b.onclick) b.onclick = () => Learn.runDaily(); b.style.display = document.body.classList.contains('playing') && Learn.dailyReady() ? '' : 'none'; } catch (e) { } }, 1500);   /* the daily challenge button shows while today's has not been done */
 const saveG = () => store.set(G_KEY, G);
 const UI = { busy: false, talking: false, fishing: null };
 const NAMES = { mom: ['妈妈', 'Mom'], dad: ['爸爸', 'Dad'] };
@@ -4304,7 +4436,7 @@ function openBag() {
   if (metHome) ITEM_ORDER.forEach(id => { const got = !!G.found[id], it = ITEMS[id], d = document.createElement('div'); d.className = 'cell' + (got ? ' got' : '');
     d.innerHTML = `<img src="${thumb(id)}" alt="" style="width:64px;height:64px;object-fit:contain;${got ? '' : 'filter:brightness(0);opacity:.15'}"><div class="n">${got ? it.zh : '？'}</div><div class="c">${got ? VOCAB[it.zh][0] : ''}</div>`;
     if (got) d.onclick = () => Voice.speak(it.zh, .6); g.appendChild(d); });
-  Life.bagRows(g); storyRows(g); Learn.rows(g);
+  Life.bagRows(g); storyRows(g); try { Shop.rows(g); } catch (e) { } Learn.rows(g); try { Backup.rows(g); } catch (e) { }
   if (!g.children.length) g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:18px 6px;line-height:1.7">背包还是空的。<br>听完故事、做完活动，就会有东西放进来哦！<span class="en-only"><br>Your bag is empty. Finish stories and activities to fill it!</span></div>';
   $('albumVeil').classList.remove('hidden'); UI.busy = true;
 }
@@ -4419,6 +4551,7 @@ function exitMat(name) {
 }
 function roomExit() { nearby.all = []; try { nearby(); } catch (e) { } const a = nearby.all.find(x => x.zh === '出去'); nearby.all = null; return a; }
 function onEnter(name) {
+  try { Shop.place(name); } catch (e) { }   /* what has been bought for the home is set out in it */
   exitMat(name);
   $('exitBtn').classList.toggle('hidden', !roomExit());
   if (name === 'town') Mail.check();
@@ -4439,7 +4572,7 @@ async function enterMarket() {
 /* ---------- making your character: hair, clothes, trousers, skin ---------- */
 const LOOK0 = { gender: 'girl', style: 0, glasses: false, hair: 0, shirt: 0, pants: 0, skin: 0 };
 let preview = null;
-function lookPal(l) { return kidPal({ hair: HAIRS[l.hair], shirt: SHIRTS[l.shirt], pants: PANTS[l.pants], skin: SKINS[l.skin] }); }
+function lookPal(l) { return kidPal({ hair: HAIRS[l.hair], shirt: l.shirtCol || SHIRTS[l.shirt], pants: l.pantsCol || PANTS[l.pants], skin: SKINS[l.skin] }); }
 function buildPreview(look) {
   const cv = $('lookCv'), r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }); r.setPixelRatio(Math.min(2, devicePixelRatio || 1)); r.setSize(cv.clientWidth || 260, cv.clientHeight || 260, false); r.outputEncoding = THREE.sRGBEncoding;
   const s = new THREE.Scene(); s.add(new THREE.HemisphereLight(lin('#FFF6E6'), lin('#B8A07A'), 1.0)); const d = new THREE.DirectionalLight(lin('#FFF1D8'), 1.1); d.position.set(3, 6, 6); s.add(d);
@@ -4758,7 +4891,7 @@ function startGame(opts = {}) {
   PEOPLE.captain5 = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
   putIn(PEOPLE.captain5, SP.town, -10.5, 36.4, 0);
   SP.town.nameSign.material.map = canvasTex(Math.round(256 * 1.6 / .5), 256, (c, w, h) => { c.fillStyle = '#8C5B3A'; P.rr(6, 6, w - 12, h - 12, 40)(c); c.fill(); label(c, G.name + '的家', w / 2, h / 2 + 6, h * .5, '#FFF6E0'); });
-  PEOPLE.me = makeKid(G.look); if (G.nyHat) B1f.addHat(PEOPLE.me);
+  PEOPLE.me = makeKid(G.look); if (G.nyHat) B1f.addHat(PEOPLE.me); try { Shop.wear(); } catch (e) { }
   PEOPLE.mom = makeLook('mom'); PEOPLE.dad = makeLook('dad');
   [['clerk', -3.6, -3.4, .9], ['cashier', -10.4, 3.0, Math.PI / 2], ['s1', -4.6, 1.6, -.4], ['s2', 4, -2.6, 2.4]].forEach(([k, x, z, ry]) => { const c = makeLook(k); putIn(c, SP.market, x, z, ry); PEOPLE[k] = c; });
   const T = SP.town;
@@ -4998,6 +5131,7 @@ const B5 = (() => {
   function quiz(n, host) {
     const L = lesson(n), E0 = BOOK5_QUIZ_EN[n] || [], qs = L.quiz.slice(0, 2).map((q, k) => ({ q: q.q, a: q.a, w: q.w, E: E0[k] || null }));
     Learn.forQuiz(n, 4).forEach(x => { x.E = { q: x.qe, a: '', w: [] }; qs.push(x); });
+    { const nx = Learn.nextQ(n); if (nx) { nx.E = { q: nx.qe, a: '', w: [] }; qs.push(nx); } }
     let i = 0, right = 0;
     const next = () => {
       if (i >= qs.length) { $('qText').onclick = null; closeVeil('qVeil'); finish(n, host, right, qs.length); return; }
@@ -6289,8 +6423,9 @@ const Isle1 = (() => {
       if (mat) { const fm = new THREE.Mesh(g, mat); fm.userData.fx = true; fm.renderOrder = 2; W.scene.add(fm); return fm; }
       const m = mk(g, col, 0, 0, 0, null, false); if (water) FX.water(m); return m; };
     const sy = Z.stream[1], brook = [[hx - 4.6, hz + 1.8, 1.5, 1.86], [hx - 5.6, hz + 2.3, 1.7, 1.36], [hx - 6.8, hz + 2.9, 1.9, .74], [hx - 8.3, hz + 3.4, 2.2, .22], [hx - 10.2, sy, 2.7, .07], [Z.stream[0] + 15.6, sy, 3.3, .055], [Z.stream[0] + 14, sy, 3.4, .055]];
-    const wx = Z.stream[0] - 15, river = [[wx + 2, sy, 3.4, .055], [wx - .2, sy + .5, 3.5, .055], [wx - 1.6, sy + 3.4, 3.7, .055], [wx - 1.8, sy + 9, 4, .055], [wx - 1.6, sy + 15, 4.4, .055], [wx - 1.8, sy + 21, 4.8, .055], [wx - 3, sy + 25.5, 5.4, .055], [wx - 6, sy + 28.2, 6.2, .04], [wx - 9.5, sy + 29.8, 7.4, 0], [wx - 13, sy + 30.8, 9, -.05], [wx - 16.5, sy + 31.4, 10.5, -.07]];   /* down the west side with lawn on both banks, then one smooth turn west across the beach, opening steadily into the sea */
-    ribbon(river.map(q => [q[0], q[1], q[2] + .9, Math.max(.04, q[3] - .012)]).slice(0, 7), '#E9D9B4', false, false); ribbon(river, '#7FC4E8', true, true);
+    const wx = Z.stream[0] - 15, river = [[wx + 2, sy, 3.4, .055], [wx - .2, sy + .5, 3.5, .055], [wx - 1.6, sy + 3.4, 3.7, .055], [wx - 1.8, sy + 9, 4, .055], [wx - 1.6, sy + 15, 4.4, .055], [wx - 1.8, sy + 21, 4.8, .055], [wx - 3, sy + 25.5, 5.4, .055], [wx - 6, sy + 28.2, 6.2, .04], [wx - 8.75, sy + 29.4, 7, .012]];   /* it ends at the water's edge: the sea itself is the rest */   /* down the west side with lawn on both banks, then one smooth turn west across the beach, opening steadily into the sea */
+    ribbon(river.map(q => [q[0], q[1], q[2] + .9, Math.max(.04, q[3] - .012)]).slice(0, 7), '#E9D9B4', false, false);
+    ribbon(river, '#7FC4E8', true, true);
     ribbon(brook, '#7FC4E8', true, false);
     /* the spring: a little pool among stones, high on the slope */
     const pool = mk(new THREE.CircleGeometry(1.3, 20), '#7FC4E8', hx - 4.1, 1.98, hz + 1.6, null, false); pool.rotation.x = -Math.PI / 2; FX.water(pool);
@@ -6302,7 +6437,7 @@ const Isle1 = (() => {
     flowOn(brook, 2.2, .75, .22); flowOn([[Z.stream[0] + 15, sy, 3.4, .055], [Z.stream[0], sy, 3.4, .055], [wx, sy, 3.4, .055]], 7, .4, .12); flowOn(river, 9, .42, .1);
     [[hx - 8.9, hz + 3.5, .5], [hx - 9.6, sy + .5, .42], [hx - 9.3, sy - .5, .36], [hx - 10.4, sy + .1, .3]].forEach(([x, z, r]) => { const f = new THREE.Mesh(sph(r, 8), new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: .8 })); f.scale.y = .35; f.position.set(x, .14, z); f.userData.fx = true; W.scene.add(f); gsap.to(f.scale, { x: 1.25, z: 1.25, duration: .7 + r, yoyo: true, repeat: -1, ease: 'sine.inOut' }); });
     { const fanT = canvasTex(256, 256, c => { const g2 = c.createRadialGradient(128, 128, 8, 128, 128, 126); g2.addColorStop(0, 'rgba(255,255,255,.75)'); g2.addColorStop(.45, 'rgba(200,236,250,.5)'); g2.addColorStop(1, 'rgba(160,220,245,0)'); c.fillStyle = g2; c.fillRect(0, 0, 256, 256); });
-      const fan = new THREE.Mesh(new THREE.CircleGeometry(11, 28), new THREE.MeshBasicMaterial({ map: fanT, transparent: true, depthWrite: false })); fan.rotation.x = -Math.PI / 2; fan.scale.set(1.25, .8, 1); fan.position.set(wx - 14.5, -.04, sy + 31.2); fan.userData.fx = true; fan.renderOrder = 1; W.scene.add(fan); gsap.to(fan.scale, { x: 1.4, y: .92, duration: 3.2, yoyo: true, repeat: -1, ease: 'sine.inOut' }); }
+      const fan = new THREE.Mesh(new THREE.CircleGeometry(11, 28), new THREE.MeshBasicMaterial({ map: fanT, transparent: true, depthWrite: false })); fan.rotation.x = -Math.PI / 2; fan.scale.set(.9, .62, 1); fan.position.set(wx - 11.2, -.05, sy + 30.2); fan.userData.fx = true; fan.renderOrder = 1; W.scene.add(fan); gsap.to(fan.scale, { x: 1.02, y: .7, duration: 3.2, yoyo: true, repeat: -1, ease: 'sine.inOut' }); }
     [[wx - 4.3, sy + 6], [wx + .7, sy + 11], [wx - 4.6, sy + 17], [wx + .9, sy + 23]].forEach(([x, z], i) => { const rk = mk(sph(.3 + (i % 2) * .12, 6), '#A8A193', x, .12, z, null, false); rk.scale.y = .6; });
     sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 6.6, Z.meadow[1] - 5.4, '#5E9A57'); sign('日出山坡', Z.hill[0] + 11, Z.hill[1] + 4.6, '#F28C28', 2.2);
     // trees and flowers
