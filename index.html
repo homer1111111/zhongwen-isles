@@ -1427,6 +1427,18 @@ void main() {
   }
   const onBed = (x, z) => { for (let i = 0; i < HM.clear.length; i++) { const q = HM.clear[i]; if (q[0] === here.scene && Math.hypot(q[1] - x, q[2] - z) < 1.7) return true; } return false; };   // flower beds are not for walking on
   /* what is underfoot here: [kind, height]; kind 0 nothing to stand on (or water), 1 ground, 2 road, 3 white paint */
+  /* Is the thing on top at this spot water? Asked for each step the player takes outdoors, so that no river, pond or
+     strip of sea can be walked onto wherever a no-walk box happens to fall short. A pier, bridge or boat above the water
+     is what is on top there, so those are walked on as before. */
+  /* water all round, not just seen through the gap between two planks of a pier */
+  const wet = (x, z) => wet1(x, z) && wet1(x + .3, z + .3) && wet1(x - .3, z - .3) && wet1(x + .3, z - .3) && wet1(x - .3, z + .3);
+  function wet1(x, z) {
+    try { if (!here || !here.sky) return false; _ray.camera = camera; _ray.set(_o.set(x, 14, z), _down); _ray.far = 16; const hits = _ray.intersectObjects(here.scene.children, true);
+      for (let i = 0; i < hits.length; i++) { const ob = hits[i].object; if (!ob.isMesh || ob.userData.fx || (ob.parent && ob.parent.userData.fx) || !shown(ob) || ob.isSkinnedMesh || ob.isInstancedMesh || !ob.material) continue;
+        if (G0.waters && G0.waters.has(ob)) return true; const m = Array.isArray(ob.material) ? ob.material[(hits[i].face && hits[i].face.materialIndex) || 0] : ob.material; if (!m || !m.color) continue; if (m.transparent && m.opacity < .5) continue;
+        if (hits[i].point.y > .6) return false; _c.copy(m.userData.fx0 || m.color).convertLinearToSRGB().getHSL(_hsl); return _hsl.h > .5 && _hsl.h < .63 && _hsl.s > .3 && hits[i].point.y < .2; }
+    } catch (e) { } return false;
+  }
   function landAt(x, z) {
     try { if (onBed(x, z)) return [0, 0]; _ray.camera = camera; _ray.set(_o.set(x, 14, z), _down); _ray.far = 16; const hits = _ray.intersectObjects(grounds(here), false);
       for (let i = 0; i < hits.length; i++) { const ob = hits[i].object; if (!ob.isMesh || ob.userData.fx || (ob.parent && ob.parent.userData.fx) || !shown(ob) || !hits[i].face || ob.isSkinnedMesh) continue; if (ob.isInstancedMesh || (G0.waters && G0.waters.has(ob))) return [0, 0];
@@ -1682,8 +1694,9 @@ void main() {
   /* which way a built animal faces, as an angle about the vertical: its head is the one part that is a group */
   /* Animals whose models were made as a body resting on the ground get real legs here: four of them (the squirrel, who
      sits upright, two feet), in the body's own colour, swinging in diagonal pairs as the animal walks. */
-  const NOLEGS = { mao3: 4, maozai: 4, gou3: 4, tu3: 4, tuzi: 4, wugui: 4, songshu: 2 }, LEGGED = [];
+  const NOLEGS = {}, LEGGED = [];   /* every animal now comes with its own legs (Zoo); nothing is left to add them to */
   function addLegs(k, g, D) {
+    if (g.userData.zooLegs && !g.userData.fxLegs) { g.userData.fxLegs = D.legs = g.userData.zooLegs; LEGGED.push(D); return; }   /* a Zoo animal brings its own jointed legs */
     if (g.userData.fxLegs || !NOLEGS[k]) return;
     try {
       const box = new THREE.Box3(), one = new THREE.Box3(), sz = new THREE.Vector3(); let main = null, vol = 0;
@@ -1707,9 +1720,11 @@ void main() {
   /* legs swing while the animal is moving and settle straight again when it stops */
   function legsTick(dt) {
     for (let i = 0; i < LEGGED.length; i++) { const D = LEGGED[i], g = D.gait || 0, moving = g !== D.gait0; D.gait0 = g;
-      for (let j = 0; j < D.legs.length; j++) { const l = D.legs[j], want = moving ? Math.sin(g * (D.hop > .1 ? 2 : 1) + l.ph) * .65 : 0; l.p.rotation.x += (want - l.p.rotation.x) * Math.min(1, dt * (moving ? 30 : 8)); } }
+      for (let j = 0; j < D.legs.length; j++) { const l = D.legs[j], a = g * (D.hop > .1 ? 2 : 1) + l.ph, want = moving ? Math.sin(a) * (l.k ? .5 : .65) : 0, e = Math.min(1, dt * (moving ? 30 : 8)); l.p.rotation.x += (want - l.p.rotation.x) * e;
+        if (l.k) { const bend = moving ? Math.max(0, Math.cos(a)) * .95 : 0; l.k.rotation.x += (bend - l.k.rotation.x) * e; }   /* the knee folds while the foot is brought forward */ } }
   }
   function facing(g) {
+    if (g.userData.zooFwd != null) return g.userData.zooFwd;
     try { const box = new THREE.Box3(); let face = null; g.children.forEach(ch => { ch.updateMatrix(); if (ch.isMesh && ch.geometry) { if (!ch.geometry.boundingBox) ch.geometry.computeBoundingBox(); box.union(_bc.copy(ch.geometry.boundingBox).applyMatrix4(ch.matrix)); } else if (ch.isGroup && !face && !ch.userData.fx) face = ch; });
       if (box.isEmpty() || !face) return 0; const mid = box.getCenter(new THREE.Vector3()), fx = face.position.x - mid.x, fz = face.position.z - mid.z;
       if (Math.abs(fx) > .05 || Math.abs(fz) > .05) return Math.abs(fx) > Math.abs(fz) ? Math.sign(fx) * Math.PI / 2 : (fz < 0 ? Math.PI : 0);
@@ -1915,6 +1930,7 @@ void main() {
      animal's own space, so it follows the animal wherever it goes and whichever way it faces. */
   const beasts = [], _bb = new THREE.Box3(), _bc = new THREE.Box3(), _bv = new THREE.Vector3(), _bi = new THREE.Matrix4();
   function creature(g) {
+    if (g.userData.zoo) return;   /* Zoo animals walk on their own jointed legs */
     if (!g || g.userData.fxBeast || LOW || !SHADER_FX) return g;
     try {
       /* measured now, while the parts are still separate: size, which way it faces, whether it stands on thin legs, whether it has a tail */
@@ -2692,7 +2708,7 @@ void main() {
 
   if (SHADER_FX) patchChunks();
   try { localWeather(false); } catch (e) { }
-  return { setup, resize, render, water, sway, rim, tick, cam, people, gain, shake, dust, voice, music, speaker, line, react, creature, koi, pads, traffic, seasonal, remark, lotus, lotusPod, gull, alive, stars, starsTick, shipmate, deckMate: DECKM, land: landAt, trips: () => ({ friend: Object.assign({}, friendState(), { eta: friendState().eta ? Math.round((friendState().eta - Date.now()) / 1000) : 0 }), riding: N.riding ? N.riding.k : null, ferryAway: N.ferryAway || null, rush: !!N.navRush, nav: Object.keys(NAVS).map(k => k + ':' + (NAVS[k].done ? 'done' : NAVS[k].i)), people: Object.keys(PEOPLE).filter(k => PEOPLE[k].fxD && (PEOPLE[k].fxD.away || isCaptain(k))).map(k => [k, PEOPLE[k].fxD.mode, !!PEOPLE[k].fxD.script, PEOPLE[k].space, +PEOPLE[k].obj.position.x.toFixed(1), +PEOPLE[k].obj.position.z.toFixed(1), passed(k)]) }), keepClear: (scene, x, z) => { HM.clear.push([scene, x, z]); }, trees: list => { if (SEA.lists.indexOf(list) < 0) SEA.lists.push(list); SEA.t = 0; }, timeForced: on => { N.lessonTime = on; }, weather, weatherMode, wxLook, precip, precipSet,
+  return { wet, setup, resize, render, water, sway, rim, tick, cam, people, gain, shake, dust, voice, music, speaker, line, react, creature, koi, pads, traffic, seasonal, remark, lotus, lotusPod, gull, alive, stars, starsTick, shipmate, deckMate: DECKM, land: landAt, trips: () => ({ friend: Object.assign({}, friendState(), { eta: friendState().eta ? Math.round((friendState().eta - Date.now()) / 1000) : 0 }), riding: N.riding ? N.riding.k : null, ferryAway: N.ferryAway || null, rush: !!N.navRush, nav: Object.keys(NAVS).map(k => k + ':' + (NAVS[k].done ? 'done' : NAVS[k].i)), people: Object.keys(PEOPLE).filter(k => PEOPLE[k].fxD && (PEOPLE[k].fxD.away || isCaptain(k))).map(k => [k, PEOPLE[k].fxD.mode, !!PEOPLE[k].fxD.script, PEOPLE[k].space, +PEOPLE[k].obj.position.x.toFixed(1), +PEOPLE[k].obj.position.z.toFixed(1), passed(k)]) }), keepClear: (scene, x, z) => { HM.clear.push([scene, x, z]); }, trees: list => { if (SEA.lists.indexOf(list) < 0) SEA.lists.push(list); SEA.t = 0; }, timeForced: on => { N.lessonTime = on; }, weather, weatherMode, wxLook, precip, precipSet,
     stats: () => { const st = here && SC.get(here); return { audio: A.ctx ? A.ctx.state : 'none', clips: Object.keys(A.buf).map(k => k + ':' + A.buf[k].filter(Boolean).length).join(' '), musicSteps: A.step, music: A.on, tufts: st ? st.tuft.count : 0, rocks: st ? st.rock.count : 0, blooms: st ? st.bloom.count : 0, cells: st ? st.cells.size : 0, voices: voices.length, post: !!S.post, bloom: !!(S.post && S.post.bloom), night: (() => { const o = { on: isNight(), doorOf: (() => { const m = {}; for (const k in HM.of) if (HM.of[k].door) m[k] = HM.of[k].zh; return m; })(), homes: (HOMES[here && here.name] || []).map(h => [h.zh, h.at || (h.door ? 'door' : h.away ? 'away' : h.wall ? 'wall' : 'NONE')]), home: [], out: [], sleepers: [], err: N.err || '', errand: N.errand ? [N.errand.from, N.errand.to, N.errand.w[0]] : null, modes: {} }; for (const k in PEOPLE) { const c = PEOPLE[k]; if (!c) continue; if (c.fxD) { o.modes[c.fxD.mode] = (o.modes[c.fxD.mode] || 0) + 1; if (c.fxD.mode === 'home') o.home.push(k); else o.out.push(k); } if (c.fxZ && c.fxZ.visible) o.sleepers.push(k); } return o; })(), weather: weather(), life: (() => { const o = { alive: {}, seen: {} }; for (const k in RULE) o.alive[k] = alive(k); SEA.items.forEach(it => { if (it.kind && it.place === (here && here.name)) o.seen[it.kind] = (o.seen[it.kind] || 0) + (it.obj.visible ? 1 : 0); }); o.seen.butterfly = flies.filter(f => f.g.visible && f.g.parent === (here && here.scene)).length; o.seen.dragonfly = AIR.drags.filter(d => d.g.visible).length; o.seen.firefly = AIR.flies && AIR.flies.visible ? 1 : 0; o.seen.leaves = AIR.leaves && AIR.leaves.visible ? 1 : 0; o.seen.geeseOK = alive('geese') ? 1 : 0; return o; })(), season: { now: SEA.now, items: SEA.items.length, shown: SEA.items.filter(x => x.obj.visible).length, wide: SEA.wide || 0, leaves: !!(AIR.leaves && AIR.leaves.visible), flies: !!(AIR.flies && AIR.flies.visible), drags: AIR.drags.filter(d => d.g.visible).length, bare: SEA.treeN || 0, err: SEA.err || '' }, surface: S.surface || '', ground: PEOPLE.me ? ground(ME().obj.position, !!(here && here.sky)) : '', wet: +U.wet.value.toFixed(2), blend: !!dayBlend(), wxMode: WX.mode, wxNote: WX.note, rainOn: !!(PR && PR.g.visible && PR.rain.visible), snowOn: !!(PR && PR.g.visible && PR.snow.visible) }; } };   // read by the automated play-through test
 })();
 
@@ -3415,6 +3431,127 @@ function makeBird(col, x, y, z, parent) {
 }
 function flyBird(g, t, k, vx) { g.rotation.y = vx >= 0 ? Math.PI / 2 : -Math.PI / 2; g.userData.wings.forEach(w => { w.rotation.z = w.userData.k * Math.sin(t * 14 + k) * .7; }); }
 function chatWith(k) { const c = (B5.CHATS || {})[k], line = FX.remark(k) || (c && c.length ? c[Math.floor(Math.random() * c.length)] : ['你好！', 'Hello!']); return talk(k, [line]); }
+/* ---------- Zoo: animals built to look like what they are ----------
+   One library for every island. Each animal faces +z with its feet on y = 0 and is made of the real parts of its kind:
+   a barrel body, neck, head with a muzzle, the right ears and tail, and four legs that each have a shoulder joint, a
+   knee joint and a hoof or paw. The legs are returned in g.userData.zooLegs so that whoever moves the animal can walk
+   them (see legsTick in FX): hips swing, knees fold as the foot comes forward. */
+const Zoo = (() => {
+  const KIND = {
+    horse: { L: 1.7, W: .54, R: .4, leg: .95, legR: .07, col: '#8A5A3B', dark: '#5A3A26', hoof: '#2A211D', neck: [.8, .8, .17], head: [.2, .44, .13], ear: 'point', tail: 'hair', mane: '#3A2E28', muzzle: '#B98A6A' },
+    cow: { L: 1.65, W: .72, R: .5, leg: .68, legR: .085, col: '#FFFFFF', dark: '#2B2420', hoof: '#2B2420', neck: [.36, 1.2, .24], head: [.27, .3, .2], ear: 'side', tail: 'tuft', horns: '#EDE3CF', patches: '#2B2420', udder: '#F6C4C4', muzzle: '#F6C4C4' },
+    ox: { L: 1.7, W: .74, R: .52, leg: .7, legR: .09, col: '#B07A4A', dark: '#7A5230', hoof: '#2B2420', neck: [.36, 1.2, .25], head: [.28, .3, .2], ear: 'side', tail: 'tuft', horns: '#EDE3CF', muzzle: '#E9C9A8' },
+    sheep: { L: 1, W: .5, R: .34, leg: .44, legR: .05, col: '#FBF7EE', dark: '#3A2E28', hoof: '#1E1A18', neck: [.2, .95, .13], head: [.16, .2, .11], ear: 'side', tail: 'stub', wool: true, face: '#3A2E28', muzzle: '#3A2E28', legCol: '#3A2E28' },
+    lamb: { L: .7, W: .36, R: .25, leg: .34, legR: .04, col: '#FFFFFF', dark: '#E8DCC8', hoof: '#6E5A48', neck: [.16, .95, .1], head: [.14, .15, .09], ear: 'side', tail: 'stub', wool: true, face: '#FFF4E6', muzzle: '#F6C4C4', legCol: '#F3E9D8' },
+    dog: { L: .82, W: .32, R: .22, leg: .36, legR: .048, col: '#C98A4B', dark: '#8A5A3B', neck: [.2, .85, .11], head: [.17, .2, .09], ear: 'flop', tail: 'up', muzzle: '#F3E3C8', nose: '#2B2420' },
+    cat: { L: .6, W: .24, R: .165, leg: .25, legR: .036, col: '#8E8E98', dark: '#6A6A74', neck: [.08, .8, .09], head: [.15, .08, .075], ear: 'tri', tail: 'long', muzzle: '#F6F2E8', nose: '#E79AA8' },
+    wolf: { L: 1.05, W: .36, R: .26, leg: .5, legR: .052, col: '#8A8E96', dark: '#5E6168', neck: [.26, .8, .14], head: [.19, .27, .1], ear: 'tri', tail: 'bush', muzzle: '#DADCE0', nose: '#2B2420' }
+  };
+  const tilt = (m, rx, rz) => { m.rotation.x = rx || 0; m.rotation.z = rz || 0; return m; };
+  /* one leg: shoulder pivot -> upper leg -> knee pivot -> lower leg -> hoof or paw */
+  function leg(g, x, z, len, r, col, hoof, ph) {
+    const hip = new THREE.Group(); hip.position.set(x, len, z); g.add(hip);
+    mk(cyl(r * 1.35, r * 1.05, len * .52, 8), col, 0, -len * .24, 0, hip);
+    const knee = new THREE.Group(); knee.position.y = -len * .5; hip.add(knee);
+    mk(sph(r * 1.08, 8), col, 0, 0, 0, knee, false); mk(cyl(r * .95, r * .8, len * .42, 8), col, 0, -len * .21, 0, knee);
+    if (hoof) mk(cyl(r * 1.05, r * 1.3, len * .1, 8), hoof, 0, -len * .455, 0, knee);
+    else { const p = mk(sph(r * 1.5, 8), col, 0, -len * .45, r * .6, knee); p.scale.set(1, .55, 1.3); }
+    return { p: hip, k: knee, ph };
+  }
+  function ears(g, kind, col, inner, x, y, z, r) {
+    [-1, 1].forEach(s => {
+      if (kind === 'tri') { const e = mk(new THREE.ConeGeometry(r * .42, r * .8, 4), col, s * r * .55, y + r * .85, z - r * .1, g); e.rotation.y = Math.PI / 4; e.rotation.z = -s * .2; mk(new THREE.ConeGeometry(r * .22, r * .5, 4), inner, s * r * .55, y + r * .8, z - r * .02, g, false).rotation.y = Math.PI / 4; }
+      else if (kind === 'point') { const e = mk(new THREE.ConeGeometry(r * .3, r * .95, 6), col, s * r * .5, y + r * 1.05, z - r * .25, g); e.rotation.z = -s * .25; }
+      else if (kind === 'flop') { const e = mk(sph(r * .5, 8), col, s * r * .95, y + r * .1, z - r * .1, g); e.scale.set(.35, 1.15, .8); e.rotation.z = s * .25; }
+      else { const e = mk(sph(r * .45, 8), col, s * r * 1.15, y + r * .35, z - r * .15, g); e.scale.set(1.2, .45, .7); e.rotation.z = s * .35; }
+    });
+  }
+  function tail(g, kind, K, y, z) {
+    if (kind === 'hair') { const t = mk(cyl(.05, .12, .95, 8), K.mane || K.dark, 0, y - .42, z - .16, g); t.rotation.x = -.28; }
+    else if (kind === 'tuft') { const t = mk(cyl(.03, .03, K.leg * .95, 6), K.col, 0, y - K.leg * .42, z - .05, g); t.rotation.x = -.12; mk(sph(.08, 8), K.dark, 0, y - K.leg * .9, z - .11, g).scale.y = 1.5; }
+    else if (kind === 'stub') mk(sph(K.R * .32, 8), K.col, 0, y, z, g);
+    else if (kind === 'up') { const t = mk(cyl(.025, .045, K.L * .42, 6), K.col, 0, y + K.L * .16, z - .03, g); t.rotation.x = -.5; }
+    else if (kind === 'long') { const a = mk(cyl(.028, .034, K.L * .5, 6), K.col, 0, y + .02, z - K.L * .2, g); a.rotation.x = -1.2; const b = mk(cyl(.022, .028, K.L * .4, 6), K.col, 0, y + K.L * .24, z - K.L * .43, g); b.rotation.x = -.25; mk(sph(.03, 6), K.dark, 0, y + K.L * .44, z - K.L * .48, g, false); }
+    else if (kind === 'bush') { const t = mk(sph(K.R * .5, 10), K.col, 0, y - K.R * .5, z - K.R * .9, g); t.scale.set(.75, .75, 2.1); t.rotation.x = .55; mk(sph(K.R * .26, 8), K.muzzle, 0, y - K.R * 1.02, z - K.R * 1.62, g, false); }
+  }
+  /* horse, cow, ox, sheep, lamb, dog, cat, wolf */
+  function quad(g, name, o) {
+    const K = Object.assign({}, KIND[name], o || {}), top = K.leg + K.R * .86, legs = [], lc = K.legCol || K.col;
+    const body = mk(sph(K.R, 16), K.col, 0, top, 0, g); body.scale.set(K.W / (2 * K.R), 1, K.L / (2 * K.R));
+    mk(sph(K.R * .98, 12), K.col, 0, top + K.R * .05, K.L * .3, g).scale.set(K.W / (2 * K.R) * .98, 1.02, .75);   /* chest */
+    mk(sph(K.R * .96, 12), K.col, 0, top + K.R * .02, -K.L * .3, g).scale.set(K.W / (2 * K.R), 1, .78);            /* haunch */
+    if (K.wool) for (let k = 0; k < 11; k++) { const a = k * 2.4, r = K.R * (.42 + (k % 3) * .06); mk(sph(r, 8), K.col, Math.sin(a) * K.W * .36, top + Math.cos(k * 1.7) * K.R * .45 + K.R * .2, (k / 10 - .5) * K.L * .92, g, false); }
+    if (K.patches) [[.3, .55, .32], [-.28, .1, .3], [.2, -.5, .34], [-.25, -.62, .22], [0, .2, .26]].forEach(([a, c, r]) => { const p = mk(sph(K.R * r * 1.5, 10), K.patches, a * K.W, top + K.R * .52, c * K.L * .55, g, false); p.scale.y = .5; });
+    if (K.udder) mk(sph(K.R * .36, 10), K.udder, 0, top - K.R * .88, -K.L * .2, g, false);
+    const sx = K.W * .3, fz = K.L * .33, hz = -K.L * .33;
+    legs.push(leg(g, -sx, fz, K.leg + K.R * .25, K.legR, lc, K.hoof, 0), leg(g, sx, fz, K.leg + K.R * .25, K.legR, lc, K.hoof, Math.PI), leg(g, -sx, hz, K.leg + K.R * .25, K.legR * 1.1, lc, K.hoof, Math.PI), leg(g, sx, hz, K.leg + K.R * .25, K.legR * 1.1, lc, K.hoof, 0));
+    const [nl, na, nr] = K.neck, nz = K.L * .42, ny = top + K.R * .35, hy = ny + Math.cos(na) * nl, hz2 = nz + Math.sin(na) * nl;
+    tilt(mk(cyl(nr * .85, nr * 1.15, nl + nr, 10), K.col, 0, (ny + hy) / 2, (nz + hz2) / 2, g), na);
+    const [hr, ml, mr] = K.head, fc = K.face || K.col;
+    mk(sph(hr, 14), fc, 0, hy, hz2, g).scale.set(.92, 1, 1.05);
+    const mz = mk(cyl(mr, mr * 1.25, ml, 10), K.muzzle || fc, 0, hy - hr * .3, hz2 + hr * .55 + ml * .4, g); mz.rotation.x = Math.PI / 2 + .25;
+    mk(sph(mr * 1.02, 10), K.muzzle || fc, 0, hy - hr * .3 - ml * .12, hz2 + hr * .55 + ml * .88, g, false);
+    if (K.nose) mk(sph(mr * .42, 8), K.nose, 0, hy - hr * .18 - ml * .1, hz2 + hr * .55 + ml * .95 + mr * .75, g, false);
+    else [-1, 1].forEach(s => mk(sph(mr * .16, 6), '#3A2E28', s * mr * .45, hy - hr * .24 - ml * .12, hz2 + hr * .55 + ml * .92 + mr * .9, g, false));
+    ears(g, K.ear, fc, K.muzzle || K.dark, 0, hy, hz2, hr);
+    if (K.horns) [-1, 1].forEach(s => { const h = mk(new THREE.ConeGeometry(hr * .16, hr * .8, 6), K.horns, s * hr * .62, hy + hr * .95, hz2 - hr * .05, g); h.rotation.z = -s * .55; });
+    if (K.mane) { for (let k = 0; k < 6; k++) { const t = k / 5; mk(box(.07, .2, nl * .26), K.mane, 0, ny + (hy - ny) * t + nr * .95, nz + (hz2 - nz) * t - nr * .75, g, false).rotation.x = na; } mk(box(.1, .16, .2), K.mane, 0, hy + hr * .85, hz2 + hr * .1, g, false); }
+    tail(g, K.tail, K, top + K.R * .25, -K.L * .5);
+    try { cuteFace(g, 0, hy + hr * .12, hz2 + hr * .1, hr, 0, { mouth: false, white: !!K.face && K.face !== '#FFF4E6', eye: .2, spread: .5 }); } catch (e) { }
+    g.userData.zooLegs = legs; g.userData.zooHead = [0, hy, hz2, hr]; return g;
+  }
+  function rabbit(g, col, s) {
+    s = s || 1; const c = col || '#F6F2E8', legs = [];
+    mk(sph(.24 * s, 14), c, 0, .3 * s, -.04 * s, g).scale.set(.9, .95, 1.3);                                    /* body, higher at the back */
+    mk(sph(.2 * s, 12), c, 0, .34 * s, -.2 * s, g).scale.set(1, 1.05, 1);
+    mk(sph(.17 * s, 14), c, 0, .5 * s, .26 * s, g);                                                             /* head */
+    mk(sph(.075 * s, 8), c, 0, .44 * s, .4 * s, g, false).scale.set(1.3, .8, 1); mk(sph(.022 * s, 6), '#E79AA8', 0, .465 * s, .465 * s, g, false);
+    [-1, 1].forEach(k => { const e = mk(sph(.07 * s, 10), c, k * .075 * s, .78 * s, .2 * s, g); e.scale.set(.6, 2.6, .35); e.rotation.z = -k * .12; e.rotation.x = -.15; const i = mk(sph(.045 * s, 8), '#F6C4C4', k * .075 * s, .78 * s, .222 * s, g, false); i.scale.set(.5, 2.4, .2); i.rotation.z = -k * .12; i.rotation.x = -.15; });
+    mk(sph(.085 * s, 10), '#FFFFFF', 0, .34 * s, -.42 * s, g, false);                                           /* scut */
+    [-1, 1].forEach(k => { mk(sph(.13 * s, 10), c, k * .17 * s, .22 * s, -.16 * s, g).scale.set(.6, 1, 1.1); });  /* thighs */
+    legs.push(leg(g, -.1 * s, .18 * s, .2 * s, .034 * s, c, null, 0), leg(g, .1 * s, .18 * s, .2 * s, .034 * s, c, null, 0), leg(g, -.17 * s, -.14 * s, .2 * s, .05 * s, c, null, 1.2), leg(g, .17 * s, -.14 * s, .2 * s, .05 * s, c, null, 1.2));
+    legs.slice(2).forEach(L => { const f = mk(sph(.06 * s, 8), c, 0, -.09 * s, .07 * s, L.k); f.scale.set(.9, .45, 2.2); });   /* long hind feet */
+    try { cuteFace(g, 0, .52 * s, .27 * s, .17 * s, 0, { mouth: false, eye: .2, spread: .52 }); } catch (e) { }
+    g.userData.zooLegs = legs; g.userData.zooHead = [0, .5 * s, .26 * s, .17 * s]; return g;
+  }
+  function tortoise(g, s) {
+    s = s || 1; const shell = '#6E8B4A', plate = '#55703A', skin = '#9DB86A', legs = [];
+    const dome = mk(new THREE.SphereGeometry(.42 * s, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), shell, 0, .2 * s, 0, g); dome.scale.set(1, .78, 1.22);
+    mk(cyl(.44 * s, .44 * s, .07 * s, 18), '#8FA860', 0, .2 * s, 0, g).scale.set(1, 1, 1.22);                    /* rim */
+    mk(cyl(.36 * s, .3 * s, .08 * s, 14), '#E3D9A8', 0, .14 * s, 0, g, false).scale.set(1, 1, 1.2);               /* underside */
+    [[0, 0, .15], [0, .24, .12], [0, -.24, .12], [.21, .12, .11], [-.21, .12, .11], [.21, -.13, .11], [-.21, -.13, .11]].forEach(([x, z, r]) => { const h = Math.sqrt(Math.max(0, 1 - (x / .42) ** 2 - (z / .52) ** 2)) * .33; const p = mk(cyl(r * s, r * 1.15 * s, .03 * s, 6), plate, x * s, (.2 + h) * s, z * s, g, false); p.rotation.x = z * 1.5; p.rotation.z = -x * 1.9; });
+    const nk = mk(cyl(.07 * s, .09 * s, .26 * s, 8), skin, 0, .27 * s, .56 * s, g); nk.rotation.x = 1.1;
+    mk(sph(.115 * s, 12), skin, 0, .36 * s, .7 * s, g).scale.set(.95, .85, 1.15);
+    const tl = mk(new THREE.ConeGeometry(.04 * s, .16 * s, 6), skin, 0, .17 * s, -.56 * s, g); tl.rotation.x = -1.9;
+    [[-.3, .34, 0], [.3, .34, Math.PI], [-.3, -.3, Math.PI], [.3, -.3, 0]].forEach(([x, z, ph]) => { const L = leg(g, x * s, z * s, .2 * s, .062 * s, skin, null, ph); L.p.rotation.z = x > 0 ? .5 : -.5; legs.push(L); });
+    try { cuteFace(g, 0, .38 * s, .71 * s, .115 * s, 0, { mouth: false, eye: .22, spread: .55 }); } catch (e) { }
+    g.userData.zooLegs = legs; g.userData.zooHead = [0, .36 * s, .7 * s, .115 * s]; g.userData.zooSplay = true; return g;
+  }
+  function squirrel(g, s) {
+    s = s || 1; const c = '#B5683A', belly = '#F3E3C8', legs = [];
+    mk(sph(.17 * s, 14), c, 0, .24 * s, 0, g).scale.set(.95, 1.25, 1);                                           /* sitting up */
+    mk(sph(.11 * s, 10), belly, 0, .23 * s, .09 * s, g, false).scale.set(.85, 1.25, .7);
+    mk(sph(.13 * s, 14), c, 0, .5 * s, .05 * s, g);                                                               /* head */
+    mk(sph(.06 * s, 8), belly, 0, .465 * s, .15 * s, g, false).scale.set(1.2, .8, 1); mk(sph(.02 * s, 6), '#2B2420', 0, .485 * s, .2 * s, g, false);
+    [-1, 1].forEach(k => { const e = mk(new THREE.ConeGeometry(.04 * s, .1 * s, 5), c, k * .075 * s, .64 * s, .02 * s, g); e.rotation.z = -k * .2; mk(new THREE.ConeGeometry(.012 * s, .07 * s, 4), '#5A3A26', k * .08 * s, .71 * s, .02 * s, g, false).rotation.z = -k * .2; });
+    /* the big tail: up the back and curling over */
+    [[-.2, .2, .1, 1], [-.27, .38, .125, 1.15], [-.27, .58, .13, 1.1], [-.2, .74, .115, 1], [-.08, .8, .085, .9]].forEach(([z, y, r, f]) => mk(sph(r * s, 10), c, 0, y * s, z * s, g).scale.set(.85 * f, 1, .9));
+    mk(sph(.07 * s, 8), '#D9925A', 0, .78 * s, -.01 * s, g, false);
+    [-1, 1].forEach(k => { const a = mk(cyl(.022 * s, .026 * s, .13 * s, 6), c, k * .1 * s, .31 * s, .13 * s, g); a.rotation.x = 1.1; a.rotation.z = k * .3; mk(sph(.028 * s, 6), '#8A4E2A', k * .075 * s, .29 * s, .2 * s, g, false); });   /* arms and hands */
+    const nut = mk(sph(.04 * s, 8), '#8A5A3B', 0, .3 * s, .21 * s, g, false); nut.scale.y = 1.2;
+    legs.push(leg(g, -.11 * s, .04 * s, .1 * s, .036 * s, c, null, 0), leg(g, .11 * s, .04 * s, .1 * s, .036 * s, c, null, 0));
+    legs.forEach(L => { const f = mk(sph(.04 * s, 8), '#8A4E2A', 0, -.04 * s, .05 * s, L.k); f.scale.set(.9, .45, 2); });
+    try { cuteFace(g, 0, .52 * s, .06 * s, .13 * s, 0, { mouth: false, eye: .22, spread: .5 }); } catch (e) { }
+    g.userData.zooLegs = legs; g.userData.zooHead = [0, .5 * s, .05 * s, .13 * s]; return g;
+  }
+  /* put an animal into a group the island already made: at a size, and turned to face the way the old model did
+     (yaw 0 = +z, PI/2 = +x). The group itself is left alone, so whatever moves or scales it still works. */
+  function into(g, scale, yaw, build) {
+    const q = new THREE.Group(); q.scale.setScalar(scale || 1); q.rotation.y = yaw || 0; g.add(q); build(q);
+    g.userData.zoo = true; g.userData.zooFwd = yaw || 0; g.userData.zooLegs = q.userData.zooLegs; return g;
+  }
+  return { quad, rabbit, tortoise, squirrel, into, KIND };
+})();
 function cuteFace(parent, x, y, z, r, ry = 0, o = {}) {
   const f = new THREE.Group(); f.position.set(x, y, z); f.rotation.y = ry; parent.add(f);
   const on = (px, py, k = 1) => Math.sqrt(Math.max(0, r * r - px * px - py * py)) * k;
@@ -3666,7 +3803,8 @@ function moveMe(dt) {
   if (m > .12) {
     const n = Math.hypot(dx, dz) || 1, sp = (m > .85 ? 7.2 : 4.2) * dt * m, ox = o.x, oz = o.z;
     const nx = ox + dx / n * sp, nz = oz + dz / n * sp;
-    const inCar = carAt(ox, oz); if (!blocked(nx, oz, o.y) && (inCar || !carAt(nx, oz))) o.x = nx; if (!blocked(o.x, nz, o.y) && (inCar || !carAt(o.x, nz))) o.z = nz;
+    const inCar = carAt(ox, oz), inWet = FX.wet(ox, oz);   /* already in the water (put there by a scene): free to walk out */
+    if (!blocked(nx, oz, o.y) && (inCar || !carAt(nx, oz)) && (inWet || !FX.wet(nx, oz))) o.x = nx; if (!blocked(o.x, nz, o.y) && (inCar || !carAt(o.x, nz)) && (inWet || !FX.wet(o.x, nz))) o.z = nz;
     if (me.target && Math.hypot(o.x - ox, o.z - oz) < sp * .2) { me.stuck = (me.stuck || 0) + dt; if (me.stuck > .5) me.target = null; }
     const want = Math.atan2(dx, dz); let d = want - me.obj.rotation.y; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; me.obj.rotation.y += d * Math.min(1, dt * 12);
     me.play(m > .85 ? 'sprint' : 'walk');
@@ -6046,16 +6184,53 @@ const Isle1 = (() => {
     for (let i = 0; i < 4; i++) mk(box(9.6, .18, .5), '#9A6B45', Z.field[0], .16, Z.field[1] - 2.6 + i * 1.75, null, false);
     const stream = mk(new THREE.PlaneGeometry(30, 3.4), '#7FC4E8', Z.stream[0], .05, Z.stream[1], null, false); stream.rotation.x = -Math.PI / 2; FX.water(stream);
     sp.solids.push([Z.stream[0] - 15, Z.stream[1] - 1.7, Z.stream[0] + 15, Z.stream[1] + 1.7]);
-    const knoll = mk(new THREE.SphereGeometry(9, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), '#86CB63', Z.hill[0], -3.2, Z.hill[1] - 3, null, false); knoll.scale.y = .55;
-    sp.solids.push([Z.hill[0] - 7, Z.hill[1] - 10, Z.hill[0] + 7, Z.hill[1] + 1]);
+    /* The hill is a real hill now: a tall mound with a darker crown and rocks, leaning on the terrace behind it. A spring
+       rises on its west side; the brook runs down the slope, joins the old stream bed, flows west past the bridge and the
+       carved stones, then bends south along the west shore, widening into a river, and meets the sea on the west coast,
+       well before the ferry pier in the south. */
+    const hx = Z.hill[0] + .5, hz = Z.hill[1] - 2.5, prof = [[9.5, 0], [8.4, .35], [6.8, 1.1], [5, 2.1], [3.2, 3], [1.6, 3.7], [.5, 4], [0, 4.05]].map(q => new THREE.Vector2(q[0], q[1]));
+    const knoll = mk(new THREE.LatheGeometry(prof, 30), '#86CB63', hx, 0, hz, null, false); knoll.scale.z = .8;
+    const crown = mk(new THREE.LatheGeometry(prof.slice(4).map(q => new THREE.Vector2(q.x + .12, q.y + .04)), 30), '#6FB552', hx, 0, hz, null, false); crown.scale.z = .8;
+    [[-3.6, 3.2, .7], [4.4, 2.6, .55], [-1, 4.6, .45], [6.2, 1.2, .5], [-6.4, 1, .6]].forEach(([dx, dz, r], i) => { const rk = mk(sph(r, 7), i % 2 ? '#A8A193' : '#8F8A80', hx + dx, Math.max(.1, 3.6 - Math.hypot(dx, dz / .8) * .42), hz + dz, null, false); rk.scale.set(1.2, .7, 1); });
+    sp.solids.push([hx - 8.6, hz - 8, hx + 8.6, hz + 6.9]);
+    /* a strip of water along a path of [x, z, width, height] points, smoothed, with matching no-walk squares; bank: a sandy strip under it */
+    const ribbon = (pts, col, water, solid, mat) => {
+      const S2 = [], cr = (a, b, c, d, t) => .5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+      for (let i = 0; i < pts.length - 1; i++) { const a = pts[Math.max(0, i - 1)], b = pts[i], c = pts[i + 1], d = pts[Math.min(pts.length - 1, i + 2)]; for (let k = 0; k < 8; k++) { const t = k / 8; S2.push([0, 1, 2, 3].map(j => cr(a[j], b[j], c[j], d[j], t))); } }
+      S2.push(pts[pts.length - 1].slice());
+      const pos = [], uv = [], idx = [];
+      S2.forEach((q, i) => { const n = S2[Math.min(S2.length - 1, i + 1)], m = S2[Math.max(0, i - 1)]; let tx = n[0] - m[0], tz = n[1] - m[1]; const L = Math.hypot(tx, tz) || 1; tx /= L; tz /= L;
+        pos.push(q[0] - tz * q[2] / 2, q[3], q[1] + tx * q[2] / 2, q[0] + tz * q[2] / 2, q[3], q[1] - tx * q[2] / 2); uv.push(0, i / 4, 1, i / 4);
+        if (i) { const o = i * 2; idx.push(o - 2, o, o - 1, o - 1, o, o + 1); }
+        if (solid && i % 4 === 0) sp.solids.push([q[0] - q[2] / 2 - .1, q[1] - q[2] / 2 - .1, q[0] + q[2] / 2 + .1, q[1] + q[2] / 2 + .1]); });
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+      if (g.attributes.normal.array[1] < 0) { g.setIndex(idx.map((v, i) => idx[i - i % 3 + [0, 2, 1][i % 3]])); g.computeVertexNormals(); }
+      if (mat) { const fm = new THREE.Mesh(g, mat); fm.userData.fx = true; fm.renderOrder = 2; W.scene.add(fm); return fm; }
+      const m = mk(g, col, 0, 0, 0, null, false); if (water) FX.water(m); return m; };
+    const sy = Z.stream[1], brook = [[hx - 4.6, hz + 1.8, 1.5, 1.86], [hx - 5.6, hz + 2.3, 1.7, 1.36], [hx - 6.8, hz + 2.9, 1.9, .74], [hx - 8.3, hz + 3.4, 2.2, .22], [hx - 10.2, sy, 2.7, .07], [Z.stream[0] + 15.6, sy, 3.3, .055], [Z.stream[0] + 14, sy, 3.4, .055]];
+    const wx = Z.stream[0] - 15, river = [[wx + 2, sy, 3.4, .055], [wx - .2, sy + .5, 3.5, .055], [wx - 1.6, sy + 3.4, 3.7, .055], [wx - 1.8, sy + 9, 4, .055], [wx - 1.6, sy + 15, 4.4, .055], [wx - 1.8, sy + 21, 4.8, .055], [wx - 3, sy + 25.5, 5.4, .055], [wx - 6, sy + 28.2, 6.2, .04], [wx - 9.5, sy + 29.8, 7.4, 0], [wx - 13, sy + 30.8, 9, -.05], [wx - 16.5, sy + 31.4, 10.5, -.07]];   /* down the west side with lawn on both banks, then one smooth turn west across the beach, opening steadily into the sea */
+    ribbon(river.map(q => [q[0], q[1], q[2] + .9, Math.max(.04, q[3] - .012)]).slice(0, 7), '#E9D9B4', false, false); ribbon(river, '#7FC4E8', true, true);
+    ribbon(brook, '#7FC4E8', true, false);
+    /* the spring: a little pool among stones, high on the slope */
+    const pool = mk(new THREE.CircleGeometry(1.3, 20), '#7FC4E8', hx - 4.1, 1.98, hz + 1.6, null, false); pool.rotation.x = -Math.PI / 2; FX.water(pool);
+    for (let k = 0; k < 7; k++) { const a = k / 7 * 6.283 + .4; if (Math.cos(a) < -.55) continue; const rk = mk(sph(.34 + (k % 3) * .08, 6), k % 2 ? '#9A948A' : '#B5AFA3', hx - 4.1 + Math.cos(a) * 1.5, 2.02 - Math.cos(a) * .3, hz + 1.6 + Math.sin(a) * 1.4, null, false); rk.scale.y = .7; }
+    /* the water is seen to move: pale streaks drift downstream the whole way, quick down the slope and slower in the wide
+       river; white water where the brook comes off the hill; and at the mouth the river fans out pale into the sea */
+    const streaks = () => { const t = canvasTex(64, 256, (c, w, h) => { c.clearRect(0, 0, w, h); c.strokeStyle = '#FFFFFF'; for (let k = 0; k < 9; k++) { c.globalAlpha = .35 + (k % 3) * .2; c.lineWidth = 2 + k % 3; const x = 6 + (k * 23) % 52, y = (k * 61) % 256, L = 26 + (k * 17) % 40; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (k % 2 ? 2 : -2), y + L); c.stroke(); if (y + L > 256) { c.beginPath(); c.moveTo(x, y - 256); c.lineTo(x + (k % 2 ? 2 : -2), y + L - 256); c.stroke(); } } }); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+    const flowOn = (pts, secs, alpha, rep) => { const tex = streaks(); tex.repeat.set(1, rep); const m = ribbon(pts.map(q => [q[0], q[1], q[2] * .82, q[3] + .014]), 0, false, false, new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: alpha, depthWrite: false })); gsap.to(tex.offset, { y: -1, duration: secs, repeat: -1, ease: 'none' }); return m; };
+    flowOn(brook, 2.2, .75, .22); flowOn([[Z.stream[0] + 15, sy, 3.4, .055], [Z.stream[0], sy, 3.4, .055], [wx, sy, 3.4, .055]], 7, .4, .12); flowOn(river, 9, .42, .1);
+    [[hx - 8.9, hz + 3.5, .5], [hx - 9.6, sy + .5, .42], [hx - 9.3, sy - .5, .36], [hx - 10.4, sy + .1, .3]].forEach(([x, z, r]) => { const f = new THREE.Mesh(sph(r, 8), new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: .8 })); f.scale.y = .35; f.position.set(x, .14, z); f.userData.fx = true; W.scene.add(f); gsap.to(f.scale, { x: 1.25, z: 1.25, duration: .7 + r, yoyo: true, repeat: -1, ease: 'sine.inOut' }); });
+    { const fanT = canvasTex(256, 256, c => { const g2 = c.createRadialGradient(128, 128, 8, 128, 128, 126); g2.addColorStop(0, 'rgba(255,255,255,.75)'); g2.addColorStop(.45, 'rgba(200,236,250,.5)'); g2.addColorStop(1, 'rgba(160,220,245,0)'); c.fillStyle = g2; c.fillRect(0, 0, 256, 256); });
+      const fan = new THREE.Mesh(new THREE.CircleGeometry(11, 28), new THREE.MeshBasicMaterial({ map: fanT, transparent: true, depthWrite: false })); fan.rotation.x = -Math.PI / 2; fan.scale.set(1.25, .8, 1); fan.position.set(wx - 14.5, -.04, sy + 31.2); fan.userData.fx = true; fan.renderOrder = 1; W.scene.add(fan); gsap.to(fan.scale, { x: 1.4, y: .92, duration: 3.2, yoyo: true, repeat: -1, ease: 'sine.inOut' }); }
+    [[wx - 4.3, sy + 6], [wx + .7, sy + 11], [wx - 4.6, sy + 17], [wx + .9, sy + 23]].forEach(([x, z], i) => { const rk = mk(sph(.3 + (i % 2) * .12, 6), '#A8A193', x, .12, z, null, false); rk.scale.y = .6; });
     for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI; mk(box(.12, .9, .12), '#B98A5A', Z.farm[0] + Math.cos(a) * 5, .45, Z.farm[1] - Math.sin(a) * 4); }
-    sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 6.6, Z.meadow[1] - 5.4, '#5E9A57'); sign('日出山坡', Z.hill[0] + 6, Z.hill[1] + 2.4, '#F28C28', 2.2);
+    sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 6.6, Z.meadow[1] - 5.4, '#5E9A57'); sign('日出山坡', Z.hill[0] + 11, Z.hill[1] + 4.6, '#F28C28', 2.2);
     // trees and flowers
     const T0 = TREES.length;
-    [[-33, 26], [-34, -4], [-30, -28], [34, -26], [34, 2], [12, 26], [-13, 26.5], [-4, -6], [10, 4], [30, -12]].forEach(([x, z], i) => roundTree(x, 0, z, .9 + (i % 3) * .15, i % 2 ? '#6DBF5A' : '#5EA94E'));
+    [[-33, 26], [-31.5, 1.5], [-30, -28], [34, -26], [34, 2], [12, 26], [-13, 26.5], [-4, -6], [10, 4], [30, -12]].forEach(([x, z], i) => roundTree(x, 0, z, .9 + (i % 3) * .15, i % 2 ? '#6DBF5A' : '#5EA94E'));
     trees.push(...TREES.splice(T0)); FX.trees(trees);
     flowers(6, 14, 0, 10, 103); flowers(-6, 4, 0, 10, 104);
-    [[-6, 18], [6, 6], [-35, 4], [26, 4]].forEach(([x, z]) => lamp(x, z));
+    [[-6, 18], [6, 6], [-31.5, 5.2], [26, 4]].forEach(([x, z]) => lamp(x, z));
     PEOPLE.captain = makeChar('dad', { '3,0': '#2F4A6A', '7,0': '#FFFFFF', '6,0': '#22364E', '4,0': '#2F4A6A', '7,1': '#3E4A52', '0,1': '#22364E', '2,1': '#22364E', '1,1': '#22364E', '1,0': '#5A3B2B' }, 1);
     putIn(PEOPLE.captain, sp, -3.4, 27.6, 0);
     STATIC_MARK = false; B1.build(S); B1.spawn(); B1b.build(S); B1b.spawn(); B1c.build(S); B1c.spawn(); B1d.spawn(); B1e.build(S); B1e.spawn(); B1f.build(S); B1f.spawn();
@@ -6530,9 +6705,9 @@ const B1c = (() => {
   function animal(kind, x, z) {
     const g = new THREE.Group(); g.position.set(x, 0, z); W.scene.add(g);
     const leg = (c, dx, dz, h = .7) => mk(cyl(.07, .07, h, 6), c, dx, h / 2, dz, g);
-    if (kind === '马') { const b = mk(sph(.6, 14), '#8A5A3B', 0, 1.05, 0, g); b.scale.set(.75, .7, 1.4); [[-.25, -.5], [.25, -.5], [-.25, .5], [.25, .5]].forEach(([a, c]) => leg('#6E4A2E', a, c, .8)); const n = mk(cyl(.16, .2, .8, 8), '#8A5A3B', 0, 1.5, .75, g); n.rotation.x = .6; const h = mk(sph(.28, 12), '#8A5A3B', 0, 1.85, 1.05, g); h.scale.z = 1.25; mk(sph(.16, 10), '#B98A6A', 0, 1.76, 1.32, g).scale.set(1, .8, .9); mk(box(.08, .5, .6), '#3A2E28', 0, 1.75, .55, g, false); cuteFace(g, 0, 1.9, 1.05, .28, 0, { mouth: false, eyeY: .2 }); }
-    if (kind === '牛') { g.scale.setScalar(1.25); const b = mk(sph(.65, 14), '#FFFFFF', 0, 1, 0, g); b.scale.set(.85, .75, 1.3); [[.42, .35, .3], [-.4, -.35, .32], [.1, -.75, .26], [-.3, .5, .24]].forEach(([a, c, r]) => mk(sph(r, 10), '#2B2420', a, 1.12, c, g, false).scale.y = .7); [[-.3, -.5], [.3, -.5], [-.3, .5], [.3, .5]].forEach(([a, c]) => leg('#3A2E28', a, c)); const h = mk(sph(.32, 12), '#FFFFFF', 0, 1.22, .9, g); mk(sph(.17, 10), '#F6C4C4', 0, 1.1, 1.14, g).scale.set(1.2, .85, .8); cuteFace(g, 0, 1.26, .9, .32, 0, { mouth: false, eyeY: .2 }); [-1, 1].forEach(k => mk(new THREE.ConeGeometry(.05, .2, 6), '#E9D9B4', k * .18, 1.48, .85, g)); }
-    if (kind === '羊') { [[0, 0], [.25, .2], [-.25, .2], [0, -.3], [.2, -.2], [-.2, -.2]].forEach(([a, c]) => mk(sph(.35, 10), '#FBF7EE', a, .85, c, g)); [[-.2, -.3], [.2, -.3], [-.2, .3], [.2, .3]].forEach(([a, c]) => leg('#3A2E28', a, c, .55)); mk(sph(.22, 10), '#3A2E28', 0, 1, .55, g); cuteFace(g, 0, 1, .55, .22, 0, { white: true, eye: .2, mouth: false }); }
+    if (kind === '马') Zoo.quad(g, 'horse');   /* farm animals come from the Zoo library: real proportions, jointed legs, hooves */
+    if (kind === '牛') Zoo.quad(g, 'cow');
+    if (kind === '羊') Zoo.quad(g, 'sheep');
     if (kind === '鸟') { const b = mk(sph(.18, 10), '#4F86C6', 0, 0, 0, g); b.scale.z = 1.3; mk(sph(.12, 10), '#4F86C6', 0, .12, .2, g); cuteFace(g, 0, .14, .2, .12, 0, { mouth: false, eyeY: .2, spread: .45 }); const k2 = mk(new THREE.ConeGeometry(.04, .1, 6), '#F2B233', 0, .1, .34, g, false); k2.rotation.x = Math.PI / 2; [-1, 1].forEach(k => { const w = mk(sph(.13, 8), '#3E6E9E', k * .17, .02, 0, g); w.scale.set(.4, .8, 1.1); }); }
     if (kind === '鱼') { const b = mk(sph(.22, 12), '#F28C28', 0, 0, 0, g); b.scale.set(.6, .8, 1.4); const t2 = mk(new THREE.ConeGeometry(.16, .25, 4), '#F28C28', 0, 0, -.38, g); t2.rotation.x = -Math.PI / 2; }
     if (kind === '虫') { const b = mk(sph(.16, 12), '#E8443A', 0, .1, 0, g); b.scale.y = .6; mk(sph(.08, 8), '#1E1A18', 0, .1, .15, g); [[.06, .04], [-.06, -.04], [.05, -.07]].forEach(([a, c]) => mk(sph(.03, 6), '#1E1A18', a, .18, c, g, false)); }
@@ -7488,11 +7663,7 @@ const B2c = (() => {
     const h = mk(sph(.15, 12), '#4FA36A', .16, .2, 0, g, false); h.scale.x = 1.3; [-1, 1].forEach(k => { mk(new THREE.ConeGeometry(.03, .14, 6), '#E2C25A', .12, .36, k * .06, g, false); mk(sph(.025, 6), '#1E1A18', .26, .25, k * .06, g, false); });
     mk(new THREE.ConeGeometry(.06, .1, 4), '#E8574A', -.95, .14, 0, g, false).rotation.z = Math.PI / 2;
   }
-  function cat(g) {
-    const b = mk(sph(.3, 12), '#F2A65A', 0, .3, 0, g); b.scale.set(1, .85, 1.3); const h = mk(sph(.22, 12), '#F2A65A', 0, .55, .32, g);
-    [-1, 1].forEach(k => { mk(new THREE.ConeGeometry(.07, .14, 4), '#F2A65A', k * .12, .76, .3, g); mk(sph(.03, 6), '#1E1A18', k * .08, .6, .5, g, false); });
-    const t = mk(cyl(.04, .03, .5, 6), '#F2A65A', 0, .45, -.45, g); t.rotation.x = -.8; FX.creature(g);
-  }
+  function cat(g) { Zoo.into(g, 1.7, 0, q => Zoo.quad(q, 'cat', { col: '#F2A65A', dark: '#C97E3A' })); }   /* the family's cat: a real cat now */
   /* add the party table, calendar, chores and the cat to the home (called once the home exists) */
   function furnish(sp) {
     const S = sp.scene; here_build = sp; W.scene = S;
@@ -8558,16 +8729,10 @@ const B3c = (() => {
   }
 
   /* ---------- Lesson 6: the snow yard ---------- */
-  function animal(kind, g) {
-    const col = { mao3: '#F2A65A', gou3: '#B98A5A', tu3: '#FFFFFF' }[kind];
-    const b = mk(sph(.32, 12), col, 0, .32, 0, g); b.scale.set(1, .85, 1.2); mk(sph(.24, 12), col, 0, .66, .28, g);
-    [-1, 1].forEach(k => {
-      if (kind === 'mao3') mk(new THREE.ConeGeometry(.08, .16, 4), col, k * .13, .9, .26, g);
-      if (kind === 'gou3') { const e = mk(sph(.1, 8), '#8A5A3A', k * .23, .66, .26, g); e.scale.set(.55, 1.3, .8); }
-      if (kind === 'tu3') { const e = mk(sph(.07, 8), col, k * .08, 1.05, .22, g); e.scale.set(.8, 3, .8); mk(sph(.04, 6), '#F6C4D0', k * .08, 1.05, .27, g, false).scale.set(.6, 2.4, .4); } });
-    if (kind === 'gou3') { const mz = mk(sph(.11, 10), '#E9D3B4', 0, .6, .46, g, false); mz.scale.set(1.2, .8, .8); }
-    mk(sph(.045, 6), kind === 'gou3' ? '#2B2420' : '#F29AAA', 0, kind === 'gou3' ? .63 : .66, kind === 'gou3' ? .56 : .52, g, false);
-    cuteFace(g, 0, .66, .28, .24, 0, { eyeY: .22, mouthY: .55 });
+  function animal(kind, g) {   /* the yard's cat, dog and rabbit, from the Zoo library */
+    if (kind === 'mao3') Zoo.into(g, 1.75, 0, q => Zoo.quad(q, 'cat', { col: '#F2A65A', dark: '#C97E3A' }));
+    if (kind === 'gou3') Zoo.into(g, 1.55, 0, q => Zoo.quad(q, 'dog', { col: '#B98A5A', dark: '#8A5A3A' }));
+    if (kind === 'tu3') Zoo.into(g, 1.6, 0, q => Zoo.rabbit(q, '#FFFFFF'));
   }
   function buildYard(S) {
     const [sx, sz] = Isle3.Z.snow; Q.y = { x: sx, z: sz };
@@ -8818,8 +8983,8 @@ const B3e = (() => {
   }
 
   /* ---------- the race meadow ---------- */
-  function hareMesh(g) { const b = mk(sph(.3, 12), '#C9A27A', 0, .35, 0, g); b.scale.set(1.3, .9, 1); mk(sph(.2, 12), '#C9A27A', .34, .6, 0, g); [-1, 1].forEach(k => { const e = mk(sph(.06, 8), '#C9A27A', .3, .95, k * .07, g); e.scale.set(.8, 3, .8); }); mk(sph(.08, 8), '#FFFFFF', -.38, .4, 0, g, false); cuteFace(g, .34, .6, 0, .2, Math.PI / 2, { eyeY: .15 }); }
-  function tortoiseMesh(g) { const s = mk(sph(.42, 14), '#5E9A57', 0, .3, 0, g); s.scale.set(1.2, .6, 1); const h = mk(sph(.16, 10), '#9AC07A', .55, .3, 0, g); cuteFace(g, .55, .3, 0, .16, Math.PI / 2, { eyeY: .2 }); [[.3, .3], [.3, -.3], [-.3, .3], [-.3, -.3]].forEach(([a, b]) => mk(sph(.1, 8), '#9AC07A', a, .1, b, g)); }
+  function hareMesh(g) { Zoo.into(g, 1.6, Math.PI / 2, q => Zoo.rabbit(q, '#C9A27A')); }
+  function tortoiseMesh(g) { Zoo.into(g, 1.35, Math.PI / 2, q => Zoo.tortoise(q)); }
   function buildTrack(S) {
     const [tx, tz] = Isle3.Z.track; Q.r = { x0: tx - 5.4, x1: tx + 5.2, z: tz - 1.2, tree: tx - .4 };
     for (let k = 0; k < 2; k++) mk(new THREE.PlaneGeometry(11, .08), '#FFFFFF', tx, Isle3.Y.plot + .01, tz - 1.9 + k * 1.4, null, false).rotation.x = -Math.PI / 2;
@@ -8882,7 +9047,7 @@ const B3f = (() => {
   const sayIt = (t, r = .7) => Voice.speak(t, r);
   const I = () => SP.isle3;
   const prop = (k, obj) => { PEOPLE[k] = { obj, space: 'isle3', mixer: { update() {} }, play() {}, once() {} }; return PEOPLE[k]; };
-  function catMesh(g, s, col) { const b = mk(sph(.32 * s, 12), col, 0, .32 * s, 0, g); b.scale.set(1, .85, 1.2); mk(sph(.24 * s, 12), col, 0, .66 * s, .28 * s, g); [-1, 1].forEach(k => mk(new THREE.ConeGeometry(.08 * s, .16 * s, 4), col, k * .13 * s, .9 * s, .26 * s, g)); mk(sph(.04 * s, 6), '#F29AAA', 0, .64 * s, .52 * s, g, false); cuteFace(g, 0, .66 * s, .28 * s, .24 * s, 0, { eyeY: .22, mouthY: .55 }); }
+  function catMesh(g, s, col) { Zoo.into(g, 1.75 * s, 0, q => Zoo.quad(q, 'cat', { col, dark: col })); }
 
   /* ---------- Lesson 11: the fishing bank ---------- */
   function buildBank(S) {
@@ -8934,8 +9099,8 @@ const B3f = (() => {
   }
 
   /* ---------- Lesson 12: the shepherd's hill ---------- */
-  function sheepMesh(g) { mk(sph(.42, 12), '#F6F2E8', 0, .45, 0, g).scale.set(1.3, .9, 1); mk(sph(.2, 10), '#3E3A40', .52, .55, 0, g); [[.3, .2], [.3, -.2], [-.3, .2], [-.3, -.2]].forEach(([a, b]) => mk(cyl(.05, .05, .3, 6), '#3E3A40', a, .15, b, g, false)); }
-  function wolfMesh(g) { const b = mk(sph(.4, 12), '#8A8E96', 0, .5, 0, g); b.scale.set(1.5, .8, .8); mk(sph(.26, 10), '#8A8E96', .62, .7, 0, g).scale.x = 1.3; [-1, 1].forEach(k => mk(new THREE.ConeGeometry(.07, .2, 4), '#6E727A', .58, .98, k * .12, g)); mk(cyl(.06, .03, .6, 6), '#8A8E96', -.7, .6, 0, g).rotation.z = -1; }
+  function sheepMesh(g) { Zoo.into(g, 1.1, Math.PI / 2, q => Zoo.quad(q, 'sheep')); }
+  function wolfMesh(g) { Zoo.into(g, 1.1, Math.PI / 2, q => Zoo.quad(q, 'wolf')); }
   function buildHill(S) {
     const [hx, hz] = Isle3.Z.hill, top = 1.6; Q.h = { x: hx, z: hz - 2, top };
     Q.flock = [[-1.6, -1], [1.4, -1.6], [-.4, 1], [2, .4], [-2.4, .8]].map(([dx, dz], i) => { const g = new THREE.Group(); g.position.set(hx + dx, top - .2, hz - 2 + dz); g.rotation.y = i; S.add(g); sheepMesh(g); g.userData.home = g.position.clone(); return g; });
@@ -9383,34 +9548,9 @@ const B4c = (() => {
 
   /* ---------- the stream, the ford and the stable ---------- */
   /* round, cuddly farm animals; the head looks along +x, with the shared friendly face */
-  function horse(g, s, col) {
-    const dark = shade(col, -.25), lite = shade(col, .25);
-    const b = mk(sph(.42 * s, 14), col, 0, .92 * s, 0, g); b.scale.set(1.35, .95, 1);
-    [[-.32, .2], [-.32, -.2], [.32, .2], [.32, -.2]].forEach(([a, c]) => { mk(cyl(.11 * s, .1 * s, .55 * s, 8), col, a * s, .3 * s, c * s, g); mk(cyl(.115 * s, .115 * s, .1 * s, 8), dark, a * s, .05 * s, c * s, g); });
-    const n = mk(cyl(.17 * s, .22 * s, .45 * s, 10), col, .45 * s, 1.25 * s, 0, g); n.rotation.z = -.5;
-    mk(sph(.34 * s, 14), col, .66 * s, 1.58 * s, 0, g);
-    const mz = mk(sph(.2 * s, 12), lite, .9 * s, 1.47 * s, 0, g); mz.scale.set(.9, .8, 1.1);
-    [-1, 1].forEach(k => { mk(sph(.025 * s, 6), dark, 1.08 * s, 1.47 * s, k * .07 * s, g, false); const e = mk(new THREE.ConeGeometry(.07 * s, .18 * s, 6), col, .58 * s, 1.9 * s, k * .17 * s, g); e.rotation.x = k * -.3; });
-    const mane = mk(rbox(.34 * s, .5 * s, .12 * s, .05 * s), dark, .4 * s, 1.62 * s, 0, g); mane.rotation.z = -.5;
-    const tl = mk(sph(.12 * s, 8), dark, -.62 * s, .95 * s, 0, g); tl.scale.set(.8, 2, .8);
-    cuteFace(g, .66 * s, 1.6 * s, 0, .34 * s, Math.PI / 2, { mouth: false, eyeY: .2 }); packGroup(g);
-  }
-  function cow(g) {
-    const b = mk(sph(.62, 14), '#FFFFFF', 0, 1.05, 0, g); b.scale.set(1.4, .95, 1);
-    [[.1, 1.3, .52, .22], [-.45, 1.15, -.5, .2], [.5, 1.5, -.2, .16]].forEach(([a, y, c, r]) => { const sp = mk(sph(r, 10), '#3A2E28', a, y, c, g, false); sp.scale.set(1.2, .9, .35); sp.lookAt(g.position.x, g.position.y + 1.05, g.position.z); });
-    [[-.5, .3], [-.5, -.3], [.5, .3], [.5, -.3]].forEach(([a, c]) => { mk(cyl(.13, .12, .55, 8), '#FFFFFF', a, .32, c, g); mk(cyl(.135, .135, .1, 8), '#3A2E28', a, .05, c, g); });
-    mk(sph(.42, 14), '#FFFFFF', .95, 1.4, 0, g);
-    const mz = mk(sph(.26, 12), '#F6C4C4', 1.22, 1.24, 0, g); mz.scale.set(.8, .8, 1.25);
-    [-1, 1].forEach(k => { mk(sph(.035, 6), '#B86E6E', 1.43, 1.26, k * .09, g, false); mk(new THREE.ConeGeometry(.06, .2, 6), '#E9D9B4', .9, 1.86, k * .2, g); const e = mk(sph(.1, 8), '#FFFFFF', .85, 1.62, k * .42, g); e.scale.set(.6, .5, 1.3); });
-    const tl = mk(cyl(.03, .03, .6, 5), '#FFFFFF', -.9, .95, 0, g); tl.rotation.z = .3;
-    cuteFace(g, .95, 1.44, 0, .42, Math.PI / 2, { mouth: false, eyeY: .18 }); packGroup(g);
-  }
-  function squirrel(g) {
-    const b = mk(sph(.18, 12), '#B07040', 0, .2, 0, g); b.scale.y = 1.15; mk(sph(.11, 10), '#F2D7B4', 0, .2, .1, g).scale.set(.9, 1.1, .6);
-    mk(sph(.15, 12), '#B07040', 0, .46, .02, g); [-1, 1].forEach(k => mk(new THREE.ConeGeometry(.045, .1, 6), '#B07040', k * .08, .62, 0, g));
-    const t = mk(sph(.17, 10), '#C98A5A', 0, .42, -.2, g); t.scale.set(.85, 1.7, .8);
-    cuteFace(g, 0, .46, .02, .15, 0, { eyeY: .1 }); packGroup(g);
-  }
+  function horse(g, s, col) { Zoo.into(g, s * .92, Math.PI / 2, q => Zoo.quad(q, 'horse', { col, dark: shade(col, -.25), muzzle: shade(col, .25), mane: shade(col, -.45) })); }
+  function cow(g) { Zoo.into(g, 1.15, Math.PI / 2, q => Zoo.quad(q, 'cow')); }
+  function squirrel(g) { Zoo.into(g, 1.4, 0, q => Zoo.squirrel(q)); }
   function build(S) {
     const sx = -24, sz = 26.4; Q.s = { x: sx, z: sz };
     FX.water(mk(new THREE.PlaneGeometry(24, 3), '#6FB7DA', sx, .1, sz, null, false)).rotation.x = -Math.PI / 2; I().solids.push([sx - 12, sz - 1.5, sx + 12, sz + 1.5]);
