@@ -59,7 +59,7 @@ ruby rt { font-family: var(--latin); font-size: .45em; color: var(--ink-soft); }
 
 /* ---------- HUD ---------- */
 .hud { position: absolute; top: 8px; left: 10px; right: 10px; z-index: 5; display: flex; align-items: center; gap: 8px; pointer-events: none; }
-body:not(.playing) .hud { visibility: hidden; }
+body:not(.playing) .hud, body:not(.playing) .zoomBtn { visibility: hidden; }
 .hud > * { pointer-events: auto; }
 .sp { flex: 1; }
 .rb { width: 46px; height: 46px; border-radius: 50%; border: 2px solid var(--panel-edge); background: var(--panel); display: grid; place-items: center; padding: 0; box-shadow: 0 3px 0 var(--panel-edge); flex: none; font-weight: 700; }
@@ -1300,7 +1300,7 @@ void main() {
       /* an errand names the person to find, so only somebody whose name is unique on this island can be its target (several children are all called 小朋友) */
       const locals = Object.keys(PEOPLE).filter(k => k !== 'me' && isHuman(PEOPLE[k]) && !isCaptain(k) && PEOPLE[k].fxD && PEOPLE[k].fxD.home0 === here0), count = {};
       locals.forEach(k => { count[nm(k, 0)] = (count[nm(k, 0)] || 0) + 1; });
-      const others = locals.filter(k => k !== who && count[nm(k, 0)] === 1 && nm(k, 0) !== nm(who, 0) && typeof NAMES !== 'undefined' && NAMES[k]);
+      const others = locals.filter(k => k !== who && count[nm(k, 0)] === 1 && nm(k, 0) !== nm(who, 0) && typeof NAMES !== 'undefined' && NAMES[k] && !PEOPLE[k].fxD.away && !PEOPLE[k].fxD.gone && !(PEOPLE[k].fxD.house && PEOPLE[k].fxD.house.away));   /* and somebody who is on this island tonight: the friend who has sailed home cannot be found here */
       if (R.ws.length >= 3 && others.length && Math.random() < .5 && !N.errand) {
         const w = pickOne(R.ws), to = pickOne(others);
         await N.talk0(who, [['这么晚了……先帮我一个忙吧！', 'It is late… do me a favour first!'], ['把「' + w[0] + '」这个词带给' + nm(to, 0) + '，再回来找我。', 'Take the word “' + w[0] + '” to ' + nm(to, 1) + ', then come back to me.']]);
@@ -1851,7 +1851,7 @@ void main() {
   function standUp(c, D, sp) { const s2 = D.seat, o = c.obj, f2 = seatFront(s2); s2.fxBusy = false; D.seat = null; o.position.y = sp.floor ? sp.floor(o.position.x, o.position.z) : 0; D.px = o.position.x; D.pz = o.position.z; D.tx = f2[0]; D.tz = f2[1]; D.mode = 'back'; D.standing = true; c.play('walk'); }
   /* go and sit on a bench near (x, z): the straight way if it is clear (only from one's own spot, so the way back is known), else the mapped way round */
   function trySeat(c, D, sp, x, z, range, mp, atSpot) {
-    const list = (Sit.seats ? Sit.seats(sp.name) : []).filter(s2 => !s2.fxBusy && Math.hypot(s2.x - x, s2.z - z) < range && Math.hypot(s2.x - mp.x, s2.z - mp.z) > 5).sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z)).slice(0, 2);
+    const list = (Sit.seats ? Sit.seats(sp.name) : []).filter(s2 => !s2.lie && !s2.fxBusy && Math.hypot(s2.x - x, s2.z - z) < range && Math.hypot(s2.x - mp.x, s2.z - mp.z) > 5).sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z)).slice(0, 2);
     for (const s2 of list) { const f2 = seatFront(s2); if (blocked(f2[0], f2[1])) continue;
       if (atSpot && Math.hypot(f2[0] - x, f2[1] - z) < 9 && clearPath(x, z, f2[0], f2[1])) { D.seat = s2; s2.fxBusy = true; D.viaMap = false; D.tx = f2[0]; D.tz = f2[1]; D.mode = 'walk'; c.play('walk'); return true; }
       const r = route(sp, x, z, f2[0], f2[1]); if (r && r.length && Math.hypot(r[r.length - 1][0] - f2[0], r[r.length - 1][1] - f2[1]) < .3) { D.seat = s2; s2.fxBusy = true; D.viaMap = true; D.mode = 'route'; D.route = r; D.then = 'seat'; D.speed = 1.05; D.trail = []; c.play('walk'); return true; } }
@@ -2718,23 +2718,39 @@ const Sit = (() => {
   const SEATS = {}; let cur = null, legs = [];
   const apply = () => legs.forEach(([bn, q]) => bn.quaternion.multiply(q));   // called right after the animation update each frame
   const LEGS = [['upperlegl', -1.5], ['upperlegr', -1.5], ['lowerlegl', 1.55], ['lowerlegr', 1.55]];
-  function add(space, x, z, top, ry = 0, view = false) { (SEATS[space] = SEATS[space] || []).push({ x, z, top, ry, view }); }
+  function add(space, x, z, top, ry = 0, view = false, lie = false) { (SEATS[space] = SEATS[space] || []).push({ x, z, top, ry, view, lie }); }
   function bones(ch) { const b = {}; ch.obj.traverse(o => { if (o.isBone) b[o.name] = o; }); return b; }
   function down(s) {
     const me = ME(), o = me.obj, b = bones(me), hips = b.hips;
+    if (s.lie) {   /* on your back on the mat, head to the north, looking up at the sky */
+      me.play('idle'); legs = []; o.position.set(s.x, s.top + .14, s.z + .8); o.rotation.set(-Math.PI / 2, 0, 0); cur = s; UI.sit = true; Sfx.play('pop');
+      UI.seatCam = { pos: new THREE.Vector3(s.x, s.top + 2.3, s.z + 3.6), look: new THREE.Vector3(s.x, s.top + 15, s.z - 14) }; return; }
     me.play('idle'); me.mixer && me.mixer.update(0); legs = LEGS.map(([n, a]) => [b[n], new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), a)]).filter(x => x[0]); apply();
     o.position.set(s.x - Math.sin(s.ry) * .18, 0, s.z - Math.cos(s.ry) * .18); o.rotation.y = s.ry; o.updateMatrixWorld(true);
     const hy = hips ? hips.getWorldPosition(new THREE.Vector3()).y : .5; o.position.y = s.top + .06 - hy;
     cur = s; UI.sit = true; Sfx.play('pop');
     if (s.view) UI.seatCam = { pos: new THREE.Vector3(s.x, s.top + 3.4, s.z - 4.2), look: new THREE.Vector3(s.x * .5, 0, s.z + 26) };
+    s.flip = false; turnBtn(true);
+  }
+  /* on a bench you can turn to face the other way: the houses on one side, the sea on the other */
+  let tb = null;
+  function turnBtn(show) {
+    if (!tb) { tb = document.createElement('button'); tb.className = 'pill'; tb.innerHTML = '↻ 转身<small class="en-only" style="display:block;font-size:11px;font-weight:400">Turn round</small>'; tb.style.cssText = 'position:absolute;left:50%;transform:translateX(-50%);bottom:26px;z-index:6;padding:8px 16px'; tb.onclick = turn; document.body.appendChild(tb); }
+    tb.style.display = show ? '' : 'none';
+  }
+  function turn() {
+    if (!cur || cur.lie) return; const s = cur, o = ME().obj, y = o.position.y; s.flip = !s.flip; const ry = s.ry + (s.flip ? Math.PI : 0);
+    o.position.set(s.x - Math.sin(ry) * .18, y, s.z - Math.cos(ry) * .18); o.rotation.y = ry; Sfx.play('pop');
+    if (s.view) { const k = s.flip ? -1 : 1; UI.seatCam = { pos: new THREE.Vector3(s.x, s.top + 3.4, s.z - 4.2 * k), look: new THREE.Vector3(s.x * .5, s.flip ? s.top - 2 : 0, s.z + 26 * k) }; }
   }
   function up() {
-    if (!cur) return; const me = ME(), s = cur; cur = null; legs = []; UI.seatCam = null;
+    if (!cur) return; const me = ME(), s = cur; cur = null; legs = []; UI.seatCam = null; me.obj.rotation.x = 0; if (tb) turnBtn(false);
+    if (s.lie) { me.obj.rotation.set(0, 0, 0); me.obj.position.set(s.x + 1.5, here.floor(s.x + 1.5, s.z), s.z); UI.sit = false; me.play('idle'); return; }
     me.obj.position.set(s.x + Math.sin(s.ry) * .9, here.floor(s.x, s.z), s.z + Math.cos(s.ry) * .9); UI.sit = false; me.play('idle');
   }
   function nearby(add) {
-    if (cur) { add(ME().obj.position.x, ME().obj.position.z, 5, '站起来', 'Stand up', up, 3); return; }
-    (SEATS[here.name] || []).forEach(s => add(s.x + Math.sin(s.ry) * .7, s.z + Math.cos(s.ry) * .7, 1.6, '坐下', 'Sit down', () => down(s)));
+    if (cur) { add(ME().obj.position.x, ME().obj.position.z, 5, cur.lie ? '起来' : '站起来', cur.lie ? 'Get up' : 'Stand up', up, 3); return; }
+    (SEATS[here.name] || []).forEach(s => s.lie ? add(s.x, s.z, 1.5, '躺下看星星', 'Lie down and look at the sky', () => down(s)) : add(s.x + Math.sin(s.ry) * .7, s.z + Math.cos(s.ry) * .7, 1.6, '坐下', 'Sit down', () => down(s)));
   }
   return { add, nearby, up, apply: () => cur && apply(), get sitting() { return !!cur; }, seats: sp => SEATS[sp] || [] };
 })();
@@ -2890,6 +2906,8 @@ const Heights = (() => {
     // level 2: a row of trees at the back, benches looking out over the island, flowers
     for (let x = -30; x <= 30; x += 10) if (!s2.some(c => Math.abs(c - x) < 3)) roundTree(x, y2, zB + 2.2, .9, '#6DBF5A');
     [-20, -4, 4, 20].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const bz = zA - 3.2; mk(rbox(2.4, .12, .7, .05), '#B98A5A', x, y2 + .55, bz, S); [-1, 1].forEach(q => mk(box(.12, .5, .6), '#8A6A4A', x + q, y2 + .25, bz, S)); Sit.add(sp.name, x - .6, bz, y2 + .61, 0, true); Sit.add(sp.name, x + .6, bz, y2 + .61, 0, true); sp.solids.push([x - 1.25, bz - .38, x + 1.25, bz + .38]);   /* a bench is sat on, not walked through */ flowers(x + (k % 2 ? 2.6 : -2.6), bz - 1.4, y2 + .06, 7, 900 + k, null, 1.6); });
+    /* two mats on the terrace for lying back and watching the sky */
+    [-12, 12].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const mz = zA - 3.2; mk(box(1.5, .05, 2.3), k ? '#E8574A' : '#4F86C6', x, y2 + .05, mz, S, false); [-.5, 0, .5].forEach(d => mk(box(.16, .052, 2.3), '#FFF6E2', x + d, y2 + .052, mz, S, false)); mk(rbox(.9, .16, .4, .07), '#FFF6E2', x, y2 + .14, mz - .9, S, false); Sit.add(sp.name, x, mz, y2 + .05, 0, true, true); });
     // level 3: the hill with the telescope in the middle, flowers either side
     hill(sp, S, 0, zC + 3.4, 2.6, y3);
     flowers(-14, zC + 4, y3 + .06, 10, 990, null, 1.6); flowers(14, zC + 4, y3 + .06, 10, 991, null, 1.6);
@@ -3731,7 +3749,21 @@ function initRenderer() {
   resize(); window.addEventListener('resize', resize); FX.setup();
 }
 function resize() { const cv = renderer.domElement, w = cv.clientWidth || innerWidth, h = cv.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); FX.resize(); }
-function camOff() { const a = camera.aspect < 1 ? here.camTall : here.cam; return new THREE.Vector3(a[0], a[1], a[2]); }
+/* The view can be drawn in and out (pinch, mouse wheel, or the two buttons). Drawn right in, the camera also sinks and
+   looks up past you, so the sky, the stars and the far shore come into view. */
+let ZOOM = 1; try { ZOOM = Math.max(.45, Math.min(1.5, +store.get('zhongwen-town.zoom', 1) || 1)); } catch (e) { }
+const zoomUp = () => Math.max(0, Math.min(1, (1 - ZOOM) / .55));
+function setZoom(z) { ZOOM = Math.max(.45, Math.min(1.5, z)); try { store.set('zhongwen-town.zoom', ZOOM); } catch (e) { } }
+function camOff() { const a = camera.aspect < 1 ? here.camTall : here.cam, t = zoomUp(); return new THREE.Vector3(a[0] * ZOOM, a[1] * ZOOM * (1 - .5 * t), a[2] * ZOOM); }
+(() => {
+  const free = () => document.body.classList.contains('playing') && !(typeof UI === 'object' && UI.busy);
+  addEventListener('wheel', e => { if (free()) setZoom(ZOOM * Math.exp(e.deltaY * .0012)); }, { passive: true });
+  let pz = null; const span = e => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+  addEventListener('touchstart', e => { pz = e.touches.length === 2 && free() ? { d: span(e), z: ZOOM } : null; }, { passive: true });
+  addEventListener('touchmove', e => { if (pz && e.touches.length === 2) setZoom(pz.z * pz.d / Math.max(20, span(e))); }, { passive: true });
+  addEventListener('touchend', e => { if (e.touches.length < 2) pz = null; }, { passive: true });
+  addEventListener('DOMContentLoaded', () => { [['＋', .8, 64], ['－', 1.25, 116]].forEach(([txt, f, top]) => { const b = document.createElement('button'); b.className = 'rb zoomBtn'; b.textContent = txt; b.setAttribute('aria-label', f < 1 ? 'Zoom in' : 'Zoom out'); b.style.cssText = 'position:absolute;right:10px;top:' + top + 'px;z-index:5;font-size:22px;font-weight:700;line-height:1'; b.onclick = () => setZoom(ZOOM * f); document.body.appendChild(b); }); });
+})();
 function blocked(x, z, fromY) {
   const sp = here;
   if (sp.name === 'town') {
@@ -3825,7 +3857,7 @@ function loop() {
   if (storyBox) want.y += 2.4;
   if (here.box && !UI.talkCam) want.x = Math.max(here.box[0] + 5, Math.min(here.box[2] - 5, want.x));   // not while two people talk: near the island's edge this pulled the side camera right into their faces
   camera.position.lerp(want, Math.min(1, dt * 3.5));
-  const la = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).look.clone() : fo.clone().add(new THREE.Vector3(0, storyBox ? .2 : 2.4, -6)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt); FX.cam(dt);
+  const la = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).look.clone() : fo.clone().add(new THREE.Vector3(0, storyBox ? .2 : 2.4 + zoomUp() * 4.6, -6 - zoomUp() * 13)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt); FX.cam(dt);
   if (here.sky) here.sky.g.position.copy(camera.position);
   if (here.name === 'town') TREES.forEach(tr => {   // fade trees that hide you from the camera
     const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && (Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5 || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x) || treeHides(p, tr.scale.x);
@@ -6223,7 +6255,6 @@ const Isle1 = (() => {
     { const fanT = canvasTex(256, 256, c => { const g2 = c.createRadialGradient(128, 128, 8, 128, 128, 126); g2.addColorStop(0, 'rgba(255,255,255,.75)'); g2.addColorStop(.45, 'rgba(200,236,250,.5)'); g2.addColorStop(1, 'rgba(160,220,245,0)'); c.fillStyle = g2; c.fillRect(0, 0, 256, 256); });
       const fan = new THREE.Mesh(new THREE.CircleGeometry(11, 28), new THREE.MeshBasicMaterial({ map: fanT, transparent: true, depthWrite: false })); fan.rotation.x = -Math.PI / 2; fan.scale.set(1.25, .8, 1); fan.position.set(wx - 14.5, -.04, sy + 31.2); fan.userData.fx = true; fan.renderOrder = 1; W.scene.add(fan); gsap.to(fan.scale, { x: 1.4, y: .92, duration: 3.2, yoyo: true, repeat: -1, ease: 'sine.inOut' }); }
     [[wx - 4.3, sy + 6], [wx + .7, sy + 11], [wx - 4.6, sy + 17], [wx + .9, sy + 23]].forEach(([x, z], i) => { const rk = mk(sph(.3 + (i % 2) * .12, 6), '#A8A193', x, .12, z, null, false); rk.scale.y = .6; });
-    for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI; mk(box(.12, .9, .12), '#B98A5A', Z.farm[0] + Math.cos(a) * 5, .45, Z.farm[1] - Math.sin(a) * 4); }
     sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 6.6, Z.meadow[1] - 5.4, '#5E9A57'); sign('日出山坡', Z.hill[0] + 11, Z.hill[1] + 4.6, '#F28C28', 2.2);
     // trees and flowers
     const T0 = TREES.length;
@@ -6724,6 +6755,31 @@ const B1c = (() => {
       if (zh === '马' || zh === '牛' || zh === '羊') I.solids.push([x - .7, z - 1.1, x + .7, z + 1.1]);
       return { zh, en, x, z, g, home: g.position.clone() };
     });
+    /* A proper farmyard round them: a railed paddock on trodden earth, open at the front so you can walk in among the
+       animals; a red barn behind with hay bales beside it; a drinking trough; stones round the fish pond. */
+    const wood = '#9A6B43', x0 = F[0] - 5.8, x1 = F[0] + 6.2, zb = F[1] - 4.5, zf = F[1] + 2.2;
+    const earth = mk(new THREE.PlaneGeometry(x1 - x0 - .3, zf - zb + .6), '#D9BE93', (x0 + x1) / 2, .045, (zb + zf) / 2 + .2, null, false); earth.rotation.x = -Math.PI / 2;
+    const fence = (ax, az, bx, bz) => { const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(L / 1.5)), ang = Math.atan2(bx - ax, bz - az);
+      for (let k = 0; k <= n; k++) { const t = k / n; mk(box(.14, 1.05, .14), wood, ax + (bx - ax) * t, .52, az + (bz - az) * t); mk(sph(.09, 6), wood, ax + (bx - ax) * t, 1.07, az + (bz - az) * t, null, false); }
+      [.42, .82].forEach(y => { const r = mk(box(.08, .1, L), '#B98A5A', (ax + bx) / 2, y, (az + bz) / 2); r.rotation.y = ang; });
+      I.solids.push([Math.min(ax, bx) - .12, Math.min(az, bz) - .12, Math.max(ax, bx) + .12, Math.max(az, bz) + .12]); };
+    fence(x0, zb, x1, zb); fence(x0, zb, x0, zf); fence(x1, zb, x1, zf); fence(x0, zf, x0 + 2.4, zf); fence(x1 - 2.4, zf, x1, zf);
+    /* the barn */
+    const bx = F[0] - 4.4, bz = F[1] - 7.6, barn = new THREE.Group(); barn.position.set(bx, 0, bz); W.scene.add(barn);
+    mk(box(5, 3, 3.8), '#B8483A', 0, 1.5, 0, barn); [-2.5, 2.5].forEach(x => [-1.9, 1.9].forEach(z => mk(box(.2, 3.06, .2), '#F3EDE2', x, 1.5, z, barn, false)));
+    mk(box(5.1, .2, 3.9), '#F3EDE2', 0, 3, 0, barn, false);
+    [-1, 1].forEach(k => { const lo = mk(box(1.75, .16, 4.2), '#6E4A3A', k * 1.9, 3.55, 0, barn); lo.rotation.z = -k * .95; const hi = mk(box(1.55, .16, 4.2), '#6E4A3A', k * .68, 4.42, 0, barn); hi.rotation.z = -k * .42; });
+    { const sh = new THREE.Shape(); sh.moveTo(-2.5, 0); sh.lineTo(2.5, 0); sh.lineTo(1.45, 1.42); sh.lineTo(0, 1.76); sh.lineTo(-1.45, 1.42); sh.closePath(); [-1.9, 1.9].forEach(z => { const gm = mk(new THREE.ShapeGeometry(sh), '#B8483A', 0, 3.05, z, barn, false); gm.material.side = THREE.DoubleSide; }); }
+    mk(box(2.2, 2.3, .08), '#8E3327', 0, 1.15, 1.92, barn, false); [[-1.1, 0], [1.1, 0], [0, 1.15], [0, -1.15]].forEach(([dx, dy]) => mk(box(dx ? .12 : 2.32, dx ? 2.3 : .12, .1), '#F3EDE2', dx, 1.15 + dy, 1.94, barn, false)); mk(box(.1, 2.3, .1), '#F3EDE2', 0, 1.15, 1.95, barn, false);
+    [-1, 1].forEach(k => { const d = mk(box(.1, 1.5, .1), '#F3EDE2', k * .55, 1.15, 1.96, barn, false); d.rotation.z = k * .62; });
+    mk(box(.9, .7, .08), '#F6E7B8', 0, 3.75, 1.93, barn, false); mk(box(1.04, .1, .1), '#F3EDE2', 0, 4.14, 1.94, barn, false); mk(box(1.04, .1, .1), '#F3EDE2', 0, 3.36, 1.94, barn, false);
+    I.solids.push([bx - 2.6, bz - 2, bx + 2.6, bz + 2]);
+    /* hay */
+    [[bx + 3.7, bz + 1.5, 0, .55], [bx + 4.9, bz + 1.7, .3, .55], [bx + 4.3, bz + 1.6, .1, 1.5]].forEach(([x, z, ry, y]) => { const h = new THREE.Group(); h.position.set(x, y, z); h.rotation.y = ry; W.scene.add(h); const b = mk(cyl(.55, .55, 1.1, 16), '#E3C565', 0, 0, 0, h); b.rotation.z = Math.PI / 2; [-.3, .3].forEach(dx => { const r = mk(cyl(.565, .565, .06, 16), '#C9A63F', dx, 0, 0, h, false); r.rotation.z = Math.PI / 2; }); });
+    I.solids.push([bx + 3.1, bz + .9, bx + 5.5, bz + 2.3]);
+    /* a trough of water for the animals */
+    mk(box(1.9, .42, .62), wood, F[0] + 3.4, .3, zb + .7); mk(box(1.7, .06, .44), '#7FC4E8', F[0] + 3.4, .5, zb + .7, null, false); [-.8, .8].forEach(dx => mk(box(.12, .3, .66), '#7A5334', F[0] + 3.4 + dx, .15, zb + .7, null, false)); I.solids.push([F[0] + 2.4, zb + .35, F[0] + 4.4, zb + 1.05]);
+    for (let k = 0; k < 12; k++) { const a = k / 12 * 6.283, rk = mk(sph(.2 + (k % 3) * .05, 6), k % 2 ? '#A8A193' : '#8F8A80', F[0] - 5.4 + Math.cos(a) * 1.5, .1, F[1] + 4 + Math.sin(a) * 1.5, null, false); rk.scale.y = .6; }
   }
   T[106] = async () => {
     await talk('nongnv', [['帮我找小动物吧！我说一个字，你走到那个小动物旁边，按「就是它」。', 'Help me find the animals! I say a character; walk up to that animal and press “This one”.']]);
@@ -9112,11 +9168,12 @@ const B3f = (() => {
   T[312] = async () => {
     putIn(ME(), I(), Q.field.x - 1, Q.field.z + 2.4, Math.PI); snapCamera();
     await talk('cunmin', [['我们在山下干活儿。山上有个孩子在放羊。', 'We are working at the foot of the hill. A boy is looking after sheep up there.']]);
-    Q.k = 0; shout();
+    Q.k = 0; Q.s12 = null; Q.gen = (Q.gen || 0) + 1; shout();   /* asking for the story again starts it afresh: whatever was still running from the last time stops (two at once used to leave it stuck) */
   };
   async function shout() {
-    await wait(1200); const real = Q.k === 2; Sfx.play('pop');
-    await talk('fangyang', [[real ? '狼来了！狼来了！狼真的来了！' : '狼来了！狼来了！', real ? 'Wolf! Wolf! A wolf has really come!' : 'Wolf! Wolf!']]);
+    const gen = Q.gen;
+    await wait(1200); if (gen !== Q.gen) return; const real = Q.k === 2; Sfx.play('pop');
+    await talk('fangyang', [[real ? '狼来了！狼来了！狼真的来了！' : '狼来了！狼来了！', real ? 'Wolf! Wolf! A wolf has really come!' : 'Wolf! Wolf!']]); if (gen !== Q.gen) return;
     if (!real) { Q.s12 = 'run'; return; }
     Q.wolf.visible = true; Q.wolf.position.set(Q.h.x - 7, Q.h.top - .4, Q.h.z - 3); gsap.to(Q.wolf.position, { x: Q.h.x - 2, duration: 1.6 });
     await talk('cunmin', [['他又在撒谎吧？我们不去了。', 'He is lying again, isn’t he? We are not going.']]);
@@ -9125,8 +9182,8 @@ const B3f = (() => {
     await talk('cunmin', [['羊都跑散了……这次狼是真的来了。我们去山上看看吧。', 'The sheep have all scattered… this time the wolf really came. Let us go up the hill and see.']]); Q.s12 = 'lost'; Q.found = 0;
   }
   async function runUp() {
-    Q.s12 = null; const [x, z] = climbSpot(); UI.busy = true; await goTo('isle3', x, z, Math.PI); UI.busy = false; sayIt('狼在哪儿？');
-    await talk('fangyang', [['哈哈哈！没有狼，我骗你们的！', 'Ha ha ha! There is no wolf. I tricked you!']]);
+    Q.s12 = null; const gen = Q.gen, [x, z] = climbSpot(); UI.busy = true; await goTo('isle3', x, z, Math.PI); UI.busy = false; if (gen !== Q.gen) return; sayIt('狼在哪儿？');
+    await talk('fangyang', [['哈哈哈！没有狼，我骗你们的！', 'Ha ha ha! There is no wolf. I tricked you!']]); if (gen !== Q.gen) return;
     showToast('他在撒谎，大家被他欺骗了。', 'He was lying; everyone was tricked.', 2200); sayIt('撒谎');
     putIn(ME(), I(), Q.field.x - 1, Q.field.z + 2.4, Math.PI); snapCamera(); Q.k++;
     showToast(Q.k === 1 ? '过了几天……' : '又过了几天……', Q.k === 1 ? 'A few days later…' : 'A few more days later…', 1800); shout();
