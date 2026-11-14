@@ -1217,8 +1217,27 @@ void main() {
 
   /* ---------- people: a soft shadow under the feet when real shadows are off, and neighbours glance at you ---------- */
   let blobGeo = null, blobMat = null; const _q = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
+  /* Behind a house or a tree you can still see where you are: a pale outline of the player shows through whatever is
+     in the way. It is switched on only while something really stands between the camera and the player. */
+  const SEE = { t: 0, on: false, mat: null, list: [], obj: null };
+  function seeThrough(dt) {
+    try { const me = PEOPLE.me; if (!me || !me.obj || !here) return;
+      if (!SEE.mat) SEE.mat = new THREE.MeshBasicMaterial({ color: 0xFFF3C4, transparent: true, opacity: .5, depthFunc: THREE.GreaterDepth, depthWrite: false, skinning: true });
+      if (SEE.obj !== me.obj || (SEE.n || 0) !== me.obj.children.length) { SEE.obj = me.obj; SEE.n = me.obj.children.length; SEE.list.forEach(g2 => g2.parent && g2.parent.remove(g2)); SEE.list = []; const src = [];
+        me.obj.traverse(o => { if (o.isMesh && !o.userData.fx && !o.userData.ghost) src.push(o); });
+        src.forEach(o => { let g2; if (o.isSkinnedMesh) { g2 = new THREE.SkinnedMesh(o.geometry, SEE.mat); g2.bind(o.skeleton, o.bindMatrix); o.parent.add(g2); g2.position.copy(o.position); g2.quaternion.copy(o.quaternion); g2.scale.copy(o.scale); } else { g2 = new THREE.Mesh(o.geometry, SEE.plain || (SEE.plain = SEE.mat.clone())); SEE.plain.skinning = false; o.add(g2); }
+          g2.userData.fx = g2.userData.ghost = true; g2.frustumCulled = false; g2.renderOrder = 999; g2.castShadow = false; g2.visible = false; SEE.list.push(g2); }); SEE.n = me.obj.children.length; }
+      SEE.t -= dt; if (SEE.t > 0) return; SEE.t = .12;
+      let hid = false; if (here.sky && me.obj.visible && !UI.seatCam) { const p = me.obj.position, to = (SEE.v || (SEE.v = new THREE.Vector3())).set(p.x, p.y + 1.1, p.z).sub(camera.position), dist = to.length(); _ray.camera = camera; _ray.set(camera.position, to.normalize()); _ray.far = dist - .7;
+        const hs = _ray.intersectObjects(here.scene.children, true);
+        for (let i = 0; i < hs.length; i++) { const ob = hs[i].object; if (!ob.isMesh || ob.userData.fx || (ob.parent && ob.parent.userData.fx) || !shown(ob) || (ob.material && ob.material.transparent && ob.material.opacity < .6)) continue; let mine = false; for (let q = ob; q; q = q.parent) if (q === me.obj) { mine = true; break; } if (mine) continue; hid = true; break; } }
+      if (hid !== SEE.on) { SEE.on = hid; SEE.list.forEach(g2 => { g2.visible = hid; }); }
+    } catch (e) { }
+  }
+  /* windows of the houses put up by the game: glass by day, lit at night, with light on the path outside */
+  function homeLights(dt) { if (!HM.win) return; const n = isNight() ? 1 : 0, e = Math.min(1, dt * 1.5); HM.nf = (HM.nf || 0) + (n - (HM.nf || 0)) * e; HM.win.color.setRGB(.75 + .25 * HM.nf, .85 - .02 * HM.nf, .9 - .38 * HM.nf); HM.lamp.color.setRGB(.91 + .09 * HM.nf, .89 - .02 * HM.nf, .82 - .3 * HM.nf); HM.glow.opacity = .6 * HM.nf; }
   function people(dt) {
-    legsTick(dt);
+    legsTick(dt); seeThrough(dt); homeLights(dt);
     try { daily(dt); } catch (e) { if (!N.err) { N.err = String(e && (e.stack || e.message)).slice(0, 400); console.error('daily: ' + N.err); } }
     const me = PEOPLE.me, mp = me && me.obj.position;
     for (const k in PEOPLE) {
@@ -1605,6 +1624,20 @@ void main() {
     if (h.boat) { const ring = mk(new THREE.TorusGeometry(.3, .09, 8, 16), '#E8574A', w / 2 - .7, 2.05, d / 2 + .08, g, false); ring.userData.fx = true; mk(new THREE.BoxGeometry(w + .02, .3, d + .02), '#3F78B8', 0, .5, 0, g, false); }
     const tex = canvasTex(384, 96, c => { c.fillStyle = h.boat ? '#2F5E93' : h.old ? '#5A3A2A' : '#3E6A5C'; c.fillRect(0, 0, 384, 96); c.strokeStyle = '#FFFDF2'; c.lineWidth = 5; c.strokeRect(7, 7, 370, 82); c.fillStyle = '#FFFDF2'; c.font = '700 52px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(h.zh, 192, 50); });
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(2.3, .58), new THREE.MeshBasicMaterial({ map: tex })); plate.position.set(0, 2.28, d / 2 + .09); g.add(plate);
+    /* a front yard: doorstep, stepping stones to the door, flower boxes under the windows, a shrub at each corner, a
+       lantern by the door; and at night the windows glow and warm light falls on the path */
+    mk(new THREE.BoxGeometry(1.5, .1, .7), '#CFC8BA', 0, .05, d / 2 + .42, g, false);
+    [[.12, 1.15], [-.14, 1.75], [.1, 2.32]].forEach(([dx, dz]) => { const st = mk(new THREE.CylinderGeometry(.3, .32, .06, 10), '#D6CFC0', dx, .035, d / 2 + dz, g, false); st.scale.z = .8; });
+    [-1, 1].forEach(sd => { mk(new THREE.BoxGeometry(1.02, .16, .22), '#8A5A3C', sd * w * .3, 1.0, d / 2 + .16, g, false);
+      [-.32, 0, .32].forEach((fx, i) => mk(new THREE.SphereGeometry(.09, 8, 6), ['#E8574A', '#F7C948', '#F4A6C0'][(i + (sd > 0 ? 1 : 0)) % 3], sd * w * .3 + fx, 1.13, d / 2 + .17, g, false));
+      const bush = mk(new THREE.SphereGeometry(.38, 10, 8), '#5E9A57', sd * (w / 2 - .2), .3, d / 2 + .28, g, false); bush.scale.set(1.1, .85, .8); });
+    if (!h.boat && !h.old) mk(new THREE.BoxGeometry(.5, 1.1, .5), '#B9B2A6', w * .26, 3.5, -d * .12, g);
+    if (!HM.win) { HM.win = new THREE.MeshBasicMaterial({ color: 0xBFD9E6 }); HM.lamp = new THREE.MeshBasicMaterial({ color: 0xE8E2D2 });
+      const gt = canvasTex(128, 128, c => { const gr = c.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, 'rgba(255,214,130,.9)'); gr.addColorStop(1, 'rgba(255,214,130,0)'); c.fillStyle = gr; c.fillRect(0, 0, 128, 128); });
+      HM.glow = new THREE.MeshBasicMaterial({ map: gt, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }); }
+    [-1, 1].forEach(sd => { const wn = new THREE.Mesh(new THREE.BoxGeometry(.85, .75, .04), HM.win); wn.position.set(sd * w * .3, 1.6, d / 2 + .075); wn.userData.fx = true; g.add(wn); });
+    { const lt = new THREE.Mesh(new THREE.BoxGeometry(.16, .24, .16), HM.lamp); lt.position.set(.78, 1.78, d / 2 + .14); lt.userData.fx = true; g.add(lt); mk(new THREE.BoxGeometry(.2, .05, .2), '#5B4A3A', .78, 1.92, d / 2 + .14, g, false);
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 3.4), HM.glow); pool.rotation.x = -Math.PI / 2; pool.position.set(0, .07, d / 2 + 1.5); pool.userData.fx = true; pool.renderOrder = 1; g.add(pool); }
     g.position.set(x, y, z); g.userData.home = true; sp.scene.add(g); sp.solids.push([x - w / 2 - .45, z - d / 2 - .45, x + w / 2 + .45, z + d / 2 + .5]);
     return { x, z: z + d / 2 + 1 };
   }
@@ -2795,7 +2828,10 @@ const Guide = (() => {
       const p = c.obj.position, nm = NAMES[k][0]; if (shown.some(q => q[0] === nm && Math.hypot(q[1] - p.x, q[2] - p.z) < 2.6)) return;
       const lift = shown.filter(q => Math.hypot(q[1] - p.x, q[2] - p.z) < 1.5).length; shown.push([nm, p.x, p.z, lift]);   // different people standing shoulder to shoulder: the tags stack instead of covering each other
       const m = tags[k] || (tags[k] = tag(nm)); if (m.parent !== here.scene) here.scene.add(m);
-      m.visible = true; m.position.set(p.x, p.y + 2.95 * c.obj.scale.y + lift * .85, p.z); });
+      m.visible = true; m.position.set(p.x, p.y + 2.95 * c.obj.scale.y + lift * .85, p.z); shown[shown.length - 1].push(m); });
+    /* and on the screen: two tags that would cover each other, though their owners stand apart, are moved clear, the nearer one staying put */
+    try { const W2 = innerWidth / 2, H2 = innerHeight / 2, v = new THREE.Vector3(), rect = m => { v.copy(m.position).project(camera); const cx = v.x * W2, cy = v.y * H2, z = v.z; v.copy(m.position); v.y += m.scale.y / 2; v.project(camera); const hh = Math.abs(v.y * H2 - cy); return [cx, cy, hh * m.scale.x / m.scale.y, hh, z]; };
+      const placed = []; shown.map(q => [q, rect(q[4])]).sort((a, b) => a[1][4] - b[1][4]).forEach(([q, r]) => { let n = 0; while (n < 4 && r[4] < 1 && placed.some(o => Math.abs(o[0] - r[0]) < o[2] + r[2] && Math.abs(o[1] - r[1]) < o[3] + r[3])) { q[4].position.y += .8; q[3] += .94; r = rect(q[4]); n++; } placed.push(r); }); } catch (e) { }
     stack = shown;
   }
   function tick(dt) {
@@ -2891,16 +2927,29 @@ const Heights = (() => {
     sp.solids.forEach(q => { if (q[1] < zA && q[3] > zA - .5) q[1] = zA; });
     // level 2: wall and top, built around the stair cuts
     const slab = (x0, x1, z0, z1, y, col) => { if (x1 - x0 < .05 || z1 - z0 < .05) return; mk(box(x1 - x0, y + 2, z1 - z0), col, (x0 + x1) / 2, y / 2 - 1, (z0 + z1) / 2, S); mk(box(x1 - x0, .06, z1 - z0), '#8FC96A', (x0 + x1) / 2, y + .02, (z0 + z1) / 2, S, false); };
+    const railX = (a, b2, z, y) => { mk(box(b2 - a, .07, .07), '#8A6A4A', (a + b2) / 2, y + .55, z, S); for (let x = a + .3; x < b2; x += 1.6) mk(cyl(.06, .06, .55, 6), '#8A6A4A', x, y + .28, z, S); sp.solids.push([a, z - .14, b2, z + .14]); };
+    const railZ = (x, a, b2, y) => { mk(box(.07, .07, b2 - a), '#8A6A4A', x, y + .55, (a + b2) / 2, S); for (let z = a + .3; z < b2; z += 1.6) mk(cyl(.06, .06, .55, 6), '#8A6A4A', x, y + .28, z, S); sp.solids.push([x - .14, a, x + .14, b2]); };
     const level = (X, zFront, zBack, y, cuts, col) => {
       const xs = [-X, ...cuts.flatMap(c => [c - W / 2, c + W / 2]), X];
       for (let i = 0; i < xs.length; i += 2) slab(xs[i], xs[i + 1], zBack, zFront, y, col);
       cuts.forEach(c => { slab(c - W / 2, c + W / 2, zBack, zFront - D, y, col); });
       // stone band along the front of the wall, and a wooden rail on top except at the stairs
-      for (let i = 0; i < xs.length; i += 2) { const w = xs[i + 1] - xs[i]; mk(box(w, .25, .1), '#B9A27E', (xs[i] + xs[i + 1]) / 2, y * .5, zFront + .02, S); mk(box(w, .07, .07), '#8A6A4A', (xs[i] + xs[i + 1]) / 2, y + .55, zFront - .2, S); for (let x = xs[i] + .3; x < xs[i + 1]; x += 1.6) mk(cyl(.06, .06, .55, 6), '#8A6A4A', x, y + .28, zFront - .2, S); }
+      /* the rail is a real barrier now (it could be walked straight through), and it does not run across a waterfall: where a
+         stream goes over the edge the rail stops at each bank and turns back along the water instead */
+      const fall = zFront === zA && sp.fallX ? sp.fallX : null;
+      for (let i = 0; i < xs.length; i += 2) { const w = xs[i + 1] - xs[i]; mk(box(w, .25, .1), '#B9A27E', (xs[i] + xs[i + 1]) / 2, y * .5, zFront + .02, S);
+        const parts = fall && fall[0] < xs[i + 1] && fall[1] > xs[i] ? [[xs[i], fall[0] - .25], [fall[1] + .25, xs[i + 1]]] : [[xs[i], xs[i + 1]]];
+        parts.forEach(([a, b2]) => { if (b2 - a > .3) railX(a, b2, zFront - .2, y); });
+        if (parts.length === 2) { railZ(fall[0] - .25, zFront - 3.9, zFront - .2, y); railZ(fall[1] + .25, zFront - 3.9, zFront - .2, y); railX(fall[0] - .25, fall[1] + .25, zFront - 3.9, y); } }
       sp.raised.push({ kind: 'rect', x0: -X, x1: X, z0: zBack, z1: zFront, y, holes: cuts.map(c => [c - W / 2, zFront - D, c + W / 2, zFront]) });
     };
     level(X2, zA, zB, y2, s1, '#C9B48C');
     level(X3, zB, zC, y3, s2, '#BFA987');
+    /* rails round the open sides and the back as well, and nothing beyond them can be stood on: the walls used to be
+       unguarded there, and you could walk out past the edge and stand in the air above the sea */
+    [-1, 1].forEach(k => { railZ(k * (X2 - .2), zB + .2, zA - .2, y2); railX(Math.min(k * X3, k * X2) + (k < 0 ? 0 : .2), Math.max(k * X3, k * X2) - (k < 0 ? .2 : 0), zB + .2, y2); railZ(k * (X3 - .2), zC + .25, zB - .2, y3); });
+    railX(-X3 + .2, X3 - .2, zC + .25, y3);
+    sp.solids.push([X2, -999, 999, zA], [-999, -999, -X2, zA], [X3, -999, 999, zB], [-999, -999, -X3, zB], [-999, -999, 999, zC]);
     s1.forEach(c => { stairs(S, c, zA, zA - D, .03, y2, W - .1); sp.raised.push({ kind: 'ramp', x0: c - W / 2 + .1, x1: c + W / 2 - .1, z0: zA - D, z1: zA, top: y2, bottom: .03 }); });
     s2.forEach(c => { stairs(S, c, zB, zB - D, y2, y3, W - .1); sp.raised.push({ kind: 'ramp', x0: c - W / 2 + .1, x1: c + W / 2 - .1, z0: zB - D, z1: zB, top: y3, bottom: y2 }); });
     // level 2: a row of trees at the back, benches looking out over the island, flowers
@@ -8387,7 +8436,7 @@ const Isle3 = (() => {
     { const lx = Z.lake[0], lz = Z.lake[1];
       FX.pads(W.scene, lx, lz, 4.4, .125);
       FX.koi(W.scene, lx, lz, 4.3, .13); } sp.solids.push([Z.lake[0] - 5.6, Z.lake[1] - 5.6, Z.lake[0] + 5.6, Z.lake[1] + 5.6]); sign('湖', Z.lake[0] + 7, Z.lake[1] + 2, '#4F86C6');
-    FX.water(plane(4, 60.5, '#6FB7DA', Z.river[0], .1, Z.river[1] - .25)); sp.solids.push([Z.river[0] - 2, -30.5, Z.river[0] + 2, 31]);
+    FX.water(plane(4, 60.5, '#6FB7DA', Z.river[0], .1, Z.river[1] - .25)); sp.solids.push([Z.river[0] - 2, -30.5, Z.river[0] + 2, 31]); sp.fallX = [Z.river[0] - 2, Z.river[0] + 2];
     { const fall = mk(new THREE.PlaneGeometry(4, 2.4), new THREE.MeshStandardMaterial({ color: lin('#8FCBEF'), roughness: .2 }), Z.river[0], 1.2, -30.36, null, false); FX.water(fall, { flow: 1 });
       FX.water(plane(4, 3.2, '#6FB7DA', Z.river[0], 2.49, -32.1));
       [[-2.2, -29.8, .45, .15], [2.2, -29.7, .5, .15], [-1.2, -29.9, .3, .12], [-2, -33.6, .5, 2.5], [0, -33.9, .6, 2.5], [2, -33.6, .5, 2.5]].forEach(([dx, z, r, y], i) => { mk(sph(r, 8), i % 2 ? '#9A9A92' : '#8A8E96', Z.river[0] + dx, y, z).scale.y = .7; }); } sign('小河', Z.river[0] - 3.6, -4, '#4F86C6');
