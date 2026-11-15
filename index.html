@@ -4378,7 +4378,7 @@ const Dex = (() => {
       /* once a place has been found it is kept in the save, so a plant stands in the same spot in every season and on every visit */
       const keep = got().p || (got().p = {}), mine = keep[sp.name] || (keep[sp.name] = {}), old = mine[id];
       for (let t = old ? -1 : 0; t < 140; t++) { let x, z; if (t < 0) { x = old[0]; z = old[1]; if (blocked(x, z, sp.floor(x, z)) || FX.wet(x, z)) continue; } else { x = b[0] + r() * (b[2] - b[0]); z = b[1] + r() * (b[3] - b[1]); if (!fits(sp, x, z, list)) continue; mine[id] = [+x.toFixed(2), +z.toFixed(2)]; try { saveG(); } catch (e) { } }
-        const g = new THREE.Group(); MAKE[id](g); pack(g); g.position.set(x, sp.floor(x, z), z); g.rotation.y = r() * 6.283; g.scale.setScalar(SIZE[id] || 1); sp.scene.add(g); FX.seasonal(g, [season]); g.visible = Life.season() === season;
+        const g = new THREE.Group(); MAKE[id](g); pack(g); g.position.set(x, sp.floor(x, z), z); g.rotation.y = r() * 6.283; g.scale.setScalar(SIZE[id] || 1); sp.scene.add(g); FX.seasonal(g, [season], []); g.visible = Life.season() === season;   /* (the empty list: no lesson brings it out of season; without it every plant showed whenever a lesson was open on the island) */
         if (SOLID[id]) sp.solids.push([x - SOLID[id], z - SOLID[id], x + SOLID[id], z + SOLID[id]]); list.push({ id, x, z, g }); break; } }); }
   function found(kind, id) { const d = got()[kind]; if (d[id]) return; const row = (kind === 'a' ? ANIMALS : PLANTS).find(q => q[0] === id); if (!row) return; d[id] = 1; setStars(G.stars + 5); try { Sfx.play('found'); } catch (e) { }
     showToast('图鉴新发现：' + row[1] + '（' + row[2] + '）　+5 颗小星星', 'New in your picture book: ' + row[3] + '. +5 stars', 3200); try { Voice.speak(row[1]); } catch (e) { } }
@@ -8977,16 +8977,42 @@ const B2f = (() => {
 
   /* ---------- the river model: high in the west, sea in the east, no borders drawn ---------- */
   function buildModel(S) {
-    const [mx, mz] = Isle2.Z.model, top = .55; Q.m = { x: mx, z: mz };
-    mk(rbox(14, .4, 8, .1), '#C9B48A', mx, .32, mz); I().solids.push([mx - 7.2, mz - 4.2, mx + 7.2, mz + 4.2]);
-    mk(new THREE.PlaneGeometry(2.2, 7.6), '#5AB4E0', mx + 5.8, top + .03, mz, null, false).rotation.x = -Math.PI / 2;
-    [[-5.6, -2.4, 1.2], [-5.8, .4, 1.4], [-4.6, 2.6, 1], [-4.2, -1, .9], [-3.4, 1.4, .7], [-6, 2.8, .9], [-2.4, -2.8, .6]].forEach(([x, z, h]) => { mk(new THREE.ConeGeometry(.9 * h, 1.6 * h, 6), '#9A8A70', mx + x, top + .8 * h, mz + z); mk(new THREE.ConeGeometry(.35 * h, .45 * h, 6), '#FFFFFF', mx + x, top + 1.4 * h, mz + z, null, false); });
-    const river = (pts) => { const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(mx + x, top + .06, mz + z))); const geo = new THREE.TubeGeometry(curve, 120, .14, 6, false); const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: lin('#3E8FCF'), roughness: .3 })); m.scale.y = .35; m.position.y = (top + .06) * .65; S.add(m); m.userData.total = geo.index.count; geo.setDrawRange(0, 0); return { m, curve, n: geo.index.count }; };
-    Q.cj = river([[-5.2, 1.6], [-3.6, 2.2], [-1.6, 1.2], [.6, 2.4], [2.6, 1.6], [4.8, 2]]);
-    Q.hh = river([[-5, -1.2], [-3, -.8], [-1.8, -2.8], [.4, -3], [.6, -1], [2.6, -1.4], [4.8, -1.8]]);
-    const lab = (t, x, z, c) => { const s = signBoard(t, 1.2, .42, c); s.position.set(mx + x, top + .9, mz + z); s.visible = false; S.add(s); return s; };
+    /* A relief model of the land the two rivers cross, as in a museum: a wooden tray holding a moulded landscape that
+       steps down from the snow peaks of the high plateau in the west, through the middle highlands, to the green plains
+       and the sea in the east. The rivers lie in valleys cut into it: the Yellow River with its great square bend in
+       the north, running brown with silt lower down; the Yangtze winding across the south. */
+    const [mx, mz] = Isle2.Z.model, top = .52; Q.m = { x: mx, z: mz }; I().solids.push([mx - 7.2, mz - 4.2, mx + 7.2, mz + 4.2]);
+    mk(rbox(14.5, .5, 8.5, .08), '#6E4A30', mx, .27, mz); mk(box(14.1, .08, 8.1), '#8A6A4A', mx, .5, mz);
+    [[0, -4.14, 14.5, .22], [0, 4.14, 14.5, .22], [-7.14, 0, .22, 8.5], [7.14, 0, .22, 8.5]].forEach(([x, z, w, d]) => mk(rbox(w, .34, d, .05), '#5A3A26', mx + x, .62, mz + z));
+    const CJ = [[-5.6, .6], [-4.2, 1.6], [-3.0, 2.9], [-2.0, 2.2], [-.8, 2.6], [.4, 1.7], [1.6, 2.3], [2.8, 1.6], [3.8, 2.1], [5.3, 1.5]], HH = [[-5.2, -.2], [-4.0, -.9], [-3.2, -.3], [-2.4, -1.4], [-1.9, -3.1], [-.6, -3.3], [0, -2.6], [.1, -1.0], [1.2, -.7], [2.8, -1.3], [4.2, -2.0], [5.3, -2.3]];
+    const sm = (a, b, t) => { const k = Math.max(0, Math.min(1, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+    const dSeg = (x, z, a, b) => { const vx = b[0] - a[0], vz = b[1] - a[1], L = vx * vx + vz * vz || 1, t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / L)); return Math.hypot(x - a[0] - vx * t, z - a[1] - vz * t); };
+    const dLine = (x, z, P) => { let d = 9; for (let i = 1; i < P.length; i++) d = Math.min(d, dSeg(x, z, P[i - 1], P[i])); return d; };
+    const coast = z => 4.75 + .32 * Math.sin(z * 1.3 + .6) + .16 * Math.sin(z * 3.1);
+    const PEAK = [[-6.2, 2.6, .5], [-5.4, 3.2, .42], [-6.4, .9, .38], [-5.9, -1.6, .4], [-4.9, -2.9, .34], [-4.6, .2, .3], [-3.6, -2.3, .22], [-3.9, 3.4, .26], [-2.2, .4, .16], [.9, .4, .12], [-1.0, -1.9, .12]];
+    /* height of the land above the tray at a point of the model */
+    const land = (x, z) => { const t = (x + 7) / 14; let e = .1 + .34 * (1 - sm(.56, .72, t)) + .42 * (1 - sm(.2, .38, t));
+      e += (Math.sin(x * 2.1 + z * 1.7) + Math.sin(x * 3.7 - z * 2.9) * .6 + Math.sin(x * 6.1 + z * 5.3) * .3) * .07 * (.25 + e);
+      PEAK.forEach(([px, pz, ph]) => { e += ph * Math.exp(-((x - px) * (x - px) + (z - pz) * (z - pz)) / .5); });
+      const d = Math.min(dLine(x, z, CJ), dLine(x, z, HH)); e -= Math.min(e - .05, .16 * (.4 + e)) * Math.exp(-(d * d) / .09);
+      const sea = sm(-.25, .35, x - coast(z)); return e * (1 - sea) - .06 * sea; };
+    const geo = new THREE.PlaneGeometry(14, 8, 84, 48), pos = geo.attributes.position, col = new Float32Array(pos.count * 3), c = new THREE.Color(), c2 = new THREE.Color();
+    const BAND = [[-.1, '#D9C99A'], [.06, '#C9D08A'], [.14, '#86BC5E'], [.3, '#A4BE66'], [.5, '#C7AE78'], [.78, '#A68C6C'], [1.02, '#8E7C6A'], [1.16, '#F4F6F8'], [2, '#FFFFFF']];
+    for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), z = -pos.getY(i), e = land(x, z); pos.setXYZ(i, x, e, z); let k = 0; while (k < BAND.length - 2 && e > BAND[k + 1][0]) k++; c.set(BAND[k][1]); c2.set(BAND[k + 1][1]); c.lerp(c2, Math.max(0, Math.min(1, (e - BAND[k][0]) / (BAND[k + 1][0] - BAND[k][0])))).convertSRGBToLinear(); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.computeVertexNormals();
+    const terr = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .92, flatShading: true })); terr.position.set(mx, top, mz); terr.receiveShadow = SHADOWS; S.add(terr); mk(box(3.3, .4, 7.9), '#8E7C6A', mx - 5.33, top + .19, mz);   /* solid earth under the high ground, so its edges are not hollow */
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 8), new THREE.MeshStandardMaterial({ color: lin('#3F8FC9'), roughness: .2, transparent: true, opacity: .9 })); sea.rotation.x = -Math.PI / 2; sea.position.set(mx + 5.55, top + .035, mz); S.add(sea);
+    /* a river is a ribbon lying in its valley, wider towards the sea; it is drawn from the source onwards as the water runs */
+    const river = (pts, c0, c1) => { const curve = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(mx + x, top + land(x, z) + .035, mz + z))), N = 140, P = [], C = [], I2 = [], a = new THREE.Color(c0).convertSRGBToLinear(), b = new THREE.Color(c1).convertSRGBToLinear(), q = new THREE.Color();
+      for (let i = 0; i <= N; i++) { const u = i / N, p = curve.getPointAt(u), tg = curve.getTangentAt(u), w = .05 + .1 * u, nx = -tg.z, nz = tg.x, L = Math.hypot(nx, nz) || 1, y = top + Math.max(.0, land(p.x - mx, p.z - mz)) + .03; P.push(p.x - nx / L * w, y, p.z - nz / L * w, p.x + nx / L * w, y, p.z + nz / L * w); q.copy(a).lerp(b, sm(.25, .6, u)); C.push(q.r, q.g, q.b, q.r, q.g, q.b); if (i < N) { const k = i * 2; I2.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.setIndex(I2); g.computeVertexNormals();
+      const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .25, side: THREE.DoubleSide })); S.add(m); g.setDrawRange(0, 0); return { m, curve, n: I2.length }; };
+    Q.cj = river(CJ, '#4FA3DC', '#3A86C8'); Q.hh = river(HH, '#5FA9D6', '#C9A04A');
+    /* which way is which, standing on little posts at the ends of the tray */
+    [['西', -6.6, 4.9, '#8A6A4A'], ['东', 6.6, 4.9, '#8A6A4A'], ['大海', 5.6, -4.9, '#3E86C6']].forEach(([t, x, z, cc]) => { const b = signBoard(t, t.length > 1 ? .9 : .5, .42, cc); b.position.set(mx + x, 1.25, mz + z); S.add(b); mk(cyl(.04, .04, 1.1, 6), '#7A5236', mx + x, .6, mz + z); });
+    const lab = (t, x, z, c) => { const s = signBoard(t, 1.2, .42, c); s.position.set(mx + x, top + 1.25, mz + z); s.visible = false; S.add(s); return s; };
     Q.lcj = lab('长江', 1, 3.1, '#3E6E9E'); Q.lhh = lab('黄河', -.6, -3.6, '#B98A3A');
-    Q.boats = [0, 1, 2].map(k => { const b = new THREE.Group(); b.visible = false; S.add(b); mk(box(.36, .1, .14), '#FFFFFF', 0, .05, 0, b, false); mk(box(.02, .22, .02), '#8A6A4A', 0, .2, 0, b, false); mk(new THREE.PlaneGeometry(.16, .16), '#E8574A', .08, .22, 0, b, false); b.userData.u = k / 3; return b; });
+    Q.boats = [0, 1, 2].map(k => { const b = new THREE.Group(); b.visible = false; S.add(b); mk(box(.3, .07, .12), '#FFFFFF', 0, .035, 0, b, false); mk(box(.016, .2, .016), '#8A6A4A', 0, .16, 0, b, false); mk(new THREE.PlaneGeometry(.14, .15), tm('#E8574A', { side: THREE.DoubleSide }), .07, .19, 0, b, false); b.userData.u = k / 3; return b; });
     if (G.rivers) { [Q.cj, Q.hh].forEach(r => r.m.geometry.setDrawRange(0, r.n)); Q.lcj.visible = Q.lhh.visible = true; Q.boats.forEach(b => b.visible = true); Q.sail = true; }
   }
   function flow(r) { return new Promise(res => { const o = { k: 0 }; gsap.to(o, { k: r.n, duration: 3.2, ease: 'none', onUpdate: () => r.m.geometry.setDrawRange(0, Math.floor(o.k / 3) * 3), onComplete: res }); }); }
