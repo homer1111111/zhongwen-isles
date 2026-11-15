@@ -3661,6 +3661,45 @@ const Zoo = (() => {
     try { cuteFace(g, 0, .52 * s, .06 * s, .13 * s, 0, { mouth: false, eye: .22, spread: .5 }); } catch (e) { }
     g.userData.zooLegs = legs; g.userData.zooHead = [0, .5 * s, .05 * s, .13 * s]; return g;
   }
+  /* a frog squatting: wide flat head joined to the body, eyes bulging on top, pale throat and belly, the long hind legs
+     folded (thigh, shin and a webbed foot), short front legs with spread toes, and darker blotches on the back */
+  function frog(g, s) { g.userData.zooKind = 'frog'; s = s || 1; const c = '#5BA84A', d = '#3F8438', p = '#D6ECB0';
+    mk(sph(.36 * s, 16), c, 0, .3 * s, -.06 * s, g).scale.set(1.08, .72, 1.25); mk(sph(.3 * s, 14), c, 0, .36 * s, .26 * s, g).scale.set(1.12, .62, 1.0);   /* body, head */
+    mk(sph(.3 * s, 12), p, 0, .22 * s, .1 * s, g, false).scale.set(.95, .5, 1.25); mk(sph(.24 * s, 12), p, 0, .29 * s, .36 * s, g, false).scale.set(1.05, .42, .78);   /* belly, throat */
+    const m = mk(new THREE.TorusGeometry(.24 * s, .012 * s, 4, 16, Math.PI), '#2F5E2C', 0, .345 * s, .3 * s, g, false); m.rotation.x = Math.PI / 2; m.scale.z = .9;   /* the wide mouth */
+    [-1, 1].forEach(k => { mk(sph(.1 * s, 12), c, k * .17 * s, .56 * s, .3 * s, g); mk(sph(.075 * s, 10), '#F2D24A', k * .185 * s, .575 * s, .34 * s, g, false); const pu = mk(sph(.04 * s, 8), '#1E1A18', k * .2 * s, .58 * s, .385 * s, g, false); pu.scale.set(1.5, .6, .6); mk(sph(.014 * s, 5), '#2F5E2C', k * .06 * s, .43 * s, .52 * s, g, false);
+      /* hind leg folded beside the body */
+      const th = mk(sph(.15 * s, 10), c, k * .36 * s, .2 * s, -.2 * s, g); th.scale.set(.75, .7, 1.5); th.rotation.y = k * .5; const sh = mk(sph(.1 * s, 8), d, k * .46 * s, .1 * s, -.02 * s, g); sh.scale.set(.6, .5, 1.7); sh.rotation.y = -k * .35;
+      const ft = mk(sph(.1 * s, 8), c, k * .5 * s, .035 * s, .2 * s, g); ft.scale.set(1.2, .18, 1.6); ft.rotation.y = k * .3; for (let i = -1; i <= 1; i++) { const t = mk(sph(.03 * s, 6), d, k * .5 * s + i * .07 * s, .035 * s, .37 * s, g, false); t.scale.set(1, .5, 1.4); }
+      /* front leg */
+      const fa = mk(cyl(.045 * s, .04 * s, .26 * s, 6), c, k * .27 * s, .14 * s, .34 * s, g); fa.rotation.z = k * .35; fa.rotation.x = -.25; for (let i = -1; i <= 1; i++) { const t = mk(sph(.028 * s, 6), d, k * .32 * s + i * .05 * s, .03 * s, .43 * s, g, false); t.scale.set(.8, .5, 1.8); t.rotation.y = i * .4; } });
+    [[.1, .52, -.05, .07], [-.14, .5, -.2, .06], [.05, .46, -.36, .055], [-.02, .5, .08, .04]].forEach(([x, y, z, r]) => mk(sph(r * s, 6), d, x * s, y * s, z * s, g, false).scale.y = .35);
+    g.userData.zooHead = [0, .4 * s, .28 * s, .28 * s]; return g; }
+  /* a monkey sitting up: a slim body, a round head with a pale heart-shaped face and a muzzle, round ears, long arms ending
+     in hands, bent legs with long feet, and a long tail curling up behind. The same size as the old one, so it still fits
+     in the chain hanging from the tree. */
+  function monkey(g, s) { g.userData.zooKind = 'monkey'; s = s || 1; const c = '#8E5B33', dk = '#6E4424', f = '#EFCFAA';
+    mk(sph(.17 * s, 14), c, 0, .27 * s, 0, g).scale.set(.95, 1.25, .9); mk(sph(.12 * s, 12), f, 0, .25 * s, .09 * s, g, false).scale.set(.9, 1.25, .5);   /* body, pale chest */
+    mk(sph(.19 * s, 16), c, 0, .62 * s, 0, g).scale.set(1, .95, .95); mk(sph(.12 * s, 10), dk, 0, .73 * s, -.03 * s, g).scale.set(1.2, .6, 1.1);   /* head, darker crown */
+    [-1, 1].forEach(k => mk(sph(.085 * s, 10), f, k * .065 * s, .63 * s, .12 * s, g, false).scale.set(1, 1.15, .55)); mk(sph(.095 * s, 12), f, 0, .55 * s, .13 * s, g, false).scale.set(1.15, .8, .8);   /* face and muzzle */
+    mk(sph(.018 * s, 6), '#3A2A22', 0, .575 * s, .215 * s, g, false).scale.set(1.6, .8, 1); const mo = mk(new THREE.TorusGeometry(.045 * s, .007 * s, 4, 10, Math.PI), '#7A3A2A', 0, .54 * s, .2 * s, g, false); mo.rotation.z = Math.PI;
+    [-1, 1].forEach(k => { mk(sph(.028 * s, 8), '#1E1A18', k * .065 * s, .65 * s, .165 * s, g, false); mk(sph(.009 * s, 5), '#FFFFFF', k * .06 * s, .658 * s, .19 * s, g, false);
+      mk(sph(.075 * s, 10), c, k * .2 * s, .64 * s, -.01 * s, g).scale.set(.5, 1, 1); mk(sph(.05 * s, 8), f, k * .215 * s, .64 * s, .0, g, false).scale.set(.4, .9, .9);   /* ears */
+      const ua = mk(cyl(.04 * s, .036 * s, .22 * s, 6), c, k * .2 * s, .3 * s, .02 * s, g); ua.rotation.z = k * .45; const la = mk(cyl(.034 * s, .03 * s, .2 * s, 6), c, k * .25 * s, .14 * s, .09 * s, g); la.rotation.x = -.9; la.rotation.z = -k * .1; mk(sph(.042 * s, 8), f, k * .25 * s, .085 * s, .19 * s, g).scale.set(.9, .6, 1.3);   /* arm, forearm, hand */
+      const th = mk(sph(.085 * s, 10), c, k * .12 * s, .12 * s, .08 * s, g); th.scale.set(.85, .85, 1.6); const sh = mk(cyl(.036 * s, .032 * s, .16 * s, 6), c, k * .14 * s, .07 * s, .2 * s, g); sh.rotation.x = .5; mk(sph(.045 * s, 8), f, k * .14 * s, .025 * s, .28 * s, g).scale.set(.8, .5, 1.7); });   /* legs and feet */
+    let px = 0, py = .14 * s, pz = -.14 * s; for (let i = 0; i < 9; i++) { const a = i * .42, nx = 0, ny = py + Math.sin(a + .3) * .075 * s, nz = pz - Math.cos(a + .3) * .075 * s; const t = mk(cyl(.022 * s, .026 * s, .09 * s, 5), i > 6 ? dk : c, 0, (py + ny) / 2, (pz + nz) / 2, g, false); t.rotation.x = Math.atan2(nz - pz, ny - py); py = ny; pz = nz; }
+    packGroup(g); g.userData.zooHead = [0, .62 * s, .05 * s, .19 * s]; return g; }
+  /* a small bird: a plump body with a pale breast, a round head, a short pointed beak, folded wings with darker flight
+     feathers, a fanned tail, and thin legs with three toes */
+  function bird(g, col, s) { g.userData.zooKind = 'bird'; s = s || 1; const c = col || '#4F86C6', d = shade(c, -.28), p = '#F3EBDD';
+    mk(sph(.17 * s, 14), c, 0, 0, 0, g).scale.set(.95, .95, 1.3); mk(sph(.14 * s, 12), p, 0, -.035 * s, .07 * s, g, false).scale.set(.85, .8, 1.1);   /* body, breast */
+    mk(sph(.115 * s, 14), c, 0, .15 * s, .17 * s, g); mk(sph(.07 * s, 10), p, 0, .11 * s, .22 * s, g, false).scale.set(1, .7, .8);   /* head, cheek */
+    const bk = mk(new THREE.ConeGeometry(.032 * s, .1 * s, 6), '#F2A933', 0, .15 * s, .31 * s, g, false); bk.rotation.x = Math.PI / 2; mk(sph(.05 * s, 8), d, 0, .245 * s, .13 * s, g, false).scale.set(.8, .5, 1.2);   /* beak, crest */
+    [-1, 1].forEach(k => { mk(sph(.022 * s, 8), '#1E1A18', k * .078 * s, .175 * s, .235 * s, g, false); mk(sph(.008 * s, 5), '#FFFFFF', k * .083 * s, .182 * s, .25 * s, g, false);
+      const w = mk(sph(.13 * s, 10), d, k * .145 * s, .02 * s, -.03 * s, g); w.scale.set(.28, .78, 1.25); w.rotation.set(-.25, 0, k * .12); for (let i = 0; i < 3; i++) { const fe = mk(sph(.06 * s, 6), shade(c, -.42), k * .155 * s, -.03 * s - i * .028 * s, -.14 * s - i * .035 * s, g, false); fe.scale.set(.2, .5, 1.5); fe.rotation.x = -.4; }
+      const lg = mk(cyl(.009 * s, .009 * s, .13 * s, 4), '#C98A2E', k * .05 * s, -.2 * s, .01 * s, g, false); for (let i = -1; i <= 1; i++) { const t = mk(cyl(.006 * s, .006 * s, .06 * s, 4), '#C98A2E', k * .05 * s + i * .02 * s, -.265 * s, .035 * s, g, false); t.rotation.set(Math.PI / 2, 0, -i * .45); } });
+    for (let i = -2; i <= 2; i++) { const t = mk(sph(.07 * s, 6), i % 2 ? d : shade(c, -.42), i * .03 * s, .02 * s, -.27 * s - (2 - Math.abs(i)) * .012 * s, g, false); t.scale.set(.32, .12, 1.7); t.rotation.set(.25, i * .16, 0); }
+    g.userData.zooHead = [0, .15 * s, .17 * s, .115 * s]; return g; }
   /* put an animal into a group the island already made: at a size, and turned to face the way the old model did
      (yaw 0 = +z, PI/2 = +x). The group itself is left alone, so whatever moves or scales it still works. */
   function into(g, scale, yaw, build) {
@@ -3668,7 +3707,7 @@ const Zoo = (() => {
     g.userData.zoo = true; g.userData.zooFwd = yaw || 0; g.userData.zooLegs = q.userData.zooLegs; g.userData.zooKind = q.userData.zooKind; all.push(g); return g;
   }
   const all = [];   // every animal standing somewhere in the world, for the picture book
-  return { quad, rabbit, tortoise, squirrel, into, KIND, all };
+  return { quad, rabbit, tortoise, squirrel, frog, monkey, bird, into, KIND, all };
 })();
 function cuteFace(parent, x, y, z, r, ry = 0, o = {}) {
   const f = new THREE.Group(); f.position.set(x, y, z); f.rotation.y = ry; parent.add(f);
@@ -3854,6 +3893,8 @@ function resize() { const cv = renderer.domElement, w = cv.clientWidth || innerW
 let ZOOM = 1; try { ZOOM = Math.max(.45, Math.min(1.5, +store.get('zhongwen-town.zoom', 1) || 1)); } catch (e) { }
 const zoomUp = () => Math.max(0, Math.min(1, (1 - ZOOM) / .55));
 function setZoom(z) { ZOOM = Math.max(.45, Math.min(1.5, z)); try { store.set('zhongwen-town.zoom', ZOOM); } catch (e) { } }
+/* how far the view tilts up when drawn in: as far as the zoom asks, but never so far that you drop out of the bottom of the picture */
+function lookUp() { const t = zoomUp(); if (!t) return 0; const off = camOff(), half = camera.fov * Math.PI / 360 * .84, me = Math.atan2(-off.y, off.z);   /* (measured to the feet) */ for (let k = t; k > 0; k -= .04) if (Math.atan2(2.4 + 4.6 * k - off.y, off.z + 6 + 13 * k) - me <= half) return k; return 0; }
 function camOff() { const a = camera.aspect < 1 ? here.camTall : here.cam, t = zoomUp(); return new THREE.Vector3(a[0] * ZOOM, a[1] * ZOOM * (1 - .5 * t), a[2] * ZOOM); }
 (() => {
   const free = () => document.body.classList.contains('playing') && !(typeof UI === 'object' && UI.busy);
@@ -3957,7 +3998,7 @@ function loop() {
   if (storyBox) want.y += 2.4;
   if (here.box && !UI.talkCam) want.x = Math.max(here.box[0] + 5, Math.min(here.box[2] - 5, want.x));   // not while two people talk: near the island's edge this pulled the side camera right into their faces
   camera.position.lerp(want, Math.min(1, dt * 3.5));
-  const la = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).look.clone() : fo.clone().add(new THREE.Vector3(0, storyBox ? .2 : 2.4 + zoomUp() * 4.6, -6 - zoomUp() * 13)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt); FX.cam(dt);
+  const la = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).look.clone() : fo.clone().add(new THREE.Vector3(0, storyBox ? .2 : 2.4 + lookUp() * 4.6, -6 - lookUp() * 13)); lookAt.lerp(la, Math.min(1, dt * 4)); camera.lookAt(lookAt); FX.cam(dt);
   if (here.sky) here.sky.g.position.copy(camera.position);
   if (here.name === 'town') TREES.forEach(tr => {   // fade trees that hide you from the camera
     const p = tr.position, inFront = p.z > me.z + .5 && p.z < camera.position.z - 1 && (Math.abs(p.x - me.x) < 4.2 * tr.scale.x && p.y <= me.y + .5 || Math.hypot(p.x - camera.position.x, p.z - camera.position.z) < 2.6 * tr.scale.x) || treeHides(p, tr.scale.x);
@@ -4237,7 +4278,7 @@ const ReadAloud = (() => {
    book with its word. The fish already have their book in the museum; these two are opened from the bag. */
 const Dex = (() => {
   const ANIMALS = [['cat', '猫', 'māo', 'cat'], ['dog', '狗', 'gǒu', 'dog'], ['rabbit', '兔子', 'tùzi', 'rabbit'], ['tortoise', '乌龟', 'wūguī', 'tortoise'], ['squirrel', '松鼠', 'sōngshǔ', 'squirrel'], ['horse', '马', 'mǎ', 'horse'],
-    ['cow', '奶牛', 'nǎiniú', 'dairy cow'], ['ox', '黄牛', 'huángniú', 'ox'], ['sheep', '绵羊', 'miányáng', 'sheep'], ['lamb', '小羊', 'xiǎo yáng', 'lamb'], ['wolf', '狼', 'láng', 'wolf']];
+    ['cow', '奶牛', 'nǎiniú', 'dairy cow'], ['ox', '黄牛', 'huángniú', 'ox'], ['sheep', '绵羊', 'miányáng', 'sheep'], ['lamb', '小羊', 'xiǎo yáng', 'lamb'], ['wolf', '狼', 'láng', 'wolf'], ['frog', '青蛙', 'qīngwā', 'frog'], ['monkey', '猴子', 'hóuzi', 'monkey'], ['bird', '小鸟', 'xiǎo niǎo', 'little bird']];
   const SEASON = { spring: ['春天', 'spring', '#F29BB5'], summer: ['夏天', 'summer', '#4FA85A'], autumn: ['秋天', 'autumn', '#E08A2E'], winter: ['冬天', 'winter', '#5E8FC9'] };
   const PLANTS = [['peach', '桃花', 'táohuā', 'peach blossom', 'spring'], ['jasmine', '迎春花', 'yíngchūnhuā', 'winter jasmine', 'spring'], ['lotus', '荷花', 'héhuā', 'lotus', 'summer'], ['sunflower', '向日葵', 'xiàngrìkuí', 'sunflower', 'summer'],
     ['chrysanthemum', '菊花', 'júhuā', 'chrysanthemum', 'autumn'], ['osmanthus', '桂花', 'guìhuā', 'sweet osmanthus', 'autumn'], ['plum', '梅花', 'méihuā', 'plum blossom', 'winter'], ['narcissus', '水仙', 'shuǐxiān', 'narcissus', 'winter']];
@@ -4357,7 +4398,7 @@ const Dex = (() => {
       const cv = document.createElement('canvas'); cv.width = cv.height = N; const cx = cv.getContext('2d'), im = cx.createImageData(N, N);
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const i = ((N - 1 - y) * N + x) * 4, o = (y * N + x) * 4; for (let k = 0; k < 3; k++) im.data[o + k] = Math.round(Math.pow(px[i + k] / 255, 1 / 2.2) * 255); im.data[o + 3] = px[i + 3]; }
       cx.putImageData(im, 0, 0); return (pics[key] = cv.toDataURL('image/png')); } catch (e) { return (pics[key] = ''); } }
-  const animalPic = id => snap('a' + id, g => { const q = new THREE.Group(); g.add(q); if (id === 'rabbit') Zoo.rabbit(q); else if (id === 'tortoise') Zoo.tortoise(q); else if (id === 'squirrel') Zoo.squirrel(q); else Zoo.quad(q, id); q.rotation.y = id === 'rabbit' || id === 'tortoise' || id === 'squirrel' ? .5 : 2.0; });
+  const animalPic = id => snap('a' + id, g => { const q = new THREE.Group(); g.add(q); if (Zoo[id] && id !== 'quad') Zoo[id](q); else Zoo.quad(q, id); q.rotation.y = Zoo[id] ? .5 : 2.0; });
   function openBook(kind) { const rows = kind === 'a' ? ANIMALS : PLANTS, d = got()[kind], n = rows.filter(q => d[q[0]]).length;
     $('albumTitle').innerHTML = kind === 'a' ? '动物图鉴<small class="en-only">Animals I have met</small>' : '花草图鉴<small class="en-only">Flowers of the four seasons</small>';
     $('albumNote').innerHTML = `已经发现 ${n} / ${rows.length} 种　走近看一看，就会收进图鉴<span class="en-only"><br>Found ${n} of ${rows.length}. Walk up to one to add it.</span>` + (kind === 'f' ? `<br>现在是${SEASON[Life.season()][0]}<span class="en-only"> · It is ${SEASON[Life.season()][1]} now</span>` : '');
@@ -4371,6 +4412,34 @@ const Dex = (() => {
     el.innerHTML = '<div style="font-weight:700;font-size:17px;margin-bottom:6px">图鉴<small class="en-only"> Picture books</small></div><div class="row" style="gap:8px;flex-wrap:wrap"><button class="pill soft" data-k="a">🐾 动物 ' + a + '/' + ANIMALS.length + '<small class="en-only" style="display:block;font-size:11px;font-weight:400">Animals</small></button><button class="pill soft" data-k="f">🌸 花草 ' + f + '/' + PLANTS.length + '<small class="en-only" style="display:block;font-size:11px;font-weight:400">Flowers</small></button></div>';
     g.appendChild(el); el.querySelectorAll('[data-k]').forEach(b => { b.onclick = () => openBook(b.dataset.k); }); }
   return { tick, rows, openBook, found, placed, freeSpot, MAKE, PLANTS, ANIMALS, snap };
+})();
+/* ---------- Photo mode: a picture of yourself on the island to keep or send ----------
+   Opened from the bag. The buttons and panels go away, you turn to the camera (and can turn further, or jump), and the
+   shutter saves what the game is showing with a caption strip under it. The picture is shown for saving: a download
+   where the browser allows one, a share sheet where there is one, and always a long press on the picture itself. */
+const Photo = (() => {
+  let bar = null, was = false;
+  const css = document.createElement('style'); css.textContent = 'body.photo .hud, body.photo .zoomBtn, body.photo #quest, body.photo #act, body.photo #stick, body.photo #toast { visibility: hidden !important; }'; document.head.appendChild(css);
+  const face = () => { const p = ME().obj.position; ME().obj.rotation.y = Math.atan2(camera.position.x - p.x, camera.position.z - p.z); };
+  function enter() { if (bar || UI.talking || !PEOPLE.me) return; try { closeVeil('albumVeil'); } catch (e) { $('albumVeil').classList.add('hidden'); } was = UI.busy = true; document.body.classList.add('photo'); face();
+    bar = document.createElement('div'); bar.id = 'photoBar'; bar.style.cssText = 'position:fixed;left:0;right:0;bottom:calc(14px + env(safe-area-inset-bottom));z-index:40;display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;padding:0 10px';
+    bar.innerHTML = '<button class="pill soft" id="phTurn">转一转<small class="en-only" style="display:block;font-size:11px;font-weight:400">Turn</small></button><button class="pill soft" id="phJump">跳起来拍<small class="en-only" style="display:block;font-size:11px;font-weight:400">Jump shot</small></button><button class="pill" id="phShoot" style="font-size:22px;padding:12px 26px">📷 拍照<small class="en-only" style="display:block;font-size:11px;font-weight:400">Take photo</small></button><button class="rb" id="phClose" aria-label="Close" style="font-size:20px">✕</button>';
+    document.body.appendChild(bar); const q = id => bar.querySelector('#' + id);
+    q('phTurn').onclick = () => { ME().obj.rotation.y += Math.PI / 4; }; q('phClose').onclick = leave; q('phShoot').onclick = () => shoot();
+    q('phJump').onclick = () => { const o = ME().obj.position, y0 = o.y; gsap.killTweensOf(o); gsap.to(o, { y: y0 + 1.0, duration: .3, ease: 'power2.out', yoyo: true, repeat: 1, onComplete: () => { o.y = y0; } }); setTimeout(() => shoot(), 290); }; }
+  function leave() { if (!bar) return; bar.remove(); bar = null; document.body.classList.remove('photo'); UI.busy = false; const v = document.getElementById('photoView'); if (v) v.remove(); }
+  function shoot() { if (!bar) return; let url = '';
+    try { FX.render(here.scene, camera); const src = renderer.domElement, W = Math.min(1280, src.width), H = Math.round(src.height * W / src.width), band = Math.round(W * .085), cv = document.createElement('canvas'); cv.width = W; cv.height = H + band; const c = cv.getContext('2d');
+      c.fillStyle = '#FFF8E7'; c.fillRect(0, 0, W, H + band); c.drawImage(src, 0, 0, W, H); const d = new Date(), day = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+      c.fillStyle = '#24493F'; c.textBaseline = 'middle'; c.font = '700 ' + Math.round(band * .46) + 'px "Kaiti SC", "STKaiti", "KaiTi", serif'; c.textAlign = 'left'; c.fillText('中文群岛 · ' + (G.name || ''), band * .4, H + band * .52); c.textAlign = 'right'; c.font = Math.round(band * .36) + 'px sans-serif'; c.fillText(day, W - band * .4, H + band * .52);
+      url = cv.toDataURL('image/jpeg', .9); } catch (e) { }
+    try { Sfx.play('tap'); } catch (e) { } if (!url || url.length < 2000) { showToast('这张没有拍成，再试一次。', 'That one did not come out. Try again.'); return; }
+    bar.style.display = 'none'; const v = document.createElement('div'); v.id = 'photoView'; v.style.cssText = 'position:fixed;inset:0;z-index:61;background:rgba(36,73,63,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:14px;box-sizing:border-box';
+    v.innerHTML = '<img alt="photo" style="max-width:100%;max-height:66vh;border-radius:14px;border:5px solid #FFFFFF;box-shadow:0 6px 24px rgba(0,0,0,.35);-webkit-touch-callout:default;user-select:auto;-webkit-user-select:auto"><div style="color:#FFF8E7;text-align:center;font-size:15px;line-height:1.4">长按图片，就可以保存到相册。<span class="en-only"><br>Press and hold the picture to save it.</span></div><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><a class="pill" id="phSave" download="zhongwen-isles.jpg" style="text-decoration:none">保存<small class="en-only" style="display:block;font-size:11px;font-weight:400">Save</small></a><button class="pill soft" id="phShare" style="display:none">分享<small class="en-only" style="display:block;font-size:11px;font-weight:400">Share</small></button><button class="pill soft" id="phAgain">再拍一张<small class="en-only" style="display:block;font-size:11px;font-weight:400">Another</small></button><button class="pill soft" id="phDone">好了<small class="en-only" style="display:block;font-size:11px;font-weight:400">Done</small></button></div>';
+    document.body.appendChild(v); v.querySelector('img').src = url; v.querySelector('#phSave').href = url; v.querySelector('#phAgain').onclick = () => { v.remove(); if (bar) bar.style.display = 'flex'; }; v.querySelector('#phDone').onclick = leave;
+    try { fetch(url).then(r => r.blob()).then(b => { const f = new File([b], 'zhongwen-isles.jpg', { type: 'image/jpeg' }); if (navigator.canShare && navigator.canShare({ files: [f] })) { const sb = v.querySelector('#phShare'); sb.style.display = ''; sb.onclick = () => { navigator.share({ files: [f], title: '中文群岛' }).catch(() => { }); }; } }).catch(() => { }); } catch (e) { } }
+  function rows(g) { const el = document.createElement('div'); el.style.cssText = 'grid-column:1/-1;text-align:left;padding:4px 6px 8px'; el.innerHTML = '<button class="pill soft">📷 拍照<small class="en-only" style="font-weight:400"> Take a photo</small></button>'; el.firstChild.onclick = enter; g.appendChild(el); }
+  return { enter, leave, shoot, rows, on: () => !!bar };
 })();
 /* ---------- Star shop: what the stars are for ----------
    Stars buy clothes (new colours and hats, worn straight away) and things for the family home (they stand in the room
@@ -4487,14 +4556,16 @@ const Festival = (() => {
   const M = (parent, geo, col, x, y, z, o) => mk(geo, typeof col === 'string' && o ? tm(col, o) : col, x, y, z, parent);
   const UPV = new THREE.Vector3(0, 1, 0);
   function seg(g, col, a, b, r) { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(), m = M(g, new THREE.CylinderGeometry(r, r, L, 5), col, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); m.quaternion.setFromUnitVectors(UPV, d.normalize()); return m; }
-  const GLOW = {};
-  const glow = col => GLOW[col] || (GLOW[col] = tm(col, { emissive: lin(col), emissiveIntensity: .8, roughness: .6 }));
+  const GLOW = {}, HALO = {};
+  const glow = col => GLOW[col] || (GLOW[col] = tm(col, { emissive: lin(col), emissiveIntensity: .5, roughness: .6 }));
+  /* a soft ball of light round each lantern, seen only after dark */
+  const halo = col => HALO[col] || (HALO[col] = new THREE.MeshBasicMaterial({ color: lin(col), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
   /* a paper lantern hanging from the point (x, y, z): a ribbed body between two gilt caps, with a tassel underneath.
      kind 'round' is the red palace lantern; 'tube' a tall paper cylinder; 'lotus' has a ring of petals round its foot */
   function lantern(g, x, y, z, col, s, kind) { s = s || 1; const L = new THREE.Group(); L.position.set(x, y, z); g.add(L); const gold = '#E2B13C', R = .3 * s, H = kind === 'tube' ? .34 * s : .25 * s, cy = -.12 * s - H;
     seg(L, '#3A2A22', [0, 0, 0], [0, -.12 * s, 0], .006);
     const prof = []; for (let i = 0; i <= 12; i++) { const a = i / 12 * Math.PI; prof.push(new THREE.Vector2(kind === 'tube' ? R * .62 * (.9 + .1 * Math.sin(a)) : Math.max(.09 * s, Math.sin(a) * R), cy - Math.cos(a) * H)); }
-    M(L, new THREE.LatheGeometry(prof, 18), glow(col));
+    M(L, new THREE.LatheGeometry(prof, 18), glow(col)); { const h = new THREE.Mesh(sph(1, 12), halo(col)); h.position.set(0, cy, 0); h.scale.setScalar(R * 2.1); h.userData.fx = true; h.renderOrder = 2; L.add(h); }
     for (let i = 0; i < 8; i++) { const a = i * .7854, rib = M(L, new THREE.TorusGeometry(1, .012 * s / R, 4, 14, Math.PI), shade(col, -.22), 0, cy, 0); rib.scale.set(kind === 'tube' ? R * .64 : R * 1.01, H * 1.0, 1); rib.rotation.set(0, a, -Math.PI / 2); rib.scale.z = R; }
     M(L, cyl(.11 * s, .12 * s, .06 * s, 14), gold, 0, cy + H + .01 * s, 0); M(L, cyl(.12 * s, .1 * s, .06 * s, 14), gold, 0, cy - H - .01 * s, 0);
     if (kind === 'lotus') for (let i = 0; i < 8; i++) { const a = i * .7854, p = M(L, sph(.1 * s, 6), '#F7A8C4', Math.cos(a) * R * .75, cy - H * .75, Math.sin(a) * R * .75); p.scale.set(.5, 1.1, .5); p.rotation.set(Math.sin(a) * .6, 0, -Math.cos(a) * .6); }
@@ -4506,18 +4577,20 @@ const Festival = (() => {
   function stand(g, x, y, z, cols, yaw, kind) { const s = new THREE.Group(); s.position.set(x, y, z); s.rotation.y = yaw; g.add(s); M(s, cyl(.05, .07, 3.0, 8), '#7A5236', 0, 1.5, 0); M(s, cyl(.16, .2, .12, 10), '#8A8076', 0, .06, 0); M(s, box(1.7, .07, .07), '#7A5236', 0, 2.85, 0); [-1, 1].forEach(k => { const e = M(s, box(.07, .07, .3), '#7A5236', k * .85, 2.9, 0); e.rotation.x = .5; }); M(s, sph(.075, 8), '#E2B13C', 0, 3.04, 0); lantern(s, -.7, 2.82, 0, cols[0], 1, kind); lantern(s, .7, 2.82, 0, cols[1] || cols[0], 1, kind); }
   const GREET = { spring: ['新年快乐', '春回大地', '福满人间'], dragon: ['端午安康', '粽叶飘香', '龙舟竞渡'], moon: ['中秋快乐', '花好月圆', '合家团圆'] };
   /* the festival ground: a gate with its greeting and couplets, lantern strings round a square, and the stall in the middle */
-  function ground(g, cx, y, cz, fest, k0) { const s = new THREE.Group(), I = INFO[fest], red = '#C8261C', W = 3.3, D = 2.7; s.position.set(cx, y, cz); s.scale.setScalar(k0 || 1); g.add(s);
+  function ground(g, cx, y, cz, fest, k0) { const s = new THREE.Group(), I = INFO[fest], red = '#C8261C', W = 3.3, D = 2.7, GZ = -D;   /* the gate stands at the back, as a backdrop: from the front the stall is in full view */ s.position.set(cx, y, cz); s.scale.setScalar(k0 || 1); g.add(s);
     const posts = [[-W, D], [W, D], [W, -D], [-W, -D]]; posts.forEach(([a, b]) => { M(s, cyl(.07, .09, 3.7, 8), red, a, 1.85, b); M(s, cyl(.17, .2, .16, 10), '#8A8076', a, .08, b); M(s, sph(.1, 8), '#E2B13C', a, 3.76, b); });
-    /* the gate, on the side you walk in from */
-    M(s, box(2 * W + .7, .16, .2), red, 0, 3.25, D); M(s, box(2 * W + 1.1, .09, .34), '#3F7A5A', 0, 3.38, D); [-1, 1].forEach(k => { const up = M(s, box(.5, .09, .34), '#3F7A5A', k * (W + .7), 3.47, D); up.rotation.z = k * .45; });
-    const gb = signBoard(GREET[fest][0], 2.3, .55, I.col); gb.position.set(0, 2.86, D + .02); s.add(gb); couplet(s, GREET[fest][1], W, 2.35, D + .1, red); couplet(s, GREET[fest][2], -W, 2.35, D + .1, red);
+    /* the gate with its greeting, behind the stall */
+    M(s, box(2 * W + .7, .16, .2), red, 0, 3.25, GZ); M(s, box(2 * W + 1.1, .09, .34), '#3F7A5A', 0, 3.38, GZ); [-1, 1].forEach(k => { const up = M(s, box(.5, .09, .34), '#3F7A5A', k * (W + .7), 3.47, GZ); up.rotation.z = k * .45; });
+    const gb = signBoard(GREET[fest][0], 2.3, .55, I.col); gb.position.set(0, 2.86, GZ + .02); s.add(gb); couplet(s, GREET[fest][1], W, 2.35, GZ + .1, red); couplet(s, GREET[fest][2], -W, 2.35, GZ + .1, red);
     const cols = fest === 'spring' ? ['#D9281E', '#D9281E'] : fest === 'moon' ? ['#F5C542', '#F28C28', '#E8556A', '#6FB7DA', '#8FCB6A'] : ['#2F8F5A', '#E2B13C', '#D9281E', '#3E86C6', '#FFFFFF'];
     for (let i = 0; i < 4; i++) { const a = posts[i], b = posts[(i + 1) % 4];
       if (fest === 'dragon') garland(s, [a[0], 3.55, a[1]], [b[0], 3.55, b[1]], 9, .5, (p, k) => { const f = M(s, new THREE.ConeGeometry(.16, .34, 3), tm(cols[k % 5], { side: THREE.DoubleSide }), p[0], p[1] - .17, p[2]); f.rotation.x = Math.PI; f.rotation.y = Math.atan2(b[0] - a[0], b[1] - a[1]) + 1.57; f.scale.z = .06; });
       else garland(s, [a[0], 3.6, a[1]], [b[0], 3.6, b[1]], i % 2 ? 4 : 5, .45, (p, k) => lantern(s, p[0], p[1], p[2], cols[k % cols.length], .58, fest === 'moon' ? ['round', 'tube', 'lotus'][k % 3] : 'round')); }
-    lantern(s, -1.2, 3.18, D, cols[0], .9, 'round'); lantern(s, 1.2, 3.18, D, cols[1] || cols[0], .9, 'round');
+    lantern(s, -1.2, 3.18, GZ, cols[0], .9, 'round'); lantern(s, 1.2, 3.18, GZ, cols[1] || cols[0], .9, 'round');
     /* the stall: a cloth-covered counter under a striped awning */
-    [[-1.3, -.55], [1.3, -.55], [-1.3, .55], [1.3, .55]].forEach(([a, b]) => M(s, cyl(.04, .04, 2.4, 6), '#7A5236', a, 1.2, b)); for (let i = 0; i < 8; i++) { const aw = M(s, box(.34, .05, 1.5), i % 2 ? '#FFF6E0' : I.col, -1.19 + i * .34, 2.48 - Math.abs(0) , 0); aw.rotation.x = .16; } M(s, box(2.72, .22, .05), I.col, 0, 2.28, .78);
+    [[-1.3, -.55], [1.3, -.55], [-1.3, .55], [1.3, .55]].forEach(([a, b]) => M(s, cyl(.04, .04, 2.4, 6), '#7A5236', a, 1.2, b)); /* a pitched cloth roof in stripes, with a scalloped edge hanging along the front and the back */
+    for (let i = 0; i < 8; i++) { const col = i % 2 ? '#FFF6E0' : I.col, x = -1.225 + i * .35; [-1, 1].forEach(k => { const aw = M(s, box(.35, .04, 1.12), col, x, 2.68, k * .46); aw.rotation.x = k * .62; const tab = M(s, cyl(.175, .175, .03, 12, 1, false, 0, Math.PI), col, x, 2.36, k * .915); tab.rotation.set(Math.PI / 2, 0, Math.PI / 2 * 0); tab.rotation.z = Math.PI; tab.rotation.x = Math.PI / 2; }); }
+    M(s, box(2.86, .06, .08), '#7A5236', 0, 3.0, 0); [-1, 1].forEach(k => { const tri = new THREE.Shape(); tri.moveTo(-.92, 0); tri.lineTo(.92, 0); tri.lineTo(0, .64); tri.closePath(); const gm = M(s, new THREE.ShapeGeometry(tri), tm('#FFF6E0', { side: THREE.DoubleSide }), k * 1.4, 2.36, 0); gm.rotation.y = Math.PI / 2; });
     M(s, box(2.5, .82, .9), I.col, 0, .41, 0); M(s, box(2.6, .05, 1.0), '#F4E3B8', 0, .845, 0); M(s, box(2.5, .3, .02), '#E2B13C', 0, .62, .46);
     const T = .87;
     if (fest === 'spring') {
@@ -4526,7 +4599,7 @@ const Festival = (() => {
       M(s, cyl(.3, .3, .05, 8), '#8A1F1A', .55, T + .025, 0); for (let i = 0; i < 8; i++) { const a = i * .785; M(s, cyl(.085, .085, .04, 3, 1, false, a, .785), ['#F5C542', '#8A5A3A', '#C8261C', '#E9DFC8'][i % 4], .55 + Math.cos(a + .39) * .16, T + .065, Math.sin(a + .39) * .16); }
       M(s, cyl(.09, .07, .22, 10), '#3E86C6', 1.05, T + .11, .05); for (let i = 0; i < 5; i++) { seg(s, '#7A5236', [1.05, T + .2, .05], [1.05 + Math.cos(i * 1.25) * .12, T + .62, .05 + Math.sin(i * 1.25) * .12], .008); for (let k = 0; k < 4; k++) M(s, sph(.03, 6), k % 2 ? '#F29BB5' : '#F7B6C8', 1.05 + Math.cos(i * 1.25) * .12 * (.4 + k * .2), T + .34 + k * .08, .05 + Math.sin(i * 1.25) * .12 * (.4 + k * .2)); }
       /* strings of firecrackers on the gate posts, and a kumquat tree in a pot at each side of the counter */
-      [-1, 1].forEach(k => { for (let i = 0; i < 14; i++) { const c = M(s, cyl(.035, .035, .16, 6), '#D9281E', k * (W - .32) + (i % 2 ? .05 : -.05), 2.9 - i * .11, D + .12); c.rotation.z = i % 2 ? .7 : -.7; M(s, cyl(.037, .037, .03, 6), '#E2B13C', c.position.x, c.position.y, c.position.z).rotation.z = c.rotation.z; } seg(s, '#3A2A22', [k * (W - .32), 3.15, D + .12], [k * (W - .32), 1.4, D + .12], .006);
+      [-1, 1].forEach(k => { for (let i = 0; i < 14; i++) { const c = M(s, cyl(.035, .035, .16, 6), '#D9281E', k * (W - .32) + (i % 2 ? .05 : -.05), 2.9 - i * .11, GZ + .12); c.rotation.z = i % 2 ? .7 : -.7; M(s, cyl(.037, .037, .03, 6), '#E2B13C', c.position.x, c.position.y, c.position.z).rotation.z = c.rotation.z; } seg(s, '#3A2A22', [k * (W - .32), 3.15, GZ + .12], [k * (W - .32), 1.4, GZ + .12], .006);
         M(s, cyl(.26, .2, .34, 12), '#3E6FA8', k * 1.9, .17, .9); M(s, cyl(.275, .275, .05, 12), '#E2B13C', k * 1.9, .33, .9); seg(s, '#6B4A38', [k * 1.9, .34, .9], [k * 1.9, .8, .9], .03); [[0, 1.05, 0, .34], [.18, .85, .1, .24], [-.17, .88, -.08, .25], [0, 1.35, 0, .22]].forEach(([a, b, c2, R]) => M(s, sph(R, 10), '#2F7D45', k * 1.9 + a, b, .9 + c2));
         const r = mulberry(k + 7); for (let i = 0; i < 26; i++) { const a = r() * 6.28, e = (r() - .3) * 2.2, R = .36; M(s, sph(.04, 6), '#F5A023', k * 1.9 + Math.cos(a) * Math.cos(e) * R * .95, 1.05 + Math.sin(e) * R * .95, .9 + Math.sin(a) * Math.cos(e) * R * .95); } });
       const fu = signBoard('福', .42, .42, '#D9281E'); fu.position.set(0, .45, .47); fu.rotation.z = Math.PI / 4; s.add(fu); }
@@ -4537,7 +4610,7 @@ const Festival = (() => {
       for (let i = 0; i < 5; i++) { seg(s, '#3A2A22', [.1 + i * .22, 2.2, .7], [.1 + i * .22, 1.85 - (i % 2) * .12, .7], .005); zz(.1 + i * .22, 1.78 - (i % 2) * .12, .7, i * 1.3); }   // dumplings hung up by their strings
       M(s, cyl(.2, .16, .04, 14), '#FFFFFF', .35, T + .02, .05); [[.3, 0], [.42, .08], [.36, .12]].forEach(([a, b]) => M(s, sph(.055, 8), '#C9D9A0', a, T + .07, b).scale.y = 1.3);   // salted duck eggs
       [[.85, 0, '#D9281E'], [1.0, .12, '#E2B13C'], [.95, -.12, '#3E86C6']].forEach(([a, b, c]) => { const sa = M(s, sph(.06, 8), c, a, T + .07, b); sa.scale.set(.8, 1.2, .5); seg(s, c, [a, T + .01, b], [a, T - .0, b + .12], .006); });   // scented sachets
-      [-1, 1].forEach(k => { for (let i = 0; i < 7; i++) { const lf = M(s, sph(.09, 6), i % 2 ? '#5E9A45' : '#4E8A3F', k * (W - .3) + (i - 3) * .03, 2.5 - i * .1, D + .14); lf.scale.set(.45, 1.9, .2); lf.rotation.z = (i - 3) * .12; } M(s, box(.12, .04, .04), '#D9281E', k * (W - .3), 2.62, D + .14); }); }   // bundles of mugwort tied to the gate
+      [-1, 1].forEach(k => { for (let i = 0; i < 7; i++) { const lf = M(s, sph(.09, 6), i % 2 ? '#5E9A45' : '#4E8A3F', k * (W - .3) + (i - 3) * .03, 2.5 - i * .1, GZ + .14); lf.scale.set(.45, 1.9, .2); lf.rotation.z = (i - 3) * .12; } M(s, box(.12, .04, .04), '#D9281E', k * (W - .3), 2.62, GZ + .14); }); }   // bundles of mugwort tied to the gate
     if (fest === 'moon') {
       M(s, cyl(.36, .32, .04, 16), '#FFFFFF', -.65, T + .02, 0); [[-.65, 0], [-.45, .12], [-.85, .1], [-.65, -.17], [-.5, -.1]].forEach(([a, b], i) => { M(s, cyl(.095, .1, .07, 16), '#B9772E', a, T + .075, b); M(s, cyl(.07, .07, .012, 12), '#D49A4A', a, T + .115, b); for (let k = 0; k < 6; k++) M(s, sph(.014, 5), '#8A5220', a + Math.cos(k * 1.05) * .05, T + .123, b + Math.sin(k * 1.05) * .05); M(s, sph(.016, 5), '#8A5220', a, T + .124, b); });
       const cut = M(s, cyl(.095, .1, .07, 16, 1, false, 0, Math.PI), '#B9772E', -.25, T + .035, .22); M(s, sph(.045, 8), '#F2B632', -.25, T + .04, .22);   // one cut open: the salted yolk shows
@@ -4575,12 +4648,13 @@ const Festival = (() => {
     const r = mulberry(sp.name.charCodeAt(sp.name.length - 1) * 53 + 11), taken = (Dex.placed[sp.name] || []).slice(), cols = fest === 'spring' ? ['#D9281E'] : fest === 'moon' ? ['#F5C542', '#F28C28'] : ['#2F8F5A', '#E2B13C'];
     /* the festival ground wants a clear lawn about eight metres across; on a crowded island it is built a little smaller */
     let st = null, k0 = 1; for (const k of [1, .86, .74, .62]) { st = Dex.freeSpot(sp, mulberry(sp.name.charCodeAt(sp.name.length - 1) * 91 + Math.round(k * 100)), taken, 4.2 * k); if (st) { k0 = k; break; } }
-    if (st) { taken.push({ x: st[0], z: st[1] }); ground(g, st[0], sp.floor(st[0], st[1]), st[1], fest, k0); B.stall = st; B.k = k0; const add = q => { sp.solids.push(q); B.solids.push(q); }; add([st[0] - 1.35 * k0, st[1] - .6 * k0, st[0] + 1.35 * k0, st[1] + .6 * k0]); [[-3.3, 2.7], [3.3, 2.7], [3.3, -2.7], [-3.3, -2.7]].forEach(([a, b]) => add([st[0] + a * k0 - .2, st[1] + b * k0 - .2, st[0] + a * k0 + .2, st[1] + b * k0 + .2])); }
+    if (st) { taken.push({ x: st[0], z: st[1] }); ground(g, st[0], sp.floor(st[0], st[1]), st[1], fest, k0); B.stall = st; B.k = k0; B.light = new THREE.PointLight(lin(fest === 'dragon' ? '#FFE9B0' : fest === 'moon' ? '#FFD98A' : '#FFB58A'), 0, 13, 1.6); B.light.position.set(st[0], sp.floor(st[0], st[1]) + 3.1, st[1] + 1); g.add(B.light); const add = q => { sp.solids.push(q); B.solids.push(q); }; add([st[0] - 1.35 * k0, st[1] - .6 * k0, st[0] + 1.35 * k0, st[1] + .6 * k0]); [[-3.3, 2.7], [3.3, 2.7], [3.3, -2.7], [-3.3, -2.7]].forEach(([a, b]) => add([st[0] + a * k0 - .2, st[1] + b * k0 - .2, st[0] + a * k0 + .2, st[1] + b * k0 + .2])); }
     for (let i = 0; i < 4; i++) { const p = Dex.freeSpot(sp, r, taken); if (!p) break; taken.push({ x: p[0], z: p[1] }); stand(g, p[0], sp.floor(p[0], p[1]), p[1], cols, r() * 3.14, fest === 'moon' && i % 2 ? 'tube' : 'round'); }
     if (fest === 'dragon') { const px = sp.name === 'town' ? 2.4 : -6.2, pz = 38.5;   /* beside the pier, on the side the ferry does not use */ B.boat = dragonBoat(g, px, (sp.water && sp.water.position ? sp.water.position.y : 0) + .16, pz); B.y0 = B.boat.position.y; }
     try { const mo = sp.sky && sp.sky.userData && sp.sky.userData.moon; if (mo) mo.scale.setScalar(fest === 'moon' ? 2.3 : 1); } catch (e) { } }
   let wait = 0, tt = 0;
-  function tick(dt) { tt += dt; const B0 = here && built[here.name]; if (B0 && B0.boat) { B0.boat.position.y = B0.y0 + Math.sin(tt * 1.3) * .05; B0.boat.rotation.z = Math.sin(tt * .9) * .035; B0.boat.rotation.x = Math.sin(tt * .7) * .012; }
+  function tick(dt) { tt += dt; const B0 = here && built[here.name];
+    { const ph = Life.current(), want = ph === 'night' ? 1 : ph === 'evening' ? .55 : 0; tick.n = (tick.n || 0) + (want - (tick.n || 0)) * Math.min(1, dt * 1.5); const n = tick.n; for (const k in GLOW) GLOW[k].emissiveIntensity = .5 + n * 1.3; for (const k in HALO) HALO[k].opacity = n * .3; if (B0 && B0.light) B0.light.intensity = n * 1.5; } if (B0 && B0.boat) { B0.boat.position.y = B0.y0 + Math.sin(tt * 1.3) * .05; B0.boat.rotation.z = Math.sin(tt * .9) * .035; B0.boat.rotation.x = Math.sin(tt * .7) * .012; }
     wait -= dt; if (wait > 0) return; wait = 1; if (!here || !here.sky || !/^(town|isle\d)$/.test(here.name) || UI.busy || UI.talking || !Dex.placed[here.name]) return;
     const f = now(), B = built[here.name]; if ((B ? B.fest : null) === f) return;
     if (B) { if (B.group.parent) B.group.parent.remove(B.group); (B.solids || []).forEach(q => { const i = here.solids.indexOf(q); if (i >= 0) here.solids.splice(i, 1); }); try { const mo = here.sky && here.sky.userData && here.sky.userData.moon; if (mo) mo.scale.setScalar(1); } catch (e) { } delete built[here.name]; }
@@ -4934,7 +5008,7 @@ function openBag() {
   if (metHome) ITEM_ORDER.forEach(id => { const got = !!G.found[id], it = ITEMS[id], d = document.createElement('div'); d.className = 'cell' + (got ? ' got' : '');
     d.innerHTML = `<img src="${thumb(id)}" alt="" style="width:64px;height:64px;object-fit:contain;${got ? '' : 'filter:brightness(0);opacity:.15'}"><div class="n">${got ? it.zh : '？'}</div><div class="c">${got ? VOCAB[it.zh][0] : ''}</div>`;
     if (got) d.onclick = () => Voice.speak(it.zh, .6); g.appendChild(d); });
-  Life.bagRows(g); storyRows(g); try { Dex.rows(g); } catch (e) { } try { Errand.rows(g); } catch (e) { } try { Festival.rows(g); } catch (e) { } try { Shop.rows(g); } catch (e) { } Learn.rows(g); try { Backup.rows(g); } catch (e) { }
+  try { if (here && here.sky) Photo.rows(g); } catch (e) { } Life.bagRows(g); storyRows(g); try { Dex.rows(g); } catch (e) { } try { Errand.rows(g); } catch (e) { } try { Festival.rows(g); } catch (e) { } try { Shop.rows(g); } catch (e) { } Learn.rows(g); try { Backup.rows(g); } catch (e) { }
   if (!g.children.length) g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:18px 6px;line-height:1.7">背包还是空的。<br>听完故事、做完活动，就会有东西放进来哦！<span class="en-only"><br>Your bag is empty. Finish stories and activities to fill it!</span></div>';
   $('albumVeil').classList.remove('hidden'); UI.busy = true;
 }
@@ -7445,7 +7519,7 @@ const B1c = (() => {
     if (kind === '马') Zoo.quad(g, 'horse');   /* farm animals come from the Zoo library: real proportions, jointed legs, hooves */
     if (kind === '牛') Zoo.quad(g, 'cow');
     if (kind === '羊') Zoo.quad(g, 'sheep');
-    if (kind === '鸟') { const b = mk(sph(.18, 10), '#4F86C6', 0, 0, 0, g); b.scale.z = 1.3; mk(sph(.12, 10), '#4F86C6', 0, .12, .2, g); cuteFace(g, 0, .14, .2, .12, 0, { mouth: false, eyeY: .2, spread: .45 }); const k2 = mk(new THREE.ConeGeometry(.04, .1, 6), '#F2B233', 0, .1, .34, g, false); k2.rotation.x = Math.PI / 2; [-1, 1].forEach(k => { const w = mk(sph(.13, 8), '#3E6E9E', k * .17, .02, 0, g); w.scale.set(.4, .8, 1.1); }); }
+    if (kind === '鸟') Zoo.into(g, 1.15, 0, q => Zoo.bird(q, '#4F86C6'));
     if (kind === '鱼') { const b = mk(sph(.22, 12), '#F28C28', 0, 0, 0, g); b.scale.set(.6, .8, 1.4); const t2 = mk(new THREE.ConeGeometry(.16, .25, 4), '#F28C28', 0, 0, -.38, g); t2.rotation.x = -Math.PI / 2; }
     if (kind === '虫') { const b = mk(sph(.16, 12), '#E8443A', 0, .1, 0, g); b.scale.y = .6; mk(sph(.08, 8), '#1E1A18', 0, .1, .15, g); [[.06, .04], [-.06, -.04], [.05, -.07]].forEach(([a, c]) => mk(sph(.03, 6), '#1E1A18', a, .18, c, g, false)); }
     return g;
@@ -8864,11 +8938,7 @@ const B2f = (() => {
   const prop = (k, obj) => { PEOPLE[k] = { obj, space: 'isle2', mixer: { update() {} }, play() {}, once() {} }; return PEOPLE[k]; };
 
   /* ---------- the lotus pond ---------- */
-  function frog(g) {
-    const b = mk(sph(.42, 14), '#5EA94E', 0, .38, 0, g); b.scale.set(1.15, .8, 1); mk(sph(.3, 12), '#CDE8A8', 0, .32, .2, g).scale.set(1, .6, .7);
-    [-1, 1].forEach(k => { mk(sph(.13, 10), '#5EA94E', k * .2, .68, .1, g); mk(sph(.08, 8), '#FFFFFF', k * .2, .72, .19, g, false); mk(sph(.045, 6), '#1E1A18', k * .2, .73, .25, g, false); const l = mk(sph(.14, 8), '#4E9A45', k * .4, .14, .15, g); l.scale.set(.8, .4, 1.4); });
-    mk(box(.22, .02, .02), '#2F6E46', 0, .44, .41, g, false);
-  }
+  function frog(g) { Zoo.into(g, 1.15, 0, q => Zoo.frog(q)); }   /* a real frog now, from the Zoo library */
   function buildPond(S) {
     const [px, pz] = Isle2.Z.pond; Q.p = { x: px, z: pz };
     [[px - 2.4, pz + .6, 1], [px + 2.2, pz - 1.6, .9], [px - .6, pz - 2.6, .8], [px + 2.6, pz + 2, .7]].forEach(([x, z, s]) => { const l = mk(cyl(.9 * s, .9 * s, .04, 20), '#5EA94E', x, .16, z, null, false); l.scale.z = .9; l.material = l.material.clone(); FX.seasonal(l, 'pad', null, (sn, on) => { l.material.color.set(sn === 'autumn' && !FX.alive('lotus') ? '#9A7B45' : '#5EA94E').convertSRGBToLinear(); }); });
@@ -10357,14 +10427,7 @@ const B4c = (() => {
   }
 
   /* ---------- the well under the tree ---------- */
-  function monkey(g, s) {
-    const c = '#9A6438', f = '#F2D2AE';
-    const b = mk(sph(.2 * s, 12), c, 0, .28 * s, 0, g); b.scale.y = 1.1; mk(sph(.13 * s, 10), f, 0, .27 * s, .1 * s, g, false).scale.set(1, 1.1, .5);
-    mk(sph(.2 * s, 14), c, 0, .62 * s, 0, g); const fc = mk(sph(.16 * s, 12), f, 0, .58 * s, .08 * s, g, false); fc.scale.set(1.05, .95, .8);
-    [-1, 1].forEach(k => { mk(sph(.07 * s, 8), c, k * .21 * s, .66 * s, 0, g); mk(sph(.04 * s, 6), f, k * .22 * s, .66 * s, .02 * s, g, false); const a = mk(cyl(.045 * s, .04 * s, .3 * s, 6), c, k * .18 * s, .36 * s, .05 * s, g, false); a.rotation.z = k * .5; });
-    const tl = mk(new THREE.TorusGeometry(.12 * s, .03 * s, 6, 12, Math.PI * 1.4), c, 0, .25 * s, -.2 * s, g, false); tl.rotation.y = Math.PI / 2;
-    cuteFace(g, 0, .6 * s, .02 * s, .2 * s, 0, { eyeY: .12 }); packGroup(g);
-  }
+  function monkey(g, s) { Zoo.into(g, 1, 0, q => Zoo.monkey(q, s)); }   /* a real monkey now, from the Zoo library */
   function buildWell(S) {
     const wx = 8, wz = 2; Q.w = { x: wx, z: wz };
     mk(cyl(.9, .95, .8, 20), '#9A9A92', wx, .4, wz); Q.water = mk(cyl(.72, .72, .02, 20), '#2E4A6A', wx, .62, wz, null, false); I().solids.push([wx - 1, wz - 1, wx + 1, wz + 1]);
@@ -10470,7 +10533,9 @@ const B4d = (() => {
     buildGarden(S);
   }
   T[407] = async () => {
-    Life.force('morning'); putIn(ME(), I(), Q.f.x - 3, Q.f.z + 4, Math.PI); snapCamera(); Q.birds.forEach(b => b.visible = true); Q.petals.forEach(p => p.visible = true);
+    Life.force('morning'); putIn(ME(), I(), Q.f.x - 3, Q.f.z + 4, Math.PI); snapCamera(); Q.birds.forEach(b => b.visible = true);
+    /* asking for the poems again starts them afresh: every petal lies on the ground again, the hoe and the bowl are put away and the rice is green (petals already counted used to stay counted, so the five could never be reached, and the petals themselves were never shown) */
+    Q.petals.forEach(p => { p.p.visible = true; p.done = false; }); Q.hoes = 0; if (Q.hoe) Q.hoe.visible = false; if (Q.bowl) Q.bowl.visible = false; Q.rice.forEach(m => m.material = tm('#9ACD5A'));
     await talk('nongfu4', [['第一首《春晓》。春天的早上，你刚刚睡醒……', 'First, “Spring Dawn”. It is a spring morning and you have just woken up…']]);
     for (let k = 0; k < 3; k++) { Sfx.note([1568, 1760, 1976][k]); await wait(220); }
     sayIt(POEMS[0][1][0] + POEMS[0][1][1], .6); showToast('处处闻啼鸟', 'Everywhere I hear birds singing', 2200); await wait(2400);
