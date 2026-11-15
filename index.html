@@ -2664,17 +2664,24 @@ void main() {
   function stars(parent, R, base) {
     if (base) { if (!R) { base.geometry.computeBoundingSphere(); R = base.geometry.boundingSphere.radius * .97; } base.material.size *= .55; base.material.transparent = true; base.material.opacity = .45; }
     const all = []; CONS.forEach((c, ci) => c.s.forEach((st, si) => all.push({ ci, si, ra: st[0], dec: st[1], mag: st[2], warm: !!st[3] })));
-    const g = new THREE.Group(), mk2 = (list, size) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(list.length * 3), 3)); const col = new Float32Array(list.length * 3); list.forEach((st, i) => { const b = Math.max(.45, Math.min(1, 1.15 - st.mag * .2)); col[i * 3] = b; col[i * 3 + 1] = b * (st.warm ? .78 : .97); col[i * 3 + 2] = b * (st.warm ? .6 : 1); }); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    const g = new THREE.Group(), mk2 = (list, size) => { const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(list.length * 3), 3)); const col = new Float32Array(list.length * 3); list.forEach((st, i) => { const b = Math.max(.45, Math.min(1, 1.15 - st.mag * .2)) * (st.dim || 1); col[i * 3] = b; col[i * 3 + 1] = b * (st.warm ? .78 : .97); col[i * 3 + 2] = b * (st.warm ? .6 : 1); }); geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
       /* round, soft-edged dots, sized in screen pixels (so they are not specks on a sharp phone screen) */
       const dot = canvasTex(32, 32, x => { const g2 = x.createRadialGradient(16, 16, 0, 16, 16, 16); g2.addColorStop(0, 'rgba(255,255,255,1)'); g2.addColorStop(.45, 'rgba(255,255,255,.85)'); g2.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g2; x.fillRect(0, 0, 32, 32); });
       const pt = new THREE.Points(geo, new THREE.PointsMaterial({ size: size * Math.min(2.5, window.devicePixelRatio || 1), map: dot, sizeAttenuation: false, vertexColors: true, fog: false, transparent: true, depthWrite: false })); pt.frustumCulled = false; pt.renderOrder = -1; g.add(pt); return pt; };
     const big = all.filter(st => st.mag < 1.3), small = all.filter(st => st.mag >= 1.3), sky = { g, R, base, big, small, pBig: mk2(big, 7), pSmall: mk2(small, 4.4), lines: [], next: 0, show: -1, t0: 0 };
+    /* the named stars alone leave the sky nearly empty: behind them go two thousand faint ones scattered over the whole
+       sphere, and the Milky Way as a soft band of the faintest. They turn with the sky like the rest. */
+    { const r = mulberry(2026), f1 = [], f2 = [], mw = [], D = Math.PI / 180, gauss = () => (r() + r() + r() + r() - 2) * .87;
+      for (let i = 0; i < 1500; i++) { const st = { ra: r() * 24, dec: Math.asin(2 * r() - 1) / D, mag: 3.5, warm: r() < .12, dim: .5 + r() * .5 }; (i < 450 ? f1 : f2).push(st); }
+      const pr = 12.85 * 15 * D, pd = 27.13 * D, n = [Math.cos(pd) * Math.cos(pr), Math.cos(pd) * Math.sin(pr), Math.sin(pd)], a = [-Math.sin(pr), Math.cos(pr), 0], b = [n[1] * a[2] - n[2] * a[1], n[2] * a[0] - n[0] * a[2], n[0] * a[1] - n[1] * a[0]];
+      for (let i = 0; i < 1300; i++) { const th = r() * 6.2832, k = gauss() * .13, v = [0, 1, 2].map(j => Math.cos(th) * a[j] + Math.sin(th) * b[j] + n[j] * k), L = Math.hypot(v[0], v[1], v[2]); mw.push({ ra: ((Math.atan2(v[1], v[0]) / D / 15) + 24) % 24, dec: Math.asin(v[2] / L) / D, mag: 3.5, dim: .55 + r() * .5 }); }
+      sky.extra = [[f1, mk2(f1, 3.4)], [f2, mk2(f2, 2.6)], [mw, mk2(mw, 2.2)]]; }
     CONS.forEach((c, ci) => { if (!c.l.length) { sky.lines.push(null); return; } const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(c.l.length * 6), 3)); const ln = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: '#CFE3FF', transparent: true, opacity: 0, fog: false, depthWrite: false })); ln.frustumCulled = false; ln.renderOrder = -1; ln.visible = false; g.add(ln); sky.lines.push(ln); });
     g.userData.fx = true; parent.add(g); SKIES.push(sky); place(sky); return g;
   }
   function place(sky) {
     const lst = sidereal(), v = _lv, pos = {}; sky.up = [];
-    [[sky.big, sky.pBig], [sky.small, sky.pSmall]].forEach(([list, pt]) => { const a = pt.geometry.attributes.position; list.forEach((st, i) => { skyDir(st.ra, st.dec, lst, v); const ok = v.y > .05; a.setXYZ(i, ok ? v.x * sky.R : 0, ok ? v.y * sky.R : -sky.R, ok ? v.z * sky.R : 0); pos[st.ci + ':' + st.si] = ok ? [v.x * sky.R, v.y * sky.R, v.z * sky.R] : null; }); a.needsUpdate = true; });
+    [[sky.big, sky.pBig], [sky.small, sky.pSmall]].concat(sky.extra || []).forEach(([list, pt]) => { const a = pt.geometry.attributes.position; list.forEach((st, i) => { skyDir(st.ra, st.dec, lst, v); const ok = v.y > .05; a.setXYZ(i, ok ? v.x * sky.R : 0, ok ? v.y * sky.R : -sky.R, ok ? v.z * sky.R : 0); pos[st.ci + ':' + st.si] = ok ? [v.x * sky.R, v.y * sky.R, v.z * sky.R] : null; }); a.needsUpdate = true; });
     CONS.forEach((c, ci) => { const ln = sky.lines[ci]; if (!ln) return; const a = ln.geometry.attributes.position; let whole = true; c.l.forEach(([p, q], k) => { const A = pos[ci + ':' + p], B = pos[ci + ':' + q]; if (!A || !B) { whole = false; return; } a.setXYZ(k * 2, A[0], A[1], A[2]); a.setXYZ(k * 2 + 1, B[0], B[1], B[2]); }); a.needsUpdate = true; if (whole && pos[ci + ':0'] && pos[ci + ':0'][2] < sky.R * .35) sky.up.push(ci); });   // only constellations wholly above the horizon and in front of you get their lines
   }
   function starsTick(t) {
@@ -2788,11 +2795,17 @@ const Sit = (() => {
   const LEGS = [['upperlegl', -1.5], ['upperlegr', -1.5], ['lowerlegl', 1.55], ['lowerlegr', 1.55]];
   function add(space, x, z, top, ry = 0, view = false, lie = false) { (SEATS[space] = SEATS[space] || []).push({ x, z, top, ry, view, lie }); }
   function bones(ch) { const b = {}; ch.obj.traverse(o => { if (o.isBone) b[o.name] = o; }); return b; }
+  /* lying on the mat you can look all round the sky: a drag turns the view (right round, and from the horizon to straight up) */
+  const gaze = { yaw: 0, pitch: .95, id: null, x: 0, y: 0 };
+  function aim() { const c = UI.seatCam; if (!c) return; const cp = Math.cos(gaze.pitch); c.look.set(c.pos.x + Math.sin(gaze.yaw) * cp * 30, c.pos.y + Math.sin(gaze.pitch) * 30, c.pos.z - Math.cos(gaze.yaw) * cp * 30); }
+  addEventListener('pointerdown', e => { if (!cur || !cur.lie || UI.talking || (e.target && e.target.closest && e.target.closest('button, .veil'))) return; gaze.id = e.pointerId; gaze.x = e.clientX; gaze.y = e.clientY; }, true);
+  addEventListener('pointermove', e => { if (gaze.id !== e.pointerId || !cur || !cur.lie) return; gaze.yaw -= (e.clientX - gaze.x) * .006; gaze.pitch = Math.max(.12, Math.min(1.5, gaze.pitch + (e.clientY - gaze.y) * .005)); gaze.x = e.clientX; gaze.y = e.clientY; aim(); }, true);
+  ['pointerup', 'pointercancel'].forEach(k => addEventListener(k, e => { if (gaze.id === e.pointerId) gaze.id = null; }, true));
   function down(s) {
     const me = ME(), o = me.obj, b = bones(me), hips = b.hips;
     if (s.lie) {   /* on your back on the mat, head to the north, looking up at the sky */
       me.play('idle'); legs = []; o.position.set(s.x, s.top + .14, s.z + .8); o.rotation.set(-Math.PI / 2, 0, 0); cur = s; UI.sit = true; Sfx.play('pop');
-      UI.seatCam = { pos: new THREE.Vector3(s.x, s.top + 2.3, s.z + 3.6), look: new THREE.Vector3(s.x, s.top + 15, s.z - 14) }; return; }
+      UI.seatCam = { pos: new THREE.Vector3(s.x, s.top + 2.3, s.z + 3.6), look: new THREE.Vector3() }; gaze.yaw = 0; gaze.pitch = .95; aim(); showToast('用手指拖一拖，可以转着看整片星空。', 'Drag with your finger to look all round the sky.', 3600); return; }
     me.play('idle'); me.mixer && me.mixer.update(0); legs = LEGS.map(([n, a]) => [b[n], new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), a)]).filter(x => x[0]); apply();
     o.position.set(s.x - Math.sin(s.ry) * .18, 0, s.z - Math.cos(s.ry) * .18); o.rotation.y = s.ry; o.updateMatrixWorld(true);
     const hy = hips ? hips.getWorldPosition(new THREE.Vector3()).y : .5; o.position.y = s.top + .06 - hy;
