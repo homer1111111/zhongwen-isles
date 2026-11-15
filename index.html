@@ -5752,7 +5752,7 @@ void main() {
     if (D.script) return true;
     if (!D.gone || D.mode !== 'home') { D.gone = true; if (D.mode === 'sit' && D.seat) D.seat.fxBusy = false; o.visible = false; c.space = 'night@' + sp.name; D.mode = 'home'; D.route = null; D.trail = []; }
     if (night || UI.busy || UI.talking) return true;
-    if (F.dest !== sp.name || !F.eta) { F.dest = sp.name; F.eta = Date.now() + (60 + Math.random() * 60) * 1000; friendSave(); showToast(nm(k, 0) + '出门了，过一两分钟就坐船回来。', nm(k, 1) + ' has gone out. She will be back by ferry in a minute or two.', 4200); return true; }
+    if (F.dest !== sp.name || !F.eta) { F.dest = sp.name; F.eta = Date.now() + (60 + Math.random() * 60) * 1000; friendSave(); if (Guide.nextHost() === k) showToast(nm(k, 0) + '出门了，过一两分钟就坐船回来。', nm(k, 1) + ' has gone out. She will be back by ferry in a minute or two.', 4200); return true; }   /* (said unasked only when she is the one the next lesson sends you to; knocking at her door still says it) */
     if (Date.now() < F.eta || !navOf(sp).done) return true;
     /* here she comes. If you can see the pier, the captain sails out to meet her and brings her in; otherwise she is already walking up from the shore. */
     F.at = sp.name; F.eta = 0; F.dest = ''; friendSave(); D.gone = false; const pier = pierOf(sp), f = sp.ferry, land = sp.name === 'town' ? [-9, 32.6] : [0, 31.4];
@@ -7062,10 +7062,13 @@ const Guide = (() => {
       const placed = []; shown.map(q => [q, rect(q[4])]).sort((a, b) => a[1][4] - b[1][4]).forEach(([q, r]) => { let n = 0; while (n < 4 && r[4] < 1 && placed.some(o => Math.abs(o[0] - r[0]) < o[2] + r[2] && Math.abs(o[1] - r[1]) < o[3] + r[3])) { q[4].position.y += .8; q[3] += .94; r = rect(q[4]); n++; } placed.push(r); }); } catch (e) { }
     stack = shown;
   }
+  /* who the next lesson on this island sends you to */
+  function nextHost() { const r = RANGE[here.name]; if (!r || (here.name === 'town' && G.quest < 9)) return null; for (let k = r[0]; k <= r[1]; k++) if (B5.HOSTS[k] && !B5.prog(k).done) return B5.HOSTS[k]; return null; }
   /* the task panel names the next lesson on this island and who to go and find for it */
   function board() {
     const q = $('quest'); if (!q || (G.quest > 0 && G.quest < 9)) return;   // the first shopping quest writes the panel itself
     const er = Errand.panel(); if (er) { $('questZh').textContent = er[0]; $('questEn').textContent = er[1]; q.classList.remove('hidden'); return; }   // a favour in hand comes first
+    try { const sv = Street.panel(); if (sv) { $('questZh').textContent = sv[0]; $('questEn').textContent = sv[1]; q.classList.remove('hidden'); return; } } catch (e) { }   /* visitors waiting on the terrace */
     const r = RANGE[here.name]; let n = 0; if (r && !(here.name === 'town' && G.quest < 9)) for (let k = r[0]; k <= r[1]; k++) if (B5.HOSTS[k] && !B5.prog(k).done) { n = k; break; }
     const nm = n && NAMES[B5.HOSTS[n]], L = n && B5.lesson(n); if (!nm || !L) { q.classList.add('hidden'); return; }
     const ask = B5.prog(n).task;
@@ -7082,7 +7085,7 @@ const Guide = (() => {
       const p = c.obj.position; m.visible = true; m.position.set(p.x, p.y + (person(c) ? 2.95 * c.obj.scale.y + .95 + Math.max(0, ...stack.filter(q => Math.hypot(q[1] - p.x, q[2] - p.z) < 1.5).map(q => q[3])) * .85 : 2.6) + Math.sin(tt * 3) * .12, p.z); });
   }
   function nextName() { const h = pick(); return h && NAMES[h] ? NAMES[h] : null; }
-  return { tick, nextName };
+  return { tick, nextName, nextHost };
 })();
 let STATIC_MARK = false;   // on while an island's fixed scenery is built, so it can be merged afterwards
 function mk(geo, mat, x = 0, y = 0, z = 0, parent, cast = true) {
@@ -7190,7 +7193,7 @@ const Heights = (() => {
     s1.forEach(c => { stairs(S, c, zA, zA - D, .03, y2, W - .1); sp.raised.push({ kind: 'ramp', x0: c - W / 2 + .1, x1: c + W / 2 - .1, z0: zA - D, z1: zA, top: y2, bottom: .03 }); });
     s2.forEach(c => { stairs(S, c, zB, zB - D, y2, y3, W - .1); sp.raised.push({ kind: 'ramp', x0: c - W / 2 + .1, x1: c + W / 2 - .1, z0: zB - D, z1: zB, top: y3, bottom: y2 }); });
     // level 2: a row of trees at the back, benches looking out over the island, flowers
-    for (let x = -30; x <= 30; x += 10) if (!s2.some(c => Math.abs(c - x) < 3)) roundTree(x, y2, zB + 2.2, .9, '#6DBF5A');
+    [-32, -13, -4.5, 4.5, 13, 32].forEach(x => roundTree(x, y2, zB + 2.2, .8, '#6DBF5A'));   /* between the five lots of the shop street and beside the stairs */
     [-20, -4, 4, 20].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const bz = zA - 3.2; mk(rbox(2.4, .12, .7, .05), '#B98A5A', x, y2 + .55, bz, S); [-1, 1].forEach(q => mk(box(.12, .5, .6), '#8A6A4A', x + q, y2 + .25, bz, S)); Sit.add(sp.name, x - .6, bz, y2 + .61, 0, true); Sit.add(sp.name, x + .6, bz, y2 + .61, 0, true); sp.solids.push([x - 1.25, bz - .38, x + 1.25, bz + .38]);   /* a bench is sat on, not walked through */ flowers(x + (k % 2 ? 2.6 : -2.6), bz - 1.4, y2 + .06, 7, 900 + k, null, 1.6); });
     /* two mats on the terrace for lying back and watching the sky */
     [-12, 12].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const mz = zA - 3.2; mk(box(1.5, .05, 2.3), k ? '#E8574A' : '#4F86C6', x, y2 + .05, mz, S, false); [-.5, 0, .5].forEach(d => mk(box(.16, .052, 2.3), '#FFF6E2', x + d, y2 + .052, mz, S, false)); mk(rbox(.9, .16, .4, .07), '#FFF6E2', x, y2 + .14, mz - .9, S, false); Sit.add(sp.name, x, mz, y2 + .05, 0, true, true); });
@@ -8116,6 +8119,39 @@ function blocked(x, z, fromY) {
 function carShare() { const d = new Date(), h = d.getHours() + d.getMinutes() / 60; return h < 6 ? 0 : h < 7 ? h - 6 : h < 18 ? 1 : h < 21 ? (21 - h) / 3 : 0; }
 /* A garage at the end of a road: cars drive in and out of it instead of appearing from nowhere. mx is where its doorway
    is, d which way the building lies from there (+1 towards +x), z the middle of the road. */
+/* Where a river meets the sea. It does not stop at a straight edge: it runs out between two low sand spits and ends in a
+   rounded tongue of its own paler water lying on the sea, which thins away to nothing at its rim; lines of foam keep
+   spreading out from where the two waters meet, and there are stones and reeds on the banks.
+   (ex, ez) is the middle of the river's last edge, (dx, dz) the way it is flowing there, w its width. */
+function riverMouth(ex, ez, dx, dz, w, col, yr, ys) {   /* yr: height of the river's surface at its mouth; ys: height of the sea's */
+  const yaw = Math.atan2(dx, dz), px = -dz, pz = dx;
+    /* The river's own water runs on out over the sea and thins away: the sheet is the river's colour where it leaves the
+       land and becomes steadily more see-through, both along its length and towards its sides, so what is seen is the
+       river's colour passing by degrees into the sea's own, whatever depth of blue each happens to be. There is no edge. */
+    { const LEN = 10, NA = 20, NU = 12, P = [], C = [], I = [], sm = (a, b, t) => { const k = Math.max(0, Math.min(1, (t - a) / (b - a))); return k * k * (3 - 2 * k); };
+      for (let a = 0; a <= NA; a++) { const t = a / NA, hw = w / 2 * (1 + 1.25 * t * (2 - t) * .62); for (let b = 0; b <= NU; b++) { const u = b / NU * 2 - 1, r = Math.abs(u); P.push(ex + dx * t * LEN + px * u * hw, yr + (ys + .012 - yr) * Math.min(1, t * 2.5), ez + dz * t * LEN + pz * u * hw); C.push(1, 1, 1, (1 - sm(.0, 1, t)) * (1 - sm(.35, 1, r) * sm(0, .22, t)));
+          if (a < NA && b < NU) { const o = a * (NU + 1) + b; I.push(o, o + 1, o + NU + 1, o + 1, o + NU + 2, o + NU + 1); } } }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 4)); g.setIndex(I); g.computeVertexNormals(); if (g.attributes.normal.array[1] < 0) { g.setIndex(I.map((v, n) => I[n - n % 3 + [0, 2, 1][n % 3]])); g.computeVertexNormals(); }
+      const fade = new THREE.Mesh(g, tm(col, { transparent: true, vertexColors: true, depthWrite: false, roughness: .25 })); fade.renderOrder = 1; (W.scene).add(fade); FX.water(fade); }
+    for (let k = 0; k < 3; k++) { const fm = new THREE.Mesh(new THREE.RingGeometry(.965, 1, 48, 1, Math.PI * .24, Math.PI * .52), new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide })); fm.rotation.order = 'YXZ'; fm.rotation.set(-Math.PI / 2, yaw + Math.PI, 0); fm.position.set(ex + dx * .4, ys + .03, ez + dz * .4); fm.userData.fx = true; fm.renderOrder = 3; W.scene.add(fm);
+      const o = { t: 0 }; gsap.to(o, { t: 1, duration: 5.4, delay: k * 1.8, repeat: -1, ease: 'none', onUpdate: () => { const r = 3.6 + o.t * 5.2; fm.scale.set(r * .92, r, 1); fm.material.opacity = Math.sin(o.t * Math.PI) * .55; } }); }
+    [-1, 1].forEach(k => { const bx = ex + px * k * (w / 2 + 1.1) + dx * .9, bz = ez + pz * k * (w / 2 + 1.1) + dz * .9; const wet = mk(sph(1, 14), '#D9C592', bx, ys + .01, bz, null, false); wet.rotation.y = yaw + k * .35; wet.scale.set(1.9, .12, 4.4); const spit = mk(sph(1, 14), '#F2E2B8', bx - dx * .3, ys + .035, bz - dz * .3, null, false); spit.rotation.y = yaw + k * .35; spit.scale.set(1.45, .13, 3.7);
+      [[-2.4, .5, .36], [-.6, .9, .26], [1.1, .3, .3]].forEach(([a, b, r], n) => { const rk = mk(sph(r, 6), n % 2 ? '#A8A193' : '#8F8A80', bx + dx * a + px * k * b, ys + .18, bz + dz * a + pz * k * b, null, false); rk.scale.y = .6; });
+      /* reeds on the bank: tall stalks with long leaves and feathery heads. They count for the flower book. */
+      [[-3.5, .95, 1.05], [-4.7, 1.6, .9]].forEach(([a, b, sc]) => { try { const cl = new THREE.Group(); Dex.MAKE.reed(cl); Dex.pack(cl); cl.position.set(bx + dx * a + px * k * b, ys + .1, bz + dz * a + pz * k * b); cl.rotation.y = a * 3 + k; cl.scale.setScalar(sc); W.scene.add(cl); Dex.addSpot('reed', cl.position.x, cl.position.z, W.scene); } catch (e) { } }); });
+}
+/* The last reach of a river that used to stop short on the lawn: from (ax, az) it runs on to the shore at (bx, bz),
+   opening from width w0 to w1, over a bed of sand, and goes into the sea through a mouth. */
+function riverReach(ax, az, bx, bz, w0, w1, col, y, ys, solids) {
+  const L = Math.hypot(bx - ax, bz - az) || 1, dx = (bx - ax) / L, dz = (bz - az) / L, px = -dz, pz = dx, N = 14;
+  const strip = (extra, yy, c, water) => { const P = [], I = []; for (let i = 0; i <= N; i++) { const t = i / N, k = t * t * (3 - 2 * t), hw = (w0 + (w1 - w0) * k) / 2 + extra; P.push(ax + dx * L * t - px * hw, yy, az + dz * L * t - pz * hw, ax + dx * L * t + px * hw, yy, az + dz * L * t + pz * hw); if (i < N) { const o = i * 2; I.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); } }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setIndex(I); g.computeVertexNormals(); if (g.attributes.normal.array[1] < 0) { g.setIndex(I.map((v, n) => I[n - n % 3 + [0, 2, 1][n % 3]])); g.computeVertexNormals(); }
+    const m = mk(g, c, 0, 0, 0, null, false); if (water) FX.water(m); return m; };
+  strip(.55, Math.max(.045, y - .05), '#E9D9B4', false); strip(0, y, col, true);
+  for (let i = 1; i < N; i += 3) [-1, 1].forEach(k => { const t = i / N, hw = (w0 + (w1 - w0) * t * t * (3 - 2 * t)) / 2 + .3, rk = mk(sph(.24 + (i % 2) * .08, 6), i % 2 ? '#A8A193' : '#B5AFA3', ax + dx * L * t + px * k * hw, y + .04, az + dz * L * t + pz * k * hw, null, false); rk.scale.y = .6; });
+  if (solids) solids.push([Math.min(ax, bx) - (dz ? w1 / 2 : 0), Math.min(az, bz) - (dx ? w1 / 2 : 0), Math.max(ax, bx) + (dz ? w1 / 2 : 0), Math.max(az, bz) + (dx ? w1 / 2 : 0)]);
+  riverMouth(bx, bz, dx, dz, w1, col, y, ys);
+}
 function garage(S, solids, mx, z, d) {
   const wall = '#DCD5C6', dark = '#3B3733', roofC = '#6B7080', cx = mx + d * 2.3;
   /* no two faces of the garage lie in the same plane where both can be seen: the back wall and the beam over the door fit between the side walls, and the dark floor sits clear of the road and of any paving. Overlapping faces flicker on some graphics cards. */
@@ -8184,7 +8220,7 @@ function loop() {
   const dt = Math.min(.05, clock.getDelta()), t = clock.elapsedTime;
   if (UI.sit && ((stick && stick.drag) || keys.ArrowLeft || keys.ArrowRight || keys.ArrowUp || keys.ArrowDown || keys.w || keys.a || keys.s || keys.d)) Sit.up();
   if (!UI.ride && !UI.sit) moveMe(dt);   // while riding the ferry the boat carries you; while sitting you stay put
-  Object.values(PEOPLE).forEach(c => { if (c.space === here.name) c.mixer.update(dt); }); Sit.apply(); FX.people(dt); Guide.tick(dt); try { Dex.tick(dt); Festival.tick(dt); } catch (e) { }
+  Object.values(PEOPLE).forEach(c => { if (c.space === here.name) c.mixer.update(dt); }); Sit.apply(); FX.people(dt); Guide.tick(dt); try { Dex.tick(dt); Festival.tick(dt); } catch (e) { } try { Street.tick(dt); } catch (e) { }
   if (here.mark && here.mark.visible) { here.mark.userData.a.position.y = 3.4 + Math.sin(t * 3) * .3; here.mark.userData.a.rotation.y = t * 1.5; }
   if (here.water) here.water.material.color.setHSL(.56, .55, .42 + Math.sin(t * .8) * .02);
   const me = ME().obj.position, fo = UI.focus ? UI.focus.position : me, want = (UI.talkCam || UI.seatCam) ? (UI.talkCam || UI.seatCam).pos.clone() : fo.clone().add(camOff());
@@ -8302,7 +8338,14 @@ const Learn = (() => {
     next(); }); }
   async function runDaily() { if (!dailyReady() || UI.busy) return; const qs = dailyQs(); if (!qs.length) return; const right = await run('今日挑战', qs), L = all(), y = new Date(Date.now() - DAY).toDateString();
     L.streak = L.day === y ? (L.streak || 1) + 1 : 1; L.day = today(); note('d'); const stars = 20 + Math.min(25, 5 * (L.streak - 1)) + right * 2; setStars(G.stars + stars); try { saveG(); } catch (e) { }
-    reward('今日挑战完成了！', `答对 ${right}/${qs.length} 题　连续 ${L.streak} 天　得到 ${stars} 颗小星星。明天再来！`); }
+    try { Street.practised(); } catch (e) { } reward('今日挑战完成了！', `答对 ${right}/${qs.length} 题　连续 ${L.streak} 天　得到 ${stars} 颗小星星。明天再来！`); }
+  /* a sentence of the text in the right order, among two with its parts changed round */
+  function orderQ(n) { const S = shuf(sentences(n).flatMap(t => t.split(/[，、；：,;:“”"「」]+/)).map(t => t.trim()).filter(t => t.length >= 5 && t.length <= 14))[0]; if (!S) return null; const c = [...S], a = Math.round(c.length / 3), b = Math.round(c.length * 2 / 3), p1 = c.slice(0, a).join(''), p2 = c.slice(a, b).join(''), p3 = c.slice(b).join(''), w = [p2 + p1 + p3, p1 + p3 + p2, p3 + p2 + p1].filter((t, i, l) => t !== S && l.indexOf(t) === i).slice(0, 2); if (w.length < 2) return null;
+    return { q: '哪一句话是对的？', a: S, w, qe: 'Which sentence is in the right order?', n }; }
+  /* for the shops on the street: the words of the given lessons, the shakiest first, with what-comes-next and word-order questions among them */
+  function shopQs(ls, count) { const pools = {}; let pool = []; ls.forEach(n => { pools[n] = words(n); if (pools[n].length >= 3) pool = pool.concat(pools[n]); }); pool.sort((a, b) => rank(a[3], a[0]) - rank(b[3], b[0])); const out = []; let wi = 0;
+    for (let i = 0; out.length < count && i < count * 4; i++) { const n = ls[i % ls.length]; let q = null; if (i % 5 === 3) q = nextQ(n); else if (i % 5 === 4) q = orderQ(n); else if (wi < pool.length) { const W = pool[wi++]; q = question(W, pools[W[3]], i); } if (q && !out.some(o => o.q === q.q && o.a === q.a)) out.push(q); }
+    return out; }
   function forQuiz(n, count) { const pool = words(n); if (pool.length < 3) return []; return pool.slice().sort((a, b) => rank(n, a[0]) - rank(n, b[0])).slice(0, count).map((W, i) => question(W, pool, i)).filter(Boolean); }
   /* from a list of [word, pinyin, meaning, lesson]: the one most in need of asking */
   function weakest(list) { let best = null, bv = 9; list.forEach(W => { const v = W[3] != null ? rank(W[3], W[0]) : 5; if (v < bv) { bv = v; best = W; } }); return best || list[0]; }
@@ -8316,7 +8359,7 @@ const Learn = (() => {
         h += `<div style="margin:5px 0"><b>第${book}册 第${ln}课《${L ? L.t : ''}》</b> <span style="color:#E9A90F">${'★'.repeat(big)}</span><span style="opacity:.3">${'★'.repeat(3 - big)}</span><br>学会 ${t.yes}　有点会 ${t.some}　还没考过或不会 ${t.no}<span class="en-only"> · learned ${t.yes}, getting there ${t.some}, not yet ${t.no}</span>${t.weak.length ? `<br><span style="color:#C8453B">常错：${t.weak.slice(0, 8).join('、')}</span>` : ''}<br><button class="pill soft" data-write="${n}" style="font-size:15px;padding:5px 14px 6px;margin-top:3px">✏️ 练习写字<small class="en-only" style="font-weight:400"> Practise writing</small></button> <button class="pill soft" data-read="${n}" style="font-size:15px;padding:5px 14px 6px;margin-top:3px">🎤 跟读课文<small class="en-only" style="font-weight:400"> Read aloud</small></button></div>`; });
       box.innerHTML = h; g.appendChild(box); box.querySelectorAll('[data-write]').forEach(b => { b.onclick = () => Write.run(+b.dataset.write); }); box.querySelectorAll('[data-read]').forEach(b => { b.onclick = () => ReadAloud.run(+b.dataset.read); }); } catch (e) { }
   }
-  return { run, mark, note, week, forQuiz, weakest, tally, rows, words, peek, nextQ, dailyReady, runDaily, dueCount, streak: () => all().streak || 0 };
+  return { run, mark, note, week, shopQs, forQuiz, weakest, tally, rows, words, peek, nextQ, dailyReady, runDaily, dueCount, streak: () => all().streak || 0 };
 })();
 /* ---------- Writing: trace each character stroke by stroke ----------
    The questions test reading and listening; this is where the hand learns the character. For each one: watch the stroke
@@ -8473,9 +8516,9 @@ const ReadAloud = (() => {
 const Dex = (() => {
   const ANIMALS = [['cat', '猫', 'māo', 'cat'], ['dog', '狗', 'gǒu', 'dog'], ['rabbit', '兔子', 'tùzi', 'rabbit'], ['tortoise', '乌龟', 'wūguī', 'tortoise'], ['squirrel', '松鼠', 'sōngshǔ', 'squirrel'], ['horse', '马', 'mǎ', 'horse'],
     ['cow', '奶牛', 'nǎiniú', 'dairy cow'], ['ox', '黄牛', 'huángniú', 'ox'], ['sheep', '绵羊', 'miányáng', 'sheep'], ['lamb', '小羊', 'xiǎo yáng', 'lamb'], ['wolf', '狼', 'láng', 'wolf'], ['frog', '青蛙', 'qīngwā', 'frog'], ['monkey', '猴子', 'hóuzi', 'monkey'], ['bird', '小鸟', 'xiǎo niǎo', 'little bird']];
-  const SEASON = { spring: ['春天', 'spring', '#F29BB5'], summer: ['夏天', 'summer', '#4FA85A'], autumn: ['秋天', 'autumn', '#E08A2E'], winter: ['冬天', 'winter', '#5E8FC9'] };
+  const SEASON = { spring: ['春天', 'spring', '#F29BB5'], summer: ['夏天', 'summer', '#4FA85A'], autumn: ['秋天', 'autumn', '#E08A2E'], winter: ['冬天', 'winter', '#5E8FC9'], all: ['河口·四季', 'river mouths, all year', '#6E9647'] };
   const PLANTS = [['peach', '桃花', 'táohuā', 'peach blossom', 'spring'], ['jasmine', '迎春花', 'yíngchūnhuā', 'winter jasmine', 'spring'], ['lotus', '荷花', 'héhuā', 'lotus', 'summer'], ['sunflower', '向日葵', 'xiàngrìkuí', 'sunflower', 'summer'],
-    ['chrysanthemum', '菊花', 'júhuā', 'chrysanthemum', 'autumn'], ['osmanthus', '桂花', 'guìhuā', 'sweet osmanthus', 'autumn'], ['plum', '梅花', 'méihuā', 'plum blossom', 'winter'], ['narcissus', '水仙', 'shuǐxiān', 'narcissus', 'winter']];
+    ['chrysanthemum', '菊花', 'júhuā', 'chrysanthemum', 'autumn'], ['osmanthus', '桂花', 'guìhuā', 'sweet osmanthus', 'autumn'], ['plum', '梅花', 'méihuā', 'plum blossom', 'winter'], ['narcissus', '水仙', 'shuǐxiān', 'narcissus', 'winter'], ['reed', '芦苇', 'lúwěi', 'reed', 'all']];   /* reeds grow where the rivers meet the sea, all the year round */
   const got = () => { const d = G.dex || (G.dex = {}); d.a = d.a || {}; d.f = d.f || {}; return d; };
   /* --- the plants. Petals and leaves are thin curved blades (not balls), set in rings the way the real flower carries
      them; every plant is merged into one mesh per colour once it is built, so a tree full of blossom is a few draws. --- */
@@ -8547,6 +8590,13 @@ const Dex = (() => {
         for (let k = 0; k < 4; k++) { const a = n * 1.1 + k * 1.57 + r() * .4, d = [Math.cos(a), .35, Math.sin(a)], e = [top[0] + d[0] * .07, top[1] + .03, top[2] + d[2] * .07]; stick(g, '#7FB86A', top, e, .005); const f = at(g, e, d);
           ring(f, '#FFFFFF', 3, .062, .044, 1.42, { cup: .25, bend: -.05 }); ring(f, '#FBF8EE', 3, .058, .04, 1.36, { cup: .25, phase: 1.047 }); P(f, new THREE.CylinderGeometry(.024, .016, .024, 10, 1, true), pm('#F7B92A'), 0, .016, 0); P(f, sph(.008, 5), '#E89A12', 0, .012, 0); } }); }
   };
+  /* a clump of reeds: straight jointed stalks, long drooping leaves, and a soft feathery head that leans over at the top of each */
+  MAKE.reed = g => { const r = rnd(63); for (let i = 0; i < 13; i++) { const a = r() * 6.283, d = r() * .32, h = 1.5 + r() * .8, bx = Math.cos(a) * d, bz = Math.sin(a) * d, lx = (r() - .5) * .3, lz = (r() - .5) * .3, top = [bx + lx, h, bz + lz];
+      stick(g, i % 2 ? '#9AAE5E' : '#8AA052', [bx, 0, bz], top, .016, .009);
+      for (let k = 0; k < 3; k++) { const f = .28 + k * .2, p = [bx + lx * f, h * f, bz + lz * f], la = a + k * 2.2 + r(); P(at(g, p, [Math.cos(la) * .55, 1, Math.sin(la) * .55]), blade(.5 + r() * .25, .04, .3, -.3 - r() * .3, 1), k % 2 ? '#7FA552' : '#6E9647'); }
+      const ha = r() * 6.283, hd = [Math.cos(ha) * .5, 1, Math.sin(ha) * .5], f = at(g, top, hd); for (let k = 0; k < 6; k++) { const m = P(f, blade(.3 - k * .025, .045, .2, -.45, 1), k % 2 ? '#E6D9B8' : '#D7C79C', 0, k * .035, 0); m.rotation.set(.25 + k * .1, k * 1.9, 0); } } };
+  const extra = [];   // named plants that stand somewhere fixed in the world (the reeds), for the picture book
+  const addSpot = (id, x, z, scene) => { extra.push({ id, x, z, scene }); };
   /* one mesh per colour for the whole plant */
   function pack(g) { g.updateMatrixWorld(true); const by = new Map(); g.traverse(o => { if (o.isMesh) { if (!by.has(o.material)) by.set(o.material, []); by.get(o.material).push(o); } }); by.forEach(list => bakeMerge(list, g, true)); g.children.slice().forEach(c => { if (!c.isMesh) g.remove(c); }); g.children.forEach(m => { m.castShadow = SHADOWS; }); return g; }
   const SOLID = { peach: .45, osmanthus: .45, plum: .45, lotus: 1 }, SIZE = { peach: 1.6, jasmine: 1.4, lotus: 1.3, sunflower: 1.3, chrysanthemum: 1.5, osmanthus: 1.5, plum: 1.6, narcissus: 1.6 }, placed = {}, ray = new THREE.Raycaster(), hsl = {}, tmpC = new THREE.Color(), tmpV = new THREE.Vector3();
@@ -8568,7 +8618,7 @@ const Dex = (() => {
   function freeSpot(sp, r, taken, R) { const b = bounds(sp), y = (x, z) => sp.floor(x, z), ring = (x, z) => { for (let i = 0; i < 12; i++) { const a = i * .5236, px = x + Math.cos(a) * R, pz = z + Math.sin(a) * R; if (blocked(px, pz, y(x, z)) || Math.abs(y(px, pz) - y(x, z)) > .08 || FX.wet(px, pz) || !green(sp, px, pz)) return false; const hx = x + Math.cos(a) * R * .6, hz = z + Math.sin(a) * R * .6; if (blocked(hx, hz, y(x, z)) || !green(sp, hx, hz)) return false; } return true; };
     for (let t = 0; t < (R ? 700 : 160); t++) { const x = b[0] + r() * (b[2] - b[0]), z = b[1] + r() * (b[3] - b[1]); if (fits(sp, x, z, taken) && (!R || (ring(x, z) && !spots.some(d => Math.hypot(d.x - x, d.z - z) < R + 4.5)))) return [x, z]; } return null; }
   function plant(sp) { try { nearby.all = []; nearby(); spots = nearby.all || []; } catch (e) { spots = []; } nearby.all = null; const list = placed[sp.name] = [], b = bounds(sp);
-    PLANTS.forEach(([id, zh, py, en, season], n) => { const r = mulberry(sp.name.length * 131 + sp.name.charCodeAt(sp.name.length - 1) * 17 + n * 977);
+    PLANTS.forEach(([id, zh, py, en, season], n) => { if (season === 'all') return; const r = mulberry(sp.name.length * 131 + sp.name.charCodeAt(sp.name.length - 1) * 17 + n * 977);
       /* once a place has been found it is kept in the save, so a plant stands in the same spot in every season and on every visit */
       const keep = got().p || (got().p = {}), mine = keep[sp.name] || (keep[sp.name] = {}), old = mine[id];
       for (let t = old ? -1 : 0; t < 140; t++) { let x, z; if (t < 0) { x = old[0]; z = old[1]; if (blocked(x, z, sp.floor(x, z)) || FX.wet(x, z)) continue; } else { x = b[0] + r() * (b[2] - b[0]); z = b[1] + r() * (b[3] - b[1]); if (!fits(sp, x, z, list)) continue; mine[id] = [+x.toFixed(2), +z.toFixed(2)]; try { saveG(); } catch (e) { } }
@@ -8581,6 +8631,7 @@ const Dex = (() => {
     try { if (!placed[here.name] && (here.name === 'town' || here.box)) plant(here); } catch (e) { placed[here.name] = placed[here.name] || []; console.warn('dex plant', e); }
     const p = ME().obj.position;
     (placed[here.name] || []).forEach(q => { if (q.g.visible && Math.hypot(q.x - p.x, q.z - p.z) < 3.4) found('f', q.id); });
+    if (!got().f.reed) extra.forEach(q => { if (q.scene === here.scene && Math.hypot(q.x - p.x, q.z - p.z) < 4.6) found('f', q.id); });
     Zoo.all.forEach(g => { const k = g.userData.zooKind; if (!k || got().a[k]) return; let v = g, root = null; while (v) { if (!v.visible) return; root = v; v = v.parent; } if (root !== here.scene) return; g.getWorldPosition(tmpV); if (Math.hypot(tmpV.x - p.x, tmpV.z - p.z) < 4.2 && Math.abs(tmpV.y - p.y) < 2.5) found('a', k); });
   }
   /* a small picture of a model, drawn once with the game's own renderer */
@@ -8605,7 +8656,7 @@ const Dex = (() => {
   function rows(g) { const d = got(), a = ANIMALS.filter(q => d.a[q[0]]).length, f = PLANTS.filter(q => d.f[q[0]]).length, el = document.createElement('div'); el.style.cssText = 'grid-column:1/-1;text-align:left;padding:10px 6px 4px;border-top:2px dashed rgba(0,0,0,.12);margin-top:8px';
     el.innerHTML = '<div style="font-weight:700;font-size:17px;margin-bottom:6px">图鉴<small class="en-only"> Picture books</small></div><div class="row" style="gap:8px;flex-wrap:wrap"><button class="pill soft" data-k="a">🐾 动物 ' + a + '/' + ANIMALS.length + '<small class="en-only" style="display:block;font-size:11px;font-weight:400">Animals</small></button><button class="pill soft" data-k="f">🌸 花草 ' + f + '/' + PLANTS.length + '<small class="en-only" style="display:block;font-size:11px;font-weight:400">Flowers</small></button></div>';
     g.appendChild(el); el.querySelectorAll('[data-k]').forEach(b => { b.onclick = () => openBook(b.dataset.k); }); }
-  return { tick, rows, openBook, found, placed, freeSpot, MAKE, PLANTS, ANIMALS, snap };
+  return { tick, rows, openBook, found, placed, freeSpot, MAKE, PLANTS, ANIMALS, snap, pack, addSpot };
 })();
 /* ---------- Photo mode: a picture of yourself on the island to keep or send ----------
    Opened from the bag. The buttons and panels go away, you turn to the camera (and can turn further, or jump), and the
@@ -8653,17 +8704,18 @@ const Shop = (() => {
   /* put on what is switched on: colours through the character's own palette, the hat on the head */
   function wear() {
     const me = PEOPLE.me, S = own(); if (!me || !G.look) return;
-    const pick = part => { const it = CLOTHES.find(c => c.id === S.on[part]); return it && S.got[it.id] ? it : null; }, sh = pick('shirt'), pa = pick('pants'), hat = pick('hat');
+    let more = []; try { more = Street.clothes(); } catch (e) { } const pick = part => { const it = CLOTHES.concat(more).find(c => c.id === S.on[part]); return it && S.got[it.id] ? it : null; }, sh = pick('shirt'), pa = pick('pants'), hat = pick('hat');
     G.look.shirtCol = sh ? sh.col : null; G.look.pantsCol = pa ? pa.col : null; try { me.recolor(lookPal(G.look)); } catch (e) { }
     const old = me.obj.userData.shopHat; if (old) { me.obj.remove(old); me.obj.userData.shopHat = null; }
     if (hat && !me.obj.userData.hat) { const h = new THREE.Group(); h.position.y = 2.0; me.obj.add(h); me.obj.userData.shopHat = h;
-      if (hat.id === 'h-straw') { mk(cyl(.62, .62, .04, 20), hat.col, 0, -.1, 0, h, false); mk(cyl(.3, .38, .24, 18), hat.col, 0, .02, 0, h, false); mk(cyl(.385, .385, .06, 18), '#C8453B', 0, -.06, 0, h, false); }
+      if (hat.hat) Street.hat(hat.hat, h, hat.col);
+      else if (hat.id === 'h-straw') { mk(cyl(.62, .62, .04, 20), hat.col, 0, -.1, 0, h, false); mk(cyl(.3, .38, .24, 18), hat.col, 0, .02, 0, h, false); mk(cyl(.385, .385, .06, 18), '#C8453B', 0, -.06, 0, h, false); }
       else if (hat.id === 'h-cap') { const d = mk(new THREE.SphereGeometry(.4, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), hat.col, 0, -.14, 0, h, false); d.scale.y = .8; mk(box(.5, .04, .34), hat.col, 0, -.12, .5, h, false); mk(sph(.05, 8), '#FFFFFF', 0, .18, 0, h, false); }
       else { mk(cyl(.3, .32, .16, 18), hat.col, 0, -.04, 0, h, false); for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283; mk(new THREE.ConeGeometry(.07, .2, 6), hat.col, Math.cos(a) * .27, .12, Math.sin(a) * .27, h, false); mk(sph(.035, 6), k % 2 ? '#E8574A' : '#4F86C6', Math.cos(a) * .31, -.04, Math.sin(a) * .31, h, false); } } }
   }
   /* the things bought for the home stand along the front of the room, the rug in the middle */
   function place(name) {
-    const sp = SP[name]; if (!sp || sp.sky || !/^home/.test(name) || !sp.box) return; const S = own(), b = sp.box, cx = (b[0] + b[2]) / 2, w = b[2] - b[0], zf = b[3] - 2.5, rx = b[0] + 2.6, rz = b[3] - 4.1;   /* a row across the front of the room, inside the view, and the rug on the left */
+    const sp = SP[name]; if (!sp || sp.sky || !/^i?home/.test(name) || !sp.box) return; const S = own(), b = sp.box, cx = (b[0] + b[2]) / 2, w = b[2] - b[0], zf = b[3] - 2.5, rx = b[0] + 2.6, rz = b[3] - 4.1;   /* a row across the front of the room, inside the view, and the rug on the left */
     if (sp.__decor) sp.scene.remove(sp.__decor); const g = sp.__decor = new THREE.Group(); g.userData.fx = true; sp.scene.add(g);
     const at = f => b[0] + w * f, has = id => !!S.got[id];
     if (has('rug')) { mk(box(2.8, .03, 1.8), '#C8453B', rx, .02, rz, g, false); mk(box(2.5, .035, 1.5), '#F6E7B8', rx, .022, rz, g, false); mk(box(2, .04, 1), '#4F86C6', rx, .024, rz, g, false); }
@@ -8674,6 +8726,7 @@ const Shop = (() => {
     if (has('globe')) { const x = at(.8); mk(cyl(.2, .24, .06, 14), '#5B4A3A', x, .03, zf, g); mk(cyl(.03, .03, .5, 8), '#5B4A3A', x, .3, zf, g); mk(sph(.3, 16), '#4F86C6', x, .82, zf, g); [[.1, .12, .25], [-.18, -.05, .12], [.05, -.2, .2], [-.05, .22, -.2]].forEach(([dx, dy, dz]) => mk(sph(.12, 8), '#5E9A57', x + dx, .82 + dy, zf + dz, g, false).scale.set(1, .7, 1)); }
     if (has('train')) { const x = at(.94) - .5; [['#E8574A', 0], ['#4F86C6', .5], ['#F7C948', 1]].forEach(([c2, dx], i) => { mk(box(.42, .28, .3), c2, x + dx, .24, zf, g); [-.13, .13].forEach(wx => mk(cyl(.08, .08, .34, 10), '#2B2420', x + dx + wx, .08, zf, g, false).rotation.x = Math.PI / 2); if (!i) { mk(cyl(.06, .08, .2, 8), '#2B2420', x - .1, .48, zf, g, false); mk(box(.2, .2, .28), c2, x + .1, .48, zf, g, false); } }); }
     if (has('piano')) { const x = at(.38); mk(box(1.1, .5, .5), '#C8453B', x, .55, zf - .1, g); mk(box(1, .05, .2), '#FFFFFF', x, .82, zf + .12, g, false); for (let k = 0; k < 5; k++) mk(box(.06, .06, .12), '#2B2420', x - .36 + k * .18, .85, zf + .09, g, false); [-.45, .45].forEach(dx => mk(box(.08, .3, .08), '#8E3327', x + dx, .15, zf - .1, g)); }
+    try { Street.furnish(sp, g); } catch (e) { }   /* and what came from the shop street */
   }
   /* the pages in the bag: sticker book, clothes, things for the home */
   function rows(g) {
@@ -8861,6 +8914,438 @@ const Festival = (() => {
   function rows(g) { const k = kept(), ks = Object.keys(INFO).filter(f => k.got[f]); if (!ks.length && !now()) return; const el = document.createElement('div'); el.style.cssText = 'grid-column:1/-1;text-align:left;padding:10px 6px 4px;border-top:2px dashed rgba(0,0,0,.12);margin-top:8px;line-height:1.7;font-size:15px';
     el.innerHTML = '<div style="font-weight:700;font-size:17px">节日<small class="en-only"> Festivals</small></div>' + (now() ? `<div>今天是<b>${INFO[now()].zh}</b>（${INFO[now()].py}）<span class="en-only"> · It is the ${INFO[now()].en}</span></div>` : '') + '<div>' + Object.keys(INFO).map(f => `<span style="display:inline-block;margin-right:14px;${k.got[f] ? '' : 'opacity:.3'}">${INFO[f].icon} ${INFO[f].gift}${k.got[f] ? ' ×' + k.got[f] : ''}</span>`).join('') + '</div>'; g.appendChild(el); }
   return { tick, nearby, rows, now, byDate, setMode, play, built, INFO };
+})();
+/* ---------- The shop street: new neighbours who move in and open shops ----------
+   On each island's terrace (the level above the first wall) there are five lots in a row at the foot of the next wall,
+   like the shops along the cliff on the Book 5 island. Every three lessons finished on an island bring three visitors the
+   next day the game is opened, each wishing to open a different shop; they walk about the island and have to be
+   found, and leave at the end of the day (three others come the next day); one of them is asked to stay, and that shop is built: seven days by the
+   calendar, one day less for every day the daily challenge is done. Finishing the whole island brings the fifth shop.
+   Every shop has three possible keepers, each with goods of their own; which one comes is drawn once and saved.
+   Buying is revision: the keeper asks about the three lessons that brought them, and every right answer takes 5% off.
+   A keeper can be asked to move out after an exam on the same lessons; then three more visitors come, and the next
+   keeper opens after one day. Stars and whatever was bought are shared by all the islands. */
+const Street = (() => {
+  const RANGE = { isle1: [101, 112] }, ISLE = { isle1: ['第一册岛', 'the Book 1 island'] };
+  const KINDS = ['furniture', 'clothes', 'flower', 'pet', 'build'];   /* the lots from west to east, in the order of the town's street */
+  const KIND = { furniture: ['家具店', 'furniture shop', 'building_E', '#8E6BBF'], clothes: ['衣服店', 'clothing shop', 'building_B', '#E07A98'], flower: ['花店', 'flower shop', 'building_G', '#5E9A57'], pet: ['宠物店', 'pet shop', 'building_C', '#E8894A'], build: ['建材店', 'building supplies', 'building_B', '#4F86C6'] };
+  const LOTX = [-27, -18, 0, 18, 27], Y2 = 2.4, BS = 2.8, ASK = 8, EXAM = 10, PASS = 8;
+  const shuf = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+  /* ---------- models, all made here: hats, things for the home, potted plants, things for the yard ---------- */
+  const lit = col => new THREE.MeshBasicMaterial({ color: col });
+  const tube = (r, t, arc, n = 20) => new THREE.TorusGeometry(r, t, 8, n, arc || Math.PI * 2);
+  /* a flower head of real petals: n flattened petals round a centre, opening by `cup` (0 flat, 1 closed) */
+  function head(g, x, y, z, n, len, col, mid, cup, rows, wd) {
+    const h = new THREE.Group(); h.position.set(x, y, z); g.add(h);
+    for (let r = 0; r < (rows || 1); r++) for (let i = 0; i < n; i++) { const a = (i + r * .5) / n * 6.283, p = new THREE.Group(), L = len * (1 - r * .22); p.rotation.order = 'YXZ'; p.rotation.y = a; h.add(p);
+      const m = mk(sph(L * .5, 8), r ? shade(col, .1) : col, 0, 0, L * .5, p, false); m.scale.set(wd || .42, .12, 1); p.rotation.x = -(cup || 0) * 1.2 - r * .32; }
+    if (mid) { const c = mk(sph(len * .24, 10), mid, 0, len * .05, 0, h, false); c.scale.y = .6; }
+    return h;
+  }
+  const stem = (g, x, z, y0, y1, r = .022, col = '#4E8A44') => mk(cyl(r, r * 1.2, y1 - y0, 6), col, x, (y0 + y1) / 2, z, g, false);
+  function leaf(g, x, y, z, len, ry, tilt, col = '#5E9A57') { const p = new THREE.Group(); p.position.set(x, y, z); p.rotation.order = 'YXZ'; p.rotation.y = ry; g.add(p); const m = mk(sph(len * .5, 8), col, 0, 0, len * .5, p, false); m.scale.set(.34, .08, 1); p.rotation.x = -(tilt || .5); return p; }
+  function potBase(g, col, r = .2, h = .3) { mk(cyl(r, r * .72, h, 14), col, 0, h / 2, 0, g); mk(cyl(r * 1.08, r * 1.08, h * .16, 14), shade(col, -.12), 0, h * .93, 0, g, false); mk(cyl(r * .92, r * .92, .02, 14), '#5A4030', 0, h + .005, 0, g, false); return h; }
+  /* the hats sit on a head about .56 across whose middle is .32 below the hat's own origin */
+  const HAT = {
+    sun: (h, c) => { mk(cyl(.95, .97, .03, 28), c, 0, -.03, 0, h, false); mk(cyl(.93, .93, .012, 28), shade(c, -.1), 0, -.05, 0, h, false); mk(new THREE.SphereGeometry(.6, 22, 12, 0, 6.283, 0, 1.08), c, 0, -.32, 0, h, false); mk(cyl(.545, .56, .09, 24), '#FFFFFF', 0, .02, 0, h, false); [-1, 1].forEach(k => { const b = mk(sph(.11, 8), '#FFFFFF', k * .1, .03, .56, h, false); b.scale.set(1, .65, .35); b.rotation.z = k * .5; }); mk(sph(.045, 8), shade(c, -.15), 0, .03, .58, h, false); },
+    beanie: (h, c) => { mk(new THREE.SphereGeometry(.6, 22, 12, 0, 6.283, 0, 1.3), c, 0, -.32, 0, h, false); mk(cyl(.59, .6, .15, 24), shade(c, .28), 0, -.14, 0, h, false); for (let i = 0; i < 14; i++) { const a = i / 14 * 6.283; mk(box(.035, .15, .02), shade(c, -.08), Math.cos(a) * .602, -.14, Math.sin(a) * .602, h, false).rotation.y = -a + Math.PI / 2; } mk(sph(.15, 10), '#FFFFFF', 0, .36, 0, h, false); },
+    beret: (h, c) => { mk(new THREE.SphereGeometry(.585, 22, 12, 0, 6.283, 0, 1.0), shade(c, -.12), 0, -.32, 0, h, false); const d = mk(sph(.7, 20), c, .1, .17, 0, h, false); d.scale.set(1, .26, 1); d.rotation.z = -.2; mk(cyl(.02, .02, .1, 6), shade(c, -.2), .12, .36, 0, h, false); },
+    wreath: (h, c) => { const t = mk(tube(.5, .05, 6.283, 28), '#5E9A57', 0, .0, 0, h, false); t.rotation.x = Math.PI / 2; for (let i = 0; i < 11; i++) { const a = i / 11 * 6.283, f = head(h, Math.cos(a) * .52, .05, Math.sin(a) * .52, 5, .13, [c, '#FFFFFF', '#F7C948'][i % 3], '#F2B233', .25, 1, .6); f.rotation.order = 'YXZ'; f.rotation.y = -a + Math.PI / 2; f.rotation.x = .7; leaf(h, Math.cos(a + .28) * .5, .0, Math.sin(a + .28) * .5, .16, -a + Math.PI / 2, .1); } }
+  };
+  const POT = {
+    rose: g => { const y = potBase(g, '#B8683A'); [[0, 0, .5], [-.09, .05, .4], [.1, -.04, .36]].forEach(([x, z, h], i) => { stem(g, x, z, y, y + h); const f = head(g, x, y + h, z, 5, .1, '#D9413A', null, .55, 3, .95); mk(sph(.05, 8), '#B8332A', 0, .045, 0, f, false); leaf(g, x, y + h * .5, z, .14, i * 2.1, .4); leaf(g, x, y + h * .3, z, .14, i * 2.1 + 3, .4); }); },
+    tulip: g => { const y = potBase(g, '#4F86C6'); [[-.08, 0, .44, '#E8574A'], [.08, .05, .5, '#F7C948'], [0, -.08, .4, '#F29AB4']].forEach(([x, z, h, c], i) => { stem(g, x, z, y, y + h); head(g, x, y + h, z, 6, .16, c, null, .95, 1, .6); leaf(g, x, y + .02, z, .34, i * 2.1 + .5, 1.15, '#5E9A57'); leaf(g, x, y + .02, z, .28, i * 2.1 + 3.4, 1.1, '#6DAA5E'); }); },
+    sunflower: g => { const y = potBase(g, '#C8793A', .22, .32); stem(g, 0, 0, y, y + .78, .03); const f = head(g, 0, y + .8, .03, 16, .2, '#F7C948', '#6A4326', .08, 2); f.rotation.x = 1.15; [.25, .45].forEach((h, i) => { leaf(g, 0, y + h, 0, .24, i * 3 + 1, .5); }); },
+    lily: g => { const y = potBase(g, '#E8E0D0'); [[0, 0, .56, 0], [-.07, .03, .44, 2.2]].forEach(([x, z, h, a]) => { stem(g, x, z, y, y + h); const f = head(g, x, y + h, z, 6, .2, '#FFFFFF', null, .5); f.rotation.set(.5, a, 0); for (let i = 0; i < 5; i++) mk(cyl(.006, .006, .13, 4), '#E2B93B', Math.cos(i * 1.26) * .025, .07, Math.sin(i * 1.26) * .025, f, false); }); for (let i = 0; i < 6; i++) leaf(g, 0, y + .04 + i * .05, 0, .26, i * 1.1, .7, '#4E8A44'); },
+    chrys: g => { const y = potBase(g, '#6E5A48'); [[0, 0, .42, '#F2B233'], [-.11, .04, .34, '#FFFFFF'], [.11, -.03, .36, '#E08A3A']].forEach(([x, z, h, c], i) => { stem(g, x, z, y, y + h); head(g, x, y + h, z, 14, .13, c, shade(c, -.15), .3, 3); leaf(g, x, y + h * .5, z, .13, i * 2 + .4, .4, '#4E8A44'); leaf(g, x, y + h * .3, z, .13, i * 2 + 3.3, .4, '#4E8A44'); }); },
+    plum: g => { const y = potBase(g, '#3F5A7A', .22, .22); const br = (x, y0, len, rz, rx) => { const p = new THREE.Group(); p.position.set(x, y0, 0); p.rotation.set(rx || 0, 0, rz); g.add(p); mk(cyl(.018, .03, len, 6), '#4A3528', 0, len / 2, 0, p, false); return p; };
+      const a = br(0, y, .5, .25), b = br(-.02, y + .1, .34, -.6, .2), c = new THREE.Group(); c.position.y = .5; c.rotation.z = -.9; a.add(c); mk(cyl(.012, .018, .3, 6), '#4A3528', 0, .15, 0, c, false);
+      [[a, .22], [a, .36], [a, .48], [b, .18], [b, .3], [c, .12], [c, .26]].forEach(([p, h], i) => { const f = head(p, i % 2 ? .03 : -.03, h, 0, 5, .055, i % 3 ? '#E8799A' : '#F6B8C8', '#F7C948', .1); f.rotation.z = i % 2 ? -1.2 : 1.2; }); },
+    narcissus: g => { mk(cyl(.26, .2, .12, 16), '#F4F1E8', 0, .06, 0, g); mk(cyl(.24, .24, .02, 16), '#8FCBEF', 0, .115, 0, g, false); for (let i = 0; i < 7; i++) mk(sph(.045, 6), '#C9C2B4', Math.cos(i * .9) * .14, .12, Math.sin(i * .9) * .14, g, false);
+      [[0, 0, .4], [-.08, .04, .34], [.08, -.03, .36]].forEach(([x, z, h], i) => { mk(sph(.05, 8), '#E8DCC0', x, .14, z, g, false); stem(g, x, z, .14, .14 + h, .014); const f = head(g, x, .14 + h, z, 6, .075, '#FFFFFF', null, .1); f.rotation.set(1.1, i * 2.1, 0); mk(cyl(.028, .02, .03, 8), '#F2B233', 0, .02, 0, f, false); for (let k = 0; k < 3; k++) leaf(g, x, .14, z, .32, i * 2.1 + k * 2, 1.3, '#4E8A44'); }); },
+    orchid: g => { const y = potBase(g, '#7FBF9A', .17, .26); const s = new THREE.Group(); s.position.y = y; s.rotation.z = -.22; g.add(s); mk(cyl(.012, .016, .6, 6), '#4E8A44', 0, .3, 0, s, false); [.3, .42, .54].forEach((h, i) => { const f = head(s, .05, h, 0, 5, .1, '#C98AD8', '#F7E48C', .05); f.rotation.z = -1.3; f.rotation.y = i - 1; }); for (let i = 0; i < 6; i++) leaf(g, 0, y + .01, 0, .38, i * 1.05, .28 + (i % 2) * .5, '#3F7F4A'); },
+    cactus: g => { const y = potBase(g, '#D9A066', .18, .24); const b = mk(sph(.15, 12), '#5E9A57', 0, y + .22, 0, g); b.scale.set(1, 1.7, 1); for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283; mk(cyl(.012, .012, .46, 4), '#3F7F4A', Math.cos(a) * .145, y + .22, Math.sin(a) * .145, g, false); }
+      const arm = mk(sph(.07, 10), '#5E9A57', .17, y + .26, 0, g); arm.scale.set(1, 1.5, 1); mk(cyl(.035, .035, .1, 6), '#5E9A57', .1, y + .2, 0, g, false).rotation.z = Math.PI / 2; head(g, 0, y + .48, 0, 7, .06, '#F29AB4', '#F7C948', .2); },
+    bamboo: g => { const y = potBase(g, '#3F5A7A', .2, .2); [[-.07, 0, .95], [.05, .05, .8], [.02, -.07, .66]].forEach(([x, z, h], i) => { for (let k = 0; k < Math.round(h / .16); k++) { mk(cyl(.022, .022, .15, 8), '#6DAA4E', x, y + .08 + k * .16, z, g, false); mk(cyl(.027, .027, .014, 8), '#4E8A3A', x, y + .158 + k * .16, z, g, false); } for (let k = 0; k < 5; k++) leaf(g, x, y + h * (.45 + k * .12), z, .2, i * 2 + k * 1.7, .25, '#7FBF5E'); }); },
+    pine: g => { mk(box(.5, .12, .32), '#3F5A7A', 0, .06, 0, g); mk(box(.44, .02, .26), '#5A4030', 0, .125, 0, g, false); const t = new THREE.Group(); t.position.set(-.08, .12, 0); t.rotation.z = -.35; g.add(t); mk(cyl(.03, .05, .36, 6), '#6A4A32', 0, .18, 0, t, false); const u = new THREE.Group(); u.position.y = .34; u.rotation.z = .9; t.add(u); mk(cyl(.02, .03, .26, 6), '#6A4A32', 0, .13, 0, u, false);
+      [[t, .12, .34, .14], [u, 0, .28, .17], [u, -.1, .12, .11]].forEach(([p, x, yy, r]) => { const c = mk(sph(r, 10), '#3F7F4A', x, yy, 0, p); c.scale.set(1.5, .5, 1.2); const c2 = mk(sph(r * .7, 8), '#4E9A5A', x, yy + r * .35, 0, p, false); c2.scale.set(1.4, .5, 1.1); }); mk(sph(.05, 6), '#C9C2B4', .16, .15, .05, g, false); },
+    aloe: g => { const y = potBase(g, '#E8B0A0', .19, .22); for (let r = 0; r < 2; r++) for (let i = 0; i < 6; i++) { const p = new THREE.Group(); p.position.y = y; p.rotation.y = i / 6 * 6.283 + r * .5; g.add(p); const q = new THREE.Group(); q.rotation.x = r ? .35 : .85; p.add(q); const m = mk(new THREE.ConeGeometry(.045, r ? .4 : .32, 5), r ? '#6DAA5E' : '#5E9A57', 0, (r ? .2 : .16), 0, q, false); m.scale.z = .5; } }
+  };
+  const wood = '#B98A5A', dark = '#8A6A4A';
+  const HOME = {
+    table: g => { mk(rbox(1.1, .07, .7, .03), wood, 0, .62, 0, g); [[-.46, -.27], [.46, -.27], [-.46, .27], [.46, .27]].forEach(([x, z]) => mk(cyl(.04, .035, .6, 8), dark, x, .3, z, g)); mk(box(.94, .05, .04), dark, 0, .5, -.27, g, false); mk(box(.94, .05, .04), dark, 0, .5, .27, g, false);
+      const pot = mk(sph(.11, 12), '#F4F1E8', -.15, .75, 0, g); pot.scale.y = .8; mk(cyl(.04, .05, .03, 10), '#4F86C6', -.15, .85, 0, g, false); const sp2 = mk(cyl(.015, .02, .12, 6), '#F4F1E8', -.02, .77, 0, g, false); sp2.rotation.z = -1; const hd = mk(tube(.05, .012, Math.PI), '#F4F1E8', -.27, .76, 0, g, false); hd.rotation.z = Math.PI / 2; [[.2, .1], [.32, -.08]].forEach(([x, z]) => mk(cyl(.04, .03, .06, 10), '#F4F1E8', x, .685, z, g, false)); },
+    chair: g => { mk(rbox(.5, .06, .5, .03), wood, 0, .44, 0, g); [[-.2, -.2], [.2, -.2], [-.2, .2], [.2, .2]].forEach(([x, z]) => mk(cyl(.03, .028, z < 0 ? 1 : .44, 8), dark, x, z < 0 ? .5 : .22, z, g)); [.62, .76, .9].forEach(y => mk(rbox(.44, .07, .03, .012), wood, 0, y, -.2, g, false)); mk(rbox(.42, .04, .42, .02), '#E8574A', 0, .49, .01, g, false); },
+    shelf: g => { mk(box(1, 1.5, .04), dark, 0, .75, -.15, g); [-.5, .5].forEach(x => mk(box(.05, 1.5, .34), wood, x, .75, 0, g)); [.03, .5, .98, 1.48].forEach(y => mk(box(1, .05, .34), wood, 0, y, 0, g)); const cols = ['#E8574A', '#4F86C6', '#F2B233', '#5E9A57', '#8E6BBF', '#F29AB4'];
+      [.06, .53].forEach((y, r) => { let x = -.43; for (let i = 0; x < .4; i++) { const w = .05 + ((i * 7 + r * 3) % 4) * .012, h = .3 + ((i * 5 + r) % 3) * .04; mk(box(w, h, .22), cols[(i + r * 2) % 6], x + w / 2, y + h / 2, 0, g, false); x += w + .006; } });
+      mk(sph(.09, 10), '#4F86C6', -.25, 1.11, 0, g, false); mk(cyl(.07, .05, .12, 10), '#C96A4A', .2, 1.07, 0, g, false); mk(sph(.09, 8), '#5E9A57', .2, 1.2, 0, g, false); },
+    horse: g => { [-.14, .14].forEach(x => { const r = mk(tube(.62, .03, 1.5), dark, x, .64, 0, g); r.rotation.set(0, Math.PI / 2, -Math.PI / 2 - .75); }); mk(box(.34, .04, .06), dark, 0, .08, -.3, g, false); mk(box(.34, .04, .06), dark, 0, .08, .3, g, false);
+      const b = mk(sph(.2, 12), '#E8C89A', 0, .5, 0, g); b.scale.set(.75, .8, 1.5); [[-.1, -.2], [.1, -.2], [-.1, .2], [.1, .2]].forEach(([x, z]) => mk(cyl(.035, .03, .34, 6), '#E8C89A', x, .25, z, g, false).rotation.x = z * .9);
+      const n = mk(cyl(.07, .09, .3, 8), '#E8C89A', 0, .68, .25, g, false); n.rotation.x = .5; const hd = mk(sph(.1, 10), '#E8C89A', 0, .82, .37, g); hd.scale.set(.8, .8, 1.4); hd.rotation.x = .5; [-1, 1].forEach(k => { mk(new THREE.ConeGeometry(.03, .08, 4), '#E8C89A', k * .05, .93, .31, g, false); mk(sph(.016, 6), '#2B2420', k * .065, .85, .41, g, false); });
+      for (let i = 0; i < 5; i++) mk(sph(.045, 6), '#8A4A2A', 0, .9 - i * .06, .27 - i * .035, g, false); mk(rbox(.3, .05, .22, .02), '#C8453B', 0, .66, -.02, g, false); const tl = mk(cyl(.02, .04, .22, 6), '#8A4A2A', 0, .5, -.34, g, false); tl.rotation.x = -.7; mk(cyl(.014, .014, .3, 6), dark, 0, .82, .3, g, false).rotation.z = Math.PI / 2; },
+    blocks: g => { const c = ['#E8574A', '#4F86C6', '#F7C948', '#5E9A57', '#F28C28', '#8E6BBF']; [[-.24, .1, 0, 0], [0, .1, .02, 1], [.24, .1, 0, 2], [-.12, .3, .01, 3], [.12, .3, 0, 4]].forEach(([x, y, z, i]) => mk(rbox(.2, .2, .2, .02), c[i], x, y, z, g).rotation.y = (i - 2) * .08);
+      mk(cyl(.1, .1, .2, 14), c[5], 0, .5, 0, g); const tr = mk(new THREE.CylinderGeometry(.13, .13, .2, 3), c[0], 0, .69, 0, g); tr.rotation.set(Math.PI / 2, 0, Math.PI / 6); tr.rotation.order = 'YXZ'; mk(rbox(.2, .2, .2, .02), c[2], .44, .1, .22, g).rotation.y = .5; const ar = mk(tube(.1, .05, Math.PI), c[1], -.46, .0, .22, g); },
+    ball: g => { mk(tube(.16, .025), dark, 0, .03, 0, g, false).rotation.x = Math.PI / 2; const b = mk(sph(.28, 20), '#FFFFFF', 0, .3, 0, g); [['#E8574A', 0], ['#4F86C6', 1.05], ['#F7C948', 2.1]].forEach(([c, a]) => { const t = mk(tube(.282, .03, Math.PI * 2, 28), c, 0, .3, 0, g, false); t.rotation.set(.4, a, 0); }); },
+    kite: g => { mk(cyl(.2, .24, .05, 14), dark, 0, .025, 0, g); mk(cyl(.02, .02, 1.3, 6), dark, 0, .68, -.02, g, false); const k = new THREE.Group(); k.position.set(0, .95, .03); k.rotation.x = -.12; g.add(k); const sh = new THREE.Shape(); sh.moveTo(0, .42); sh.lineTo(.3, .08); sh.lineTo(0, -.46); sh.lineTo(-.3, .08); sh.closePath();
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(sh), tm('#E8574A', { side: THREE.DoubleSide })); k.add(m); const sh2 = new THREE.Shape(); sh2.moveTo(0, .42); sh2.lineTo(.3, .08); sh2.lineTo(0, .08); sh2.closePath(); const m2 = new THREE.Mesh(new THREE.ShapeGeometry(sh2), tm('#F7C948', { side: THREE.DoubleSide })); m2.position.z = .004; k.add(m2);
+      const m3 = m2.clone(); m3.scale.set(-1, -1.35, 1); m3.position.set(0, .188, .004); k.add(m3); mk(box(.012, .88, .012), dark, 0, -.02, .01, k, false); mk(box(.6, .012, .012), dark, 0, .08, .01, k, false);
+      [0, 1, 2, 3].forEach(i => { const bw = mk(box(.1, .05, .01), ['#4F86C6', '#F7C948', '#5E9A57', '#F29AB4'][i], (i % 2 ? .05 : -.05), -.56 - i * .12, 0, k, false); bw.rotation.z = i % 2 ? .5 : -.5; }); mk(cyl(.004, .004, .5, 4), '#FFFFFF', 0, -.7, 0, k, false); },
+    doll: g => { const dress = mk(new THREE.ConeGeometry(.22, .36, 14), '#F29AB4', 0, .26, 0, g); mk(sph(.14, 14), '#F6D6BC', 0, .56, 0, g); const hair = mk(new THREE.SphereGeometry(.15, 14, 10, 0, 6.283, 0, 1.9), '#6A4326', 0, .57, -.012, g, false); hair.rotation.x = -.25;
+      [-1, 1].forEach(k => { mk(sph(.06, 8), '#6A4326', k * .17, .5, -.02, g, false); mk(sph(.018, 6), '#2B2420', k * .05, .57, .13, g, false); mk(sph(.03, 6), '#F29A9A', k * .085, .53, .115, g, false); const a = mk(cyl(.03, .028, .2, 6), '#F6D6BC', k * .17, .34, .03, g, false); a.rotation.z = k * .6; const l = mk(cyl(.035, .03, .2, 6), '#F6D6BC', k * .08, .06, .16, g, false); l.rotation.x = Math.PI / 2; mk(sph(.045, 8), '#C8453B', k * .08, .06, .27, g, false); });
+      mk(tube(.11, .02), '#FFFFFF', 0, .43, 0, g, false).rotation.x = Math.PI / 2; mk(sph(.035, 6), '#C8453B', 0, .7, .03, g, false); },
+    clock: g => { mk(rbox(.5, 1.5, .3, .03), '#8C5B3A', 0, .75, 0, g); mk(rbox(.58, .08, .36, .02), '#6A4326', 0, 1.52, 0, g, false); mk(rbox(.58, .1, .36, .02), '#6A4326', 0, .05, 0, g, false); const f = mk(cyl(.19, .19, .03, 24), '#FFF6E2', 0, 1.2, .15, g, false); f.rotation.x = Math.PI / 2; const rim = mk(tube(.19, .018, 6.283, 28), '#E2B93B', 0, 1.2, .16, g, false);
+      for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283; mk(box(.012, i % 3 ? .025 : .045, .006), '#2B2420', Math.sin(a) * .155, 1.2 + Math.cos(a) * .155, .168, g, false).rotation.z = -a; } const h1 = mk(box(.016, .1, .006), '#2B2420', .035, 1.235, .17, g, false); h1.rotation.z = -.8; mk(box(.012, .14, .006), '#2B2420', 0, 1.27, .172, g, false); mk(sph(.014, 6), '#C8453B', 0, 1.2, .174, g, false);
+      mk(box(.3, .56, .01), '#3A2A20', 0, .58, .152, g, false); mk(cyl(.006, .006, .36, 4), '#E2B93B', .03, .68, .16, g, false).rotation.z = .08; const pd = mk(cyl(.06, .06, .012, 16), '#E2B93B', .045, .5, .16, g, false); pd.rotation.x = Math.PI / 2; },
+    lantern: g => { mk(cyl(.22, .26, .05, 14), '#6A4326', 0, .025, 0, g); mk(cyl(.025, .025, 1.5, 8), '#6A4326', 0, .78, 0, g); const arm = mk(cyl(.02, .02, .4, 6), '#6A4326', .19, 1.5, 0, g, false); arm.rotation.z = Math.PI / 2; mk(cyl(.006, .006, .12, 4), '#E2B93B', .36, 1.44, 0, g, false);
+      const b = new THREE.Mesh(sph(.2, 16), new THREE.MeshStandardMaterial({ color: 0xD9302A, emissive: 0xB82018, emissiveIntensity: .55, roughness: .6 })); b.position.set(.36, 1.2, 0); b.scale.y = .85; g.add(b); for (let i = 0; i < 8; i++) { const t = mk(tube(.2, .006, Math.PI), '#E2B93B', .36, 1.2, 0, g, false); t.rotation.set(0, i / 8 * Math.PI, Math.PI / 2); t.scale.x = .85; }
+      [1.37, 1.03].forEach(y => mk(cyl(.07, .07, .03, 12), '#E2B93B', .36, y, 0, g, false)); mk(cyl(.012, .02, .2, 6), '#E2B93B', .36, .92, 0, g, false); },
+    screen: g => { ['#4F86C6', '#5E9A57', '#C8453B'].forEach((c, i) => { const p = new THREE.Group(); p.position.set((i - 1) * .44, 0, i === 1 ? -.06 : .06); p.rotation.y = (i - 1) * -.45; g.add(p); mk(rbox(.46, 1.4, .04, .015), '#6A4326', 0, .72, 0, p); mk(box(.38, 1.08, .01), '#FFF6E2', 0, .8, .022, p, false);
+        mk(sph(.07, 10), '#E8574A', .06, 1.16, .028, p, false).scale.z = .1; [[-.05, .62, .34], [.07, .56, .26], [-.1, .52, .2]].forEach(([x, y, h]) => { mk(box(.016, h, .004), c, x, y, .028, p, false); for (let k = 0; k < 3; k++) { const l = mk(sph(.05, 6), c, x + (k % 2 ? .04 : -.04), y + h * (.1 + k * .15), .028, p, false); l.scale.set(1, .35, .08); l.rotation.z = k % 2 ? .6 : -.6; } }); mk(box(.38, .12, .01), shade(c, -.1), 0, .16, .022, p, false); }); },
+    mirror: g => { [-.24, .24].forEach(x => { mk(box(.05, .05, .5), '#8C5B3A', x, .03, 0, g); mk(cyl(.025, .025, 1.3, 8), '#8C5B3A', x, .68, 0, g); }); const fr = mk(sph(.3, 20), '#8C5B3A', 0, .85, 0, g); fr.scale.set(.85, 1.7, .08); fr.rotation.x = -.1; const gl = new THREE.Mesh(sph(.27, 20), new THREE.MeshStandardMaterial({ color: 0xCFEAF6, roughness: .08, metalness: .35 })); gl.position.set(0, .85, .014); gl.scale.set(.85, 1.72, .06); gl.rotation.x = -.1; g.add(gl); const hl = mk(box(.03, .5, .004), '#FFFFFF', -.08, .95, .036, g, false); hl.rotation.z = .35; hl.rotation.x = -.1; }
+  };
+  const stone = '#B9B4A8', stoneD = '#96917F';
+  /* a little pitched roof: two boards meeting at a ridge that runs front to back */
+  function gable(g, w, d, h, col, y) { const a = Math.atan2(h, w / 2), l = Math.hypot(h, w / 2) + .04; [-1, 1].forEach(k => { const m = mk(box(l, .05, d), col, k * w / 4, y + h / 2, 0, g); m.rotation.z = -k * a; }); mk(box(.07, .07, d + .04), shade(col, -.2), 0, y + h + .01, 0, g, false); }
+  const YARD = {
+    fence: g => { for (let i = -3; i <= 3; i++) { const x = i * .3; mk(box(.1, .62, .04), '#F4F1E8', x, .34, 0, g); mk(new THREE.ConeGeometry(.071, .1, 4), '#F4F1E8', x, .7, 0, g, false).rotation.y = Math.PI / 4; } [.22, .5].forEach(y => mk(box(1.95, .06, .03), '#E0DAC8', 0, y, -.03, g, false)); },
+    birdhouse: g => { mk(cyl(.035, .045, 1.5, 8), dark, 0, .75, 0, g); mk(rbox(.34, .32, .3, .02), '#E8C89A', 0, 1.62, 0, g); gable(g, .5, .44, .2, '#C8453B', 1.78);
+      const hole = mk(cyl(.055, .055, .02, 14), '#3A2A20', 0, 1.65, .152, g, false); hole.rotation.x = Math.PI / 2; mk(cyl(.012, .012, .12, 6), dark, 0, 1.55, .2, g, false).rotation.x = Math.PI / 2; const b = new THREE.Group(); b.position.set(.02, 1.585, .23); b.scale.setScalar(.5); g.add(b); const bd = mk(sph(.09, 10), '#4F86C6', 0, .06, 0, b); bd.scale.set(.8, .8, 1.2); mk(sph(.06, 8), '#4F86C6', 0, .14, .07, b); mk(new THREE.ConeGeometry(.02, .05, 5), '#F2B233', 0, .14, .14, b, false).rotation.x = Math.PI / 2; },
+    bench: g => { [-.6, .6].forEach(x => { mk(box(.08, .44, .44), dark, x, .22, 0, g); mk(box(.08, .5, .06), dark, x, .68, -.2, g).rotation.x = -.12; }); [-.14, 0, .14].forEach(z => mk(rbox(1.4, .05, .12, .015), wood, 0, .46, z, g)); [.62, .8].forEach(y => mk(rbox(1.4, .1, .04, .015), wood, 0, y, -.22 - (y - .62) * .12, g)); },
+    barrow: g => { const t = mk(rbox(.7, .26, .5, .04), '#C8453B', 0, .42, 0, g); t.rotation.z = .06; mk(box(.62, .03, .42), '#5A4030', 0, .55, 0, g, false); const w = mk(cyl(.17, .17, .07, 16), '#2B2420', .46, .17, 0, g); w.rotation.x = Math.PI / 2; mk(cyl(.06, .06, .08, 10), '#E2B93B', .46, .17, 0, g, false).rotation.x = Math.PI / 2;
+      [-.2, .2].forEach(z => { const h = mk(cyl(.02, .02, .7, 6), dark, -.55, .46, z, g, false); h.rotation.z = Math.PI / 2 - .12; mk(cyl(.025, .025, .3, 6), dark, -.28, .15, z, g, false); }); [[-.18, -.1, '#F7C948'], [.02, .08, '#F29AB4'], [.2, -.08, '#FFFFFF'], [-.05, -.14, '#E8574A'], [.14, .12, '#F7C948']].forEach(([x, z, c]) => { stem(g, x, z, .55, .7); head(g, x, .7, z, 7, .07, c, '#F2B233', .15); leaf(g, x, .58, z, .12, x * 9, .5); }); },
+    slantern: g => { mk(cyl(.26, .3, .1, 6), stoneD, 0, .05, 0, g); mk(cyl(.09, .11, .6, 8), stone, 0, .4, 0, g); mk(cyl(.24, .12, .1, 6), stoneD, 0, .75, 0, g); mk(rbox(.3, .26, .3, .02), stone, 0, .93, 0, g); const l = new THREE.Mesh(box(.31, .14, .14), new THREE.MeshStandardMaterial({ color: 0xFFE9A8, emissive: 0xFFC860, emissiveIntensity: .7 })); l.position.set(0, .93, 0); g.add(l); const l2 = l.clone(); l2.rotation.y = Math.PI / 2; g.add(l2);
+      const r = mk(new THREE.ConeGeometry(.36, .22, 6), stoneD, 0, 1.17, 0, g); mk(sph(.06, 8), stone, 0, 1.31, 0, g, false); },
+    stools: g => { mk(cyl(.4, .4, .08, 18), stone, 0, .52, 0, g); mk(cyl(.12, .16, .48, 10), stoneD, 0, .24, 0, g); [[-.7, .1], [.66, -.15], [.05, .72]].forEach(([x, z]) => { const s = mk(cyl(.17, .15, .34, 12), stone, x, .17, z, g); mk(cyl(.175, .175, .03, 12), stoneD, x, .2, z, g, false); }); mk(cyl(.1, .08, .05, 10), '#4F86C6', .1, .585, .05, g, false); mk(sph(.05, 8), '#F4F1E8', -.12, .6, -.08, g, false); },
+    steps: g => { [[0, 0, .3], [.14, .6, .26], [-.1, 1.2, .28], [.1, 1.8, .25], [-.06, 2.4, .27]].forEach(([x, z, r], i) => { const s = mk(cyl(r, r * 1.04, .05, 9), i % 2 ? stone : stoneD, x, .035, z - 1.2, g, false); s.scale.z = .8; s.rotation.y = i; }); [[-.42, -.9], [.5, .3], [-.44, .9]].forEach(([x, z]) => { for (let k = 0; k < 4; k++) leaf(g, x, .02, z, .16, k * 1.6, .9, '#6DAA5E'); }); },
+    well: g => { mk(cyl(.42, .46, .5, 14), stone, 0, .25, 0, g); mk(cyl(.36, .36, .02, 14), '#5FA8D8', 0, .49, 0, g, false); mk(tube(.4, .05, 6.283, 14), stoneD, 0, .5, 0, g, false).rotation.x = Math.PI / 2; [-.4, .4].forEach(x => mk(box(.07, .9, .07), dark, x, .95, 0, g)); mk(cyl(.035, .035, .9, 8), dark, 0, 1.2, 0, g, false).rotation.z = Math.PI / 2;
+      gable(g, 1.2, .9, .36, '#C8453B', 1.38); mk(cyl(.008, .008, .5, 4), '#E8DCC0', .1, .95, 0, g, false); mk(cyl(.09, .07, .13, 10), dark, .1, .68, 0, g, false); },
+    bunting: g => { [-1.1, 1.1].forEach(x => { mk(cyl(.03, .04, 1.9, 8), dark, x, .95, 0, g); mk(sph(.05, 8), '#E2B93B', x, 1.93, 0, g, false); }); for (let i = 0; i < 9; i++) { const u = (i + .5) / 9, x = -1.1 + u * 2.2, y = 1.84 - Math.sin(u * Math.PI) * .26; const f = new THREE.Mesh(new THREE.ConeGeometry(.1, .2, 3), tm(['#E8574A', '#F7C948', '#4F86C6', '#5E9A57', '#F29AB4'][i % 5], { side: THREE.DoubleSide })); f.position.set(x, y - .1, 0); f.rotation.x = Math.PI; f.scale.z = .08; f.castShadow = SHADOWS; g.add(f); }
+      for (let i = 0; i < 10; i++) { const u0 = i / 10, u1 = (i + 1) / 10, p = u => [-1.1 + u * 2.2, 1.84 - Math.sin(u * Math.PI) * .26], [x0, y0] = p(u0), [x1, y1] = p(u1), s = mk(cyl(.006, .006, Math.hypot(x1 - x0, y1 - y0), 4), '#FFFFFF', (x0 + x1) / 2, (y0 + y1) / 2, 0, g, false); s.rotation.z = Math.atan2(y1 - y0, x1 - x0) + Math.PI / 2; } },
+    pinwheel: g => { mk(cyl(.025, .03, 1.5, 8), '#F4F1E8', 0, .75, 0, g); const w = new THREE.Group(); w.position.set(0, 1.5, .06); g.add(w); g.userData.spin = w; ['#E8574A', '#F7C948', '#4F86C6', '#5E9A57'].forEach((c, i) => { const p = new THREE.Group(); p.rotation.z = i * Math.PI / 2; w.add(p); const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(.34, 0); sh.lineTo(.17, .17); sh.closePath(); const m = new THREE.Mesh(new THREE.ShapeGeometry(sh), tm(c, { side: THREE.DoubleSide })); p.add(m); const m2 = new THREE.Mesh(new THREE.ShapeGeometry(sh), tm(shade(c, -.18), { side: THREE.DoubleSide })); m2.rotation.z = Math.PI / 4; m2.scale.set(.7, .7, 1); m2.position.z = .03; p.add(m2); });
+      mk(sph(.04, 8), '#E2B93B', 0, 0, .05, w, false); },
+    scarecrow: g => { mk(cyl(.035, .04, 1.7, 8), dark, 0, .85, 0, g); mk(cyl(.03, .03, 1.2, 8), dark, 0, 1.25, 0, g, false).rotation.z = Math.PI / 2; const sh = mk(rbox(.5, .56, .22, .05), '#4F86C6', 0, 1.1, 0, g); [-1, 1].forEach(k => { mk(rbox(.44, .16, .18, .04), '#4F86C6', k * .4, 1.26, 0, g, false); for (let i = 0; i < 4; i++) mk(cyl(.008, .008, .16, 4), '#E3C565', k * (.66 + i * .012), 1.25 + (i - 1.5) * .03, 0, g, false).rotation.z = Math.PI / 2; });
+      mk(sph(.17, 14), '#F1DDB0', 0, 1.56, 0, g); [-1, 1].forEach(k => mk(sph(.022, 6), '#2B2420', k * .06, 1.59, .155, g, false)); mk(new THREE.ConeGeometry(.025, .09, 6), '#F28C28', 0, 1.54, .19, g, false).rotation.x = Math.PI / 2; mk(tube(.07, .008, Math.PI), '#2B2420', 0, 1.51, .155, g, false).rotation.z = Math.PI; mk(cyl(.3, .32, .03, 18), '#E3C565', 0, 1.735, 0, g, false).rotation.x = -.12; mk(cyl(.15, .19, .18, 14), '#E3C565', 0, 1.83, -.01, g, false); mk(cyl(.195, .195, .04, 14), '#C8453B', 0, 1.775, -.005, g, false);
+      for (let i = 0; i < 7; i++) mk(cyl(.01, .01, .2, 4), '#E3C565', -.2 + i * .066, .76, 0, g, false).rotation.z = (i - 3) * .08; mk(sph(.03, 6), '#C8453B', .08, 1.2, .112, g, false); mk(sph(.03, 6), '#F7C948', -.1, 1.02, .112, g, false); },
+    pond: g => { const w = mk(cyl(.62, .62, .03, 22), '#6FB7DA', 0, .03, 0, g, false); w.scale.z = .78; for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283, r = .09 + (i * 7 % 5) * .016; const s = mk(sph(r, 8), i % 2 ? stone : stoneD, Math.cos(a) * .66, .05, Math.sin(a) * .52, g); s.scale.y = .6; }
+      [[-.2, .1, .16], [.18, -.12, .13], [.1, .22, .1]].forEach(([x, z, r], i) => { const p = mk(cyl(r, r, .012, 14, 1), '#5E9A57', x, .05, z, g, false); if (!i) head(g, x + .02, .07, z, 8, .08, '#F6B8C8', '#F7C948', .35, 2); }); const f = mk(sph(.05, 8), '#F28C28', -.05, .045, -.2, g, false); f.scale.set(1.8, .3, .8); [0, 1, 2].forEach(i => { const rd = new THREE.Group(); rd.position.set(.52, .04, -.3 + i * .07); g.add(rd); mk(cyl(.008, .008, .5, 4), '#6E9647', 0, .25, 0, rd, false); mk(cyl(.02, .02, .12, 6), '#7A5230', 0, .5, 0, rd, false); }); }
+  };
+  /* ---------- the keepers and their goods: one row each; the program above is the same for all of them ---------- */
+  const dadP = (top, dk, hair) => ({ '3,0': top, '7,0': dk, '6,0': dk, '4,0': top, '7,1': '#3E4A52', '0,1': dk, '2,1': dk, '1,1': dk, '1,0': hair });
+  const momP = (dress, trim, hair, light) => ({ '0,1': dress, '4,0': light || '#FFFFFF', '5,0': trim, '3,2': trim, '1,0': hair, '2,2': light || '#FFFFFF', '7,2': '#F6D6BC' });
+  const kidP = (shirt, pants, hair) => kidPal({ hair, shirt, pants, skin: '#F6D6BC' });
+  const BLACK = '#2B2420', BROWN = '#5A3A28', GREY = '#D8D8D8';
+  const GOODS = {}, FOLK = {};
+  /* goods: [id, name, measure word, English, price, picture, more] */
+  const good = (kind, row) => { const [id, zh, mw, en, p, icon, more] = row; GOODS[id] = Object.assign({ id, kind, zh, mw, en, p, icon }, more || {}); return id; };
+  const folk = (isle, kind, list) => { (FOLK[isle] || (FOLK[isle] = {}))[kind] = list.map(([n, look, hi, sell, chat, goods]) => Object.assign({ n, hi, sell, chat, goods: goods.map(r => good(kind, r)) }, look)); };
+  const cat = o => q => Zoo.quad(q, 'cat', o), dog = o => q => Zoo.quad(q, 'dog', o);
+  /* ===== Book 1 island ===== */
+  folk('isle1', 'clothes', [
+    [['白阿姨', 'Aunt Bai'], { base: 'mom', pal: momP('#F4F1E8', '#C9C2B4', BLACK, '#F29AB4') }, ['我最喜欢做帽子。', 'I love making hats.'], ['太阳大的时候戴帽子，下雪的时候也戴帽子。', 'A hat for when the sun is strong, and a hat for when it snows.'],
+      [['今天的太阳真大，你戴帽子了吗？', 'The sun is strong today. Are you wearing a hat?'], ['我的帽子，一顶比一顶好看！', 'My hats: each one prettier than the last!']],
+      [['i1c-a1', '太阳帽', '顶', 'sun hat', 120, '👒', { part: 'hat', col: '#F6B8C8', hat: 'sun' }], ['i1c-a2', '毛线帽', '顶', 'woolly hat', 140, '🧶', { part: 'hat', col: '#E8574A', hat: 'beanie' }], ['i1c-a3', '画家帽', '顶', 'beret', 160, '🎨', { part: 'hat', col: '#3E5F86', hat: 'beret' }], ['i1c-a4', '花环', '个', 'flower wreath', 200, '🌸', { part: 'hat', col: '#F29AB4', hat: 'wreath' }]]],
+    [['马叔叔', 'Uncle Ma'], { base: 'dad', pal: dadP('#D9413A', '#8A2A22', BLACK) }, ['我做的上衣又好看又暖和。', 'The tops I make are both good-looking and warm.'], ['红的、绿的、紫的、白的，你喜欢哪一件？', 'Red, green, purple, white: which one do you like?'],
+      [['你今天穿的衣服真好看！', 'What you are wearing today looks very nice!'], ['天冷了要多穿一件衣服。', 'When it gets cold, put on one more layer.']],
+      [['i1c-b1', '红上衣', '件', 'red top', 100, '', { part: 'shirt', col: '#D9413A' }], ['i1c-b2', '绿上衣', '件', 'green top', 100, '', { part: 'shirt', col: '#4FA05A' }], ['i1c-b3', '紫上衣', '件', 'purple top', 130, '', { part: 'shirt', col: '#8E6BBF' }], ['i1c-b4', '白上衣', '件', 'white top', 130, '', { part: 'shirt', col: '#F6F2E8' }]]],
+    [['方姐姐', 'Sister Fang'], { base: 'kid', s: .98, pal: kidP('#7FDBC8', '#3E6FB5', BLACK), style: { head: 'kid', hairCol: BLACK } }, ['我会做裤子，跑步、爬山都好穿。', 'I make trousers that are good for running and climbing.'], ['蓝的、黄的、白的、绿的，都是我自己做的。', 'Blue, yellow, white, green: I made them all myself.'],
+      [['穿上新裤子，跑得更快！', 'In new trousers you run even faster!'], ['你喜欢什么颜色？我喜欢蓝色。', 'What colour do you like? I like blue.']],
+      [['i1c-c1', '蓝裤子', '条', 'blue trousers', 100, '', { part: 'pants', col: '#3E6FB5' }], ['i1c-c2', '黄裤子', '条', 'yellow trousers', 100, '', { part: 'pants', col: '#E2B93B' }], ['i1c-c3', '白裤子', '条', 'white trousers', 130, '', { part: 'pants', col: '#EDE8DC' }], ['i1c-c4', '绿裤子', '条', 'green trousers', 130, '', { part: 'pants', col: '#3F7F5A' }]]]
+  ]);
+  folk('isle1', 'flower', [
+    [['花奶奶', 'Granny Hua'], { base: 'mom', pal: momP('#C96A88', '#8A3A58', GREY, '#F6E7B8'), style: { extra: 'bun', hairCol: GREY } }, ['我种的花，春天夏天开得最好。', 'The flowers I grow are at their best in spring and summer.'], ['每天给花浇一点水，花就会开。', 'Give a flower a little water every day and it will bloom.'],
+      [['花儿也喜欢听人说话，你跟它说说话吧。', 'Flowers like to be talked to. Say something to them.'], ['春天来了，花都开了。', 'Spring is here, and all the flowers are out.']],
+      [['i1f-a1', '玫瑰', '盆', 'pot of roses', 120, '🌹', { m: 'rose' }], ['i1f-a2', '郁金香', '盆', 'pot of tulips', 120, '🌷', { m: 'tulip' }], ['i1f-a3', '向日葵', '盆', 'potted sunflower', 150, '🌻', { m: 'sunflower' }], ['i1f-a4', '百合', '盆', 'pot of lilies', 170, '🤍', { m: 'lily' }]]],
+    [['田爷爷', 'Grandpa Tian'], { base: 'dad', pal: dadP('#6E8A5A', '#4A5F3A', GREY), style: { glasses: true, hairCol: GREY } }, ['我种的花，秋天冬天也开。', 'The flowers I grow bloom in autumn and winter too.'], ['天气冷了，梅花和水仙开得正好。', 'When it turns cold, the plum blossom and narcissus are just right.'],
+      [['下雪的时候，梅花开得最好看。', 'Plum blossom is loveliest when it snows.'], ['秋天到了，菊花开了。', 'Autumn has come and the chrysanthemums are out.']],
+      [['i1f-b1', '菊花', '盆', 'pot of chrysanthemums', 120, '🌼', { m: 'chrys' }], ['i1f-b2', '梅花', '盆', 'potted plum blossom', 170, '🌸', { m: 'plum' }], ['i1f-b3', '水仙', '盆', 'bowl of narcissus', 140, '🪻', { m: 'narcissus' }], ['i1f-b4', '兰花', '盆', 'potted orchid', 160, '💜', { m: 'orchid' }]]],
+    [['叶哥哥', 'Brother Ye'], { base: 'kid', s: 1, pal: kidP('#5E9A57', '#6A4A32', BLACK), style: { head: 'dad', extra: 'spiky', hairCol: BLACK } }, ['我的店里没有花，都是绿绿的小树和小草。', 'There are no flowers in my shop: only little green trees and plants.'], ['它们不用天天浇水，很好养。', 'They do not need water every day, so they are easy to keep.'],
+      [['仙人掌不喜欢太多水。', 'A cactus does not like too much water.'], ['竹子长得真快，一天一个样。', 'Bamboo grows so fast: different every day.']],
+      [['i1f-c1', '仙人掌', '盆', 'potted cactus', 110, '🌵', { m: 'cactus' }], ['i1f-c2', '竹子', '盆', 'pot of bamboo', 130, '🎋', { m: 'bamboo' }], ['i1f-c3', '小松树', '盆', 'little pine tree', 180, '🌲', { m: 'pine' }], ['i1f-c4', '芦荟', '盆', 'pot of aloe', 110, '🪴', { m: 'aloe' }]]]
+  ]);
+  folk('isle1', 'furniture', [
+    [['木爷爷', 'Grandpa Mu'], { base: 'dad', pal: dadP('#B98A5A', '#6E5A44', GREY) }, ['我是木工，桌子椅子都是我自己做的。', 'I am a carpenter. I make the tables and chairs myself.'], ['都是用好木头做的，可以用很多年。', 'They are made of good wood and will last many years.'],
+      [['做一把椅子要三天，做一张桌子要五天。', 'A chair takes three days to make; a table takes five.'], ['你家里有几把椅子？', 'How many chairs are there in your home?']],
+      [['i1h-a1', '小桌子', '张', 'little table', 180, '🍵', { m: 'table' }], ['i1h-a2', '小椅子', '把', 'little chair', 120, '🪑', { m: 'chair' }], ['i1h-a3', '书架', '个', 'bookshelf', 200, '📚', { m: 'shelf' }], ['i1h-a4', '木马', '只', 'rocking horse', 220, '🐴', { m: 'horse' }]]],
+    [['乐阿姨', 'Aunt Le'], { base: 'mom', pal: momP('#F2B233', '#C8793A', BROWN, '#FFF6E2') }, ['我的店里都是玩具，大家都喜欢。', 'My shop is full of toys. Everybody likes them.'], ['玩完了要放好，下次再玩。', 'Put them away when you have finished, and play again next time.'],
+      [['你最喜欢玩什么？', 'What do you like playing with most?'], ['刮风的时候，可以去放风筝。', 'When the wind blows, you can go and fly a kite.']],
+      [['i1h-b1', '积木', '盒', 'box of building blocks', 140, '🧱', { m: 'blocks' }], ['i1h-b2', '皮球', '个', 'ball', 100, '⚽', { m: 'ball' }], ['i1h-b3', '风筝', '只', 'kite', 160, '🪁', { m: 'kite' }], ['i1h-b4', '布娃娃', '个', 'rag doll', 180, '🧸', { m: 'doll' }]]],
+    [['金叔叔', 'Uncle Jin'], { base: 'dad', pal: dadP('#3E5F86', '#22364E', BLACK), style: { glasses: true, hairCol: BLACK } }, ['我的东西摆在家里，家里就更好看了。', 'Set my things out at home and your home looks all the better.'], ['有钟、有灯笼、有屏风，还有镜子。', 'There are clocks, lanterns, screens and mirrors.'],
+      [['现在几点了？看看我的钟。', 'What time is it now? Look at my clock.'], ['过新年的时候，家里要挂红灯笼。', 'At New Year we hang red lanterns at home.']],
+      [['i1h-c1', '大钟', '个', 'tall clock', 220, '🕰️', { m: 'clock' }], ['i1h-c2', '红灯笼', '个', 'red lantern', 160, '🏮', { m: 'lantern' }], ['i1h-c3', '屏风', '个', 'folding screen', 200, '🎐', { m: 'screen' }], ['i1h-c4', '镜子', '面', 'mirror', 150, '🪞', { m: 'mirror' }]]]
+  ]);
+  folk('isle1', 'pet', [
+    [['毛阿姨', 'Aunt Mao'], { base: 'mom', pal: momP('#8E8E98', '#5A5A64', BLACK, '#F6F2E8') }, ['我家有很多小猫，每一只都很乖。', 'I have many kittens at home, and every one is good.'], ['小猫喜欢吃鱼，也喜欢晒太阳。', 'Kittens like eating fish, and they like lying in the sun.'],
+      [['小猫走路没有声音。', 'A kitten makes no sound when it walks.'], ['你听，小猫在叫：喵喵喵。', 'Listen, the kitten is calling: miaow, miaow.']],
+      [['i1p-a1', '小白猫', '只', 'white kitten', 220, '🐱', { make: cat({ col: '#FFFFFF', dark: '#E8E0D4' }), s: 1.1 }], ['i1p-a2', '小黑猫', '只', 'black kitten', 220, '🐈‍⬛', { make: cat({ col: '#2E2A2A', dark: '#1E1A1A', muzzle: '#4A4444' }), s: 1.1 }], ['i1p-a3', '小黄猫', '只', 'ginger kitten', 240, '🐈', { make: cat({ col: '#E8943A', dark: '#B86A24' }), s: 1.1 }], ['i1p-a4', '小灰猫', '只', 'grey kitten', 240, '🐈', { make: cat({}), s: 1.1 }]]],
+    [['汪叔叔', 'Uncle Wang'], { base: 'dad', pal: dadP('#C98A4B', '#8A5A3B', BROWN) }, ['我最喜欢小狗，小狗是人的好朋友。', 'I love puppies best. A dog is a person’s good friend.'], ['小狗喜欢跑步，你去哪儿，它就去哪儿。', 'A puppy loves running. Wherever you go, it goes too.'],
+      [['小狗看见我就摇尾巴。', 'The puppy wags its tail when it sees me.'], ['你听，小狗在叫：汪汪汪。', 'Listen, the puppy is barking: woof, woof.']],
+      [['i1p-b1', '小黄狗', '只', 'yellow puppy', 220, '🐶', { make: dog({}), s: 1 }], ['i1p-b2', '小白狗', '只', 'white puppy', 220, '🐩', { make: dog({ col: '#FBF7EE', dark: '#E0D6C4' }), s: 1 }], ['i1p-b3', '小黑狗', '只', 'black puppy', 240, '🐕‍🦺', { make: dog({ col: '#3A3432', dark: '#221E1C', muzzle: '#8A6A4A' }), s: 1 }], ['i1p-b4', '小花狗', '只', 'spotted puppy', 260, '🐕', { make: dog({ col: '#FBF7EE', dark: '#6A4326', patches: '#6A4326' }), s: 1 }]]],
+    [['丁哥哥', 'Brother Ding'], { base: 'kid', s: 1, pal: kidP('#F4F1E8', '#4F86C6', BROWN), style: { head: 'dad', hairCol: BROWN } }, ['我的小动物不一样：有兔子、乌龟，还有松鼠。', 'My little animals are different: rabbits, a tortoise and a squirrel.'], ['小兔子跳得快，小乌龟走得慢。', 'The rabbit hops quickly; the tortoise walks slowly.'],
+      [['小兔子爱吃青草和萝卜。', 'The rabbit loves grass and carrots.'], ['乌龟走得慢，可是它不怕累。', 'The tortoise is slow, but it never gets tired.']],
+      [['i1p-c1', '小白兔', '只', 'white rabbit', 220, '🐰', { make: q => Zoo.rabbit(q, '#FFFFFF', 1), s: 1, hop: 1 }], ['i1p-c2', '小灰兔', '只', 'grey rabbit', 220, '🐇', { make: q => Zoo.rabbit(q, '#9A948C', 1), s: 1, hop: 1 }], ['i1p-c3', '小乌龟', '只', 'little tortoise', 200, '🐢', { make: q => Zoo.tortoise(q, .6), s: 1 }], ['i1p-c4', '小松鼠', '只', 'little squirrel', 260, '🐿️', { make: q => Zoo.squirrel(q, 1), s: 1, hop: 1 }]]]
+  ]);
+  folk('isle1', 'build', [
+    [['林叔叔', 'Uncle Lin'], { base: 'dad', pal: dadP('#5E8A4E', '#3F5F36', BLACK) }, ['我用木头做东西，放在家门口。', 'I make things out of wood to stand outside your front door.'], ['有篱笆、鸟屋、长椅，还有小推车。', 'There is a fence, a birdhouse, a bench and a little barrow.'],
+      [['小鸟住在鸟屋里，每天早上唱歌。', 'The birds live in the birdhouse and sing every morning.'], ['坐在长椅上看看天，真舒服。', 'Sitting on the bench and looking at the sky feels so good.']],
+      [['i1y-a1', '木篱笆', '排', 'picket fence', 120, '🪵', { m: 'fence' }], ['i1y-a2', '鸟屋', '个', 'birdhouse', 160, '🐦', { m: 'birdhouse' }], ['i1y-a3', '长椅', '把', 'bench', 180, '🪑', { m: 'bench' }], ['i1y-a4', '小推车', '辆', 'flower barrow', 200, '🛒', { m: 'barrow' }]]],
+    [['石爷爷', 'Grandpa Shi'], { base: 'dad', pal: dadP('#8A8A92', '#5A5A64', GREY), style: { extra: 'bun', hairCol: GREY } }, ['我用石头做东西，一百年也不会坏。', 'I make things out of stone. They will not break in a hundred years.'], ['有石灯、石桌、石头小路，还有水井。', 'There is a stone lantern, a stone table, a stone path and a well.'],
+      [['石头很重，要慢慢地做。', 'Stone is heavy, so the work must go slowly.'], ['天黑了，石灯就亮了。', 'When it gets dark, the stone lantern lights up.']],
+      [['i1y-b1', '石灯', '个', 'stone lantern', 180, '🏮', { m: 'slantern' }], ['i1y-b2', '石桌', '张', 'stone table and stools', 200, '🪨', { m: 'stools' }], ['i1y-b3', '石头小路', '条', 'stepping-stone path', 120, '👣', { m: 'steps' }], ['i1y-b4', '水井', '口', 'well', 220, '🪣', { m: 'well' }]]],
+    [['于阿姨', 'Aunt Yu'], { base: 'mom', pal: momP('#4F86C6', '#2F5F96', BROWN, '#F7C948') }, ['我的东西最好玩，放在门口，大家看了都高兴。', 'My things are the most fun. Put them by the door and everyone smiles.'], ['有彩旗、风车、稻草人，还有小池塘。', 'There is bunting, a pinwheel, a scarecrow and a little pond.'],
+      [['风一吹，风车就转起来了。', 'When the wind blows, the pinwheel starts to turn.'], ['稻草人站在那里，小鸟不敢来。', 'With the scarecrow standing there, the birds dare not come.']],
+      [['i1y-c1', '彩旗', '串', 'string of bunting', 140, '🎏', { m: 'bunting' }], ['i1y-c2', '风车', '个', 'pinwheel', 120, '🌀', { m: 'pinwheel' }], ['i1y-c3', '稻草人', '个', 'scarecrow', 180, '🧑‍🌾', { m: 'scarecrow' }], ['i1y-c4', '小池塘', '个', 'little pond', 220, '🪷', { m: 'pond' }]]]
+  ]);
+  /* ---------- what is saved ---------- */
+  const all = () => G.street || (G.street = {});
+  const S = isle => all()[isle] || (all()[isle] = { n: 0, cand: null, shops: {} });
+  const own = () => { const s = G.shop || (G.shop = { got: {}, on: {} }); if (!s.off) s.off = {}; if (!s.cut) s.cut = {}; return s; };
+  const dayNo = () => { const d = new Date(); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5); };
+  const lessons = isle => { const r = RANGE[isle], out = []; for (let k = r[0]; k <= r[1]; k++) out.push(k); return out; };
+  const doneL = isle => lessons(isle).filter(n => { try { return B5.prog(n).done; } catch (e) { return false; } });
+  const earned = isle => { const d = doneL(isle).length; return Math.min(KINDS.length, Math.floor(d / 3) + (d >= lessons(isle).length ? 1 : 0)); };
+  const left = sh => Math.max(0, (sh.w || 7) - (dayNo() - sh.d) - (sh.f || 0));
+  const keeper = (isle, kind, k) => FOLK[isle][kind][k];
+  const who = (isle, kind, k) => 'st_' + isle + '_' + kind + k;
+  const price = it => Math.max(1, Math.round(it.p * (1 - .05 * Math.min(10, own().cut[it.id] || 0))));
+  const has = id => !!own().got[id];
+  /* three visitors: from three different shops that are not open yet where there are that many, one keeper of each;
+     when fewer kinds are left, more keepers of the same kind make up the three */
+  function draw(isle) {
+    const st = S(isle);
+    /* visitors stay for the one day: if nobody was asked to stay they have gone by the next day, and three others are there instead */
+    if (st.cand) { if (st.cd == null) st.cd = dayNo(); if (dayNo() <= st.cd) return false; st.cand = null; st.due = st.cd; }
+    if (!st.swap && earned(isle) - st.n <= 0) return false;
+    /* visitors for lessons finished today come tomorrow: the day they were earned is kept, and they are there on the first day after it that the game is opened */
+    if (!st.swap) { const t = dayNo(); if (st.due == null) { st.due = t; saveG(); } if (t <= st.due) return false; }
+    const free = KINDS.filter(k => !st.shops[k]); if (!free.length) return false;
+    const pool = []; free.forEach(k => [0, 1, 2].forEach(i => { if (!(st.swap && st.swap[0] === k && st.swap[1] === i)) pool.push([k, i]); }));
+    const out = []; shuf(free).slice(0, 3).forEach(k => { const c = shuf(pool.filter(p => p[0] === k))[0]; if (c) out.push(c); });
+    shuf(pool).forEach(p => { if (out.length < 3 && !out.some(o => o[0] === p[0] && o[1] === p[1])) out.push(p); });
+    if (!out.length) return false;
+    const d = doneL(isle); st.cand = out; st.cd = dayNo(); st.due = null; st.ls = st.swap ? st.swap[2] : (st.n < 4 && d.length >= st.n * 3 + 3 ? d.slice(st.n * 3, st.n * 3 + 3) : d.slice()); saveG(); return true;
+  }
+  function settle(isle, i) {
+    const st = S(isle), c = st.cand && st.cand[i]; if (!c) return null;
+    const sh = st.shops[c[0]] = { k: c[1], d: dayNo(), f: 0, w: st.swap ? 1 : 7, ls: st.ls || doneL(isle) };
+    if (st.swap) st.swap = null; else st.n++; st.cand = null; st.cd = null; st.ls = null; saveG(); return sh;
+  }
+  /* the daily challenge was done: every shop being built is a day nearer, once a day */
+  function practised() { const t = dayNo(); let any = false; Object.values(all()).forEach(st => Object.values(st.shops || {}).forEach(sh => { if (left(sh) > 0 && sh.fd !== t) { sh.fd = t; sh.f = (sh.f || 0) + 1; any = true; } })); if (any) { saveG(); sig = ''; } return any; }
+  /* ---------- what stands on the terrace ---------- */
+  let V = null, sig = '', tt = 0; const told = {}, ROAM = {};
+  const zBack = sp => sp.box[1] + 8.7;
+  function tagFor(text, col) {
+    const w = Math.max(200, 70 + [...text].length * 44), tx = canvasTex(w, 84, c => { c.fillStyle = col; const r = 30; c.beginPath(); c.moveTo(r, 6); c.lineTo(w - r, 6); c.quadraticCurveTo(w - 6, 6, w - 6, 42); c.quadraticCurveTo(w - 6, 78, w - r, 78); c.lineTo(r, 78); c.quadraticCurveTo(6, 78, 6, 42); c.quadraticCurveTo(6, 6, r, 6); c.fill(); c.fillStyle = '#FFFDF2'; c.font = '700 44px "Noto Sans SC", sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(text, w / 2, 44); });
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, depthTest: false, transparent: true })); s.scale.set(w / 84 * .58, .58, 1); s.renderOrder = 20; return s;
+  }
+  function person(K, col, x, y, z, ry, g) {
+    const c = makeChar(K.base, K.pal, 1, K.style); c.obj.position.set(x, y, z); c.obj.rotation.y = ry; g.add(c.obj); c.home = [x, z, ry];
+    const t = tagFor(K.n[0], col); t.position.set(0, 2.72, 0); c.obj.add(t); c.tag = t; return c;
+  }
+  function lotSign(g, text, x, y, z, col, w) { const sg = signBoard(text, w || Math.max(1.5, [...text].length * .5), .52, col); sg.position.set(x, y + 1, z); g.add(sg); [-1, 1].forEach(k => mk(cyl(.045, .05, 1.05, 6), '#8A6A4A', x + k * ((w || Math.max(1.5, [...text].length * .5)) / 2 - .12), y + .5, z - .02, g)); return sg; }
+  function emptyLot(g, x, y, zb) {
+    const z0 = zb + .9, z1 = zb + 5.6, w = 2.6; mk(box(w * 2 - .3, .02, z1 - z0 - .3), '#C9B48C', x, y + .045, (z0 + z1) / 2, g, false);
+    [[-w, z0], [w, z0], [-w, z1], [w, z1]].forEach(([dx, z]) => mk(cyl(.05, .06, .55, 6), '#8A6A4A', x + dx, y + .3, z, g));
+    [[x - w, z1, x + w, z1], [x - w, z0, x - w, z1], [x + w, z0, x + w, z1]].forEach(([a, b, c, d]) => { const r = mk(cyl(.014, .014, Math.hypot(c - a, d - b), 4), '#E8DCC0', (a + c) / 2, y + .46, (b + d) / 2, g, false); r.rotation.z = Math.PI / 2; r.rotation.order = 'YXZ'; r.rotation.y = -Math.atan2(d - b, c - a); });
+    lotSign(g, '空地', x, y, z1 + .5, '#A8946E', 1.5);
+  }
+  function site(g, x, y, zb, kind, days) {
+    const z0 = zb + .7, z1 = zb + 5.9, w = 2.8, zc = zb + 3.3;
+    mk(box(w * 2, .06, z1 - z0), '#C9B48C', x, y + .05, (z0 + z1) / 2, g, false);
+    /* the first courses of brick, the frame of the house in timber, and scaffolding round it */
+    mk(box(4.6, .5, 4), '#C8793A', x, y + .3, zc, g); mk(box(4.3, .52, 3.7), '#8A6A4A', x, y + .3, zc, g, false);
+    [[-2.1, -1.8], [2.1, -1.8], [-2.1, 1.8], [2.1, 1.8], [0, -1.8], [0, 1.8]].forEach(([dx, dz]) => mk(box(.14, 2.6, .14), '#D9B48A', x + dx, y + 1.8, zc + dz, g));
+    [[0, -1.8, 4.3, .14], [0, 1.8, 4.3, .14], [-2.1, 0, .14, 3.7], [2.1, 0, .14, 3.7]].forEach(([dx, dz, a, b]) => mk(box(a, .14, b), '#D9B48A', x + dx, y + 3.1, zc + dz, g));
+    [-1, 1].forEach(k => { const r = mk(box(.12, 2.5, .12), '#D9B48A', x + k * 1.05, y + 3.9, zc, g); r.rotation.z = k * .98; }); mk(box(.14, .14, 3.9), '#D9B48A', x, y + 4.6, zc, g);
+    [-2.5, 2.5].forEach(dx => [zc + 2.2, zc + .4].forEach(z => mk(cyl(.04, .04, 3.4, 6), '#7A7F88', x + dx, y + 1.7, z, g)));
+    [1.3, 2.5].forEach(h => { mk(box(5.2, .05, .5), '#E3C565', x, y + h, zc + 2.2, g); mk(cyl(.03, .03, 5.2, 6), '#7A7F88', x, y + h + .8, zc + 2.45, g, false).rotation.z = Math.PI / 2; });
+    const ld = new THREE.Group(); ld.position.set(x - 1.7, y, zc + 2.7); ld.rotation.x = -.22; g.add(ld); [-.2, .2].forEach(dx => mk(box(.05, 2.7, .05), '#8A6A4A', dx, 1.35, 0, ld)); for (let i = 0; i < 7; i++) mk(box(.4, .04, .04), '#8A6A4A', 0, .3 + i * .36, 0, ld, false);
+    /* a pile of bricks, planks, a bag of sand and a barrow by the fence */
+    for (let r = 0; r < 3; r++) for (let i = 0; i < 4 - r; i++) mk(box(.36, .16, .2), r % 2 ? '#C8793A' : '#B8683A', x + 1.5 + i * .38 + r * .19, y + .13 + r * .165, z1 - .5, g);
+    [0, 1, 2].forEach(i => mk(box(1.9, .05, .2), '#D9B48A', x - .2, y + .08 + i * .055, z1 - .45 - i * .05, g).rotation.y = i * .05 - .05); const bag = mk(sph(.3, 10), '#E8DCC0', x - 1.9, y + .2, z1 - .55, g); bag.scale.set(1.2, .6, .8);
+    /* a striped barrier along the front and the sign of the shop to come */
+    for (let i = -4; i <= 4; i++) mk(box(.6, .16, .05), i % 2 ? '#F4F1E8' : '#E8574A', x + i * .6, y + .62, z1 + .1, g, false); [-2.7, -1.35, 0, 1.35, 2.7].forEach(dx => mk(cyl(.04, .05, .7, 6), '#8A6A4A', x + dx, y + .35, z1 + .1, g));
+    const K = KIND[kind]; lotSign(g, K[0] + ' · 建造中', x - .7, y, z1 + .75, K[3], 3); lotSign(g, days <= 1 ? '明天开门' : '还有' + days + '天', x + 1.95, y - .12, z1 + .75, '#8A6A4A', 1.9);
+  }
+  function build(isle) {
+    const sp = SP[isle], st = S(isle), zb = zBack(sp), g = new THREE.Group(), night = Life.phase() === 'night'; g.userData.fx = true; sp.scene.add(g);
+    const v = { isle, g, solids: [], cuts: [], keepers: {}, visitors: [], spots: [], spin: [] };
+    KINDS.forEach((kind, i) => { const x = LOTX[i], sh = st.shops[kind], K = KIND[kind];
+      if (!sh) { emptyLot(g, x, Y2, zb); return; }
+      const kp = keeper(isle, kind, sh.k), days = left(sh);
+      if (days > 0) { site(g, x, Y2, zb, kind, days); v.solids.push([x - 2.9, zb + .5, x + 2.9, zb + 6.1]); }
+      else { const b = propFrom('props', K[2], x, Y2, zb + 3.3, BS, 0, g), sg = signBoard(K[0], Math.max(2.2, K[0].length * .85), .8, K[3]); const bb = new THREE.Box3().setFromObject(b);
+        sg.position.set(x, bb.min.y + (bb.max.y - bb.min.y) * .42, bb.max.z + .22); g.add(sg); v.solids.push([bb.min.x - .15, bb.min.z - .15, bb.max.x + .15, bb.max.z + .15]); v.cuts.push({ g: b, w: bb.max.x - bb.min.x, d: bb.max.z - bb.min.z, extra: [sg] });
+        mk(rbox(2.2, .06, 1.1, .03), '#D9CDB4', x, Y2 + .06, bb.max.z + .6, g, false); v.spots.push({ t: 'door', kind, x, z: bb.max.z + 1.1 }); }
+      if (!night) { const c = person(kp, K[3], x + 3.5, Y2, zb + 6.5, -.25, g); v.keepers[kind] = c; v.spots.push({ t: days > 0 ? 'site' : 'keeper', kind, x: x + 3.5, z: zb + 6.5, c }); }
+    });
+    /* the visitors are out walking somewhere on the island, each on their own; where they were is kept while the game is open */
+    if (st.cand) { const key = JSON.stringify(st.cand), R = ROAM[isle] && ROAM[isle].key === key ? ROAM[isle] : (ROAM[isle] = { key, at: [] });
+      st.cand.forEach(([kind, k], i) => { const kp = keeper(isle, kind, k); let at = R.at[i]; if (!at || !okAt(sp, at[0], at[1])) { at = null; for (let t = 0; t < 300 && !at; t++) { const x = sp.box[0] + 4 + Math.random() * (sp.box[2] - sp.box[0] - 8), z = zb + 14 + Math.random() * (26 - zb - 14); if (okAt(sp, x, z) && Math.hypot(x, z - 30) > 7 && !R.at.some(q => q && Math.hypot(q[0] - x, q[1] - z) < 12)) at = [x, z]; } at = R.at[i] = at || [(i - 1) * 3, 24]; }
+        const c = person(kp, KIND[kind][3], at[0], sp.floor(at[0], at[1]), at[1], Math.random() * 6.283, g); c.w = { wait: 1 + Math.random() * 3 }; v.visitors.push(c); v.spots.push({ t: 'visitor', i, kind, k, x: at[0], z: at[1], c }); }); }
+    v.solids.forEach(q => sp.solids.push(q)); sp.cut = sp.cut || []; v.cuts.forEach(q => sp.cut.push(q));
+    return v;
+  }
+  /* level ground a person can stand on: not solid, not water, not up on the terraces */
+  const okAt = (sp, x, z) => { try { return !blocked(x, z, .03) && !FX.wet(x, z) && sp.floor(x, z) < .2; } catch (e) { return false; } };
+  const wayOK = (sp, x0, z0, x1, z1) => { const n = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / .5); for (let i = 1; i <= n; i++) if (!okAt(sp, x0 + (x1 - x0) * i / n, z0 + (z1 - z0) * i / n)) return false; return true; };
+  /* they stroll a few steps, stand a while, and stroll on; when you come close they stop and turn to you */
+  function roamTick(dt) {
+    if (!V || !V.visitors.length || UI.talking) return; const sp = SP[V.isle], me = ME().obj.position, R = ROAM[V.isle];
+    V.spots.forEach(s => { if (s.t !== 'visitor') return; const c = s.c, p = c.obj.position, w = c.w, near = Math.hypot(me.x - p.x, me.z - p.z) < 2.6;
+      if (near) { w.tx = null; w.wait = 1.5; c.play('idle'); let a = Math.atan2(me.x - p.x, me.z - p.z) - c.obj.rotation.y; a = Math.atan2(Math.sin(a), Math.cos(a)); c.obj.rotation.y += a * Math.min(1, dt * 6); return; }
+      if (w.tx == null) { w.wait -= dt; if (w.wait > 0) return; for (let i = 0; i < 4 && w.tx == null; i++) { const a = Math.random() * 6.283, d = 4 + Math.random() * 8, tx = p.x + Math.cos(a) * d, tz = p.z + Math.sin(a) * d; if (wayOK(sp, p.x, p.z, tx, tz)) { w.tx = tx; w.tz = tz; c.play('walk'); } } if (w.tx == null) w.wait = 1.2; return; }
+      const dx = w.tx - p.x, dz = w.tz - p.z, d = Math.hypot(dx, dz), v = 1.35 * dt;
+      if (d <= v) { w.tx = null; w.wait = 2 + Math.random() * 5; c.play('idle'); } else { p.x += dx / d * v; p.z += dz / d * v; p.y = sp.floor(p.x, p.z); let a = Math.atan2(dx, dz) - c.obj.rotation.y; a = Math.atan2(Math.sin(a), Math.cos(a)); c.obj.rotation.y += a * Math.min(1, dt * 8); }
+      s.x = p.x; s.z = p.z; if (R) R.at[s.i] = [p.x, p.z]; });
+  }
+  function clear() { if (!V) return; const sp = SP[V.isle]; if (sp) { sp.solids = sp.solids.filter(q => V.solids.indexOf(q) < 0); if (sp.cut) sp.cut = sp.cut.filter(q => V.cuts.indexOf(q) < 0); sp.scene.remove(V.g); }
+    V.g.traverse(o => { if (o.isSprite && o.material.map) { o.material.map.dispose(); o.material.dispose(); } }); V = null; }
+  const stamp = isle => { const st = S(isle); return isle + '|' + JSON.stringify(st.cand) + '|' + KINDS.map(k => st.shops[k] ? st.shops[k].k + ':' + left(st.shops[k]) : '-').join(',') + '|' + (Life.phase() === 'night' ? 'n' : 'd'); };
+  function tick(dt) {
+    try { petTick(dt); } catch (e) { }
+    if (V) { Object.values(V.keepers).concat(V.visitors).forEach(c => c.mixer.update(dt)); }
+    try { yardTick(dt); } catch (e) { }
+    try { roamTick(dt); } catch (e) { }
+    tt += dt; if (tt < 1 && sig) return; tt = 0;
+    /* on whatever island you are: visitors who are due on any island arrive, and once each time the game is opened you are told where visitors are waiting */
+    if (!(UI.busy || UI.talking) && here && PEOPLE.me) Object.keys(RANGE).forEach(k => { draw(k); const st = S(k); if (st.cand && told[k] !== JSON.stringify(st.cand)) { told[k] = JSON.stringify(st.cand); showToast(`${ISLE[k][0]}今天来了三位新居民！去岛上找找他们吧。`, `Three newcomers are on ${ISLE[k][1]} today! Go and look for them.`, 5200); try { Sfx.play('found'); } catch (e) { } } });
+    const isle = here && RANGE[here.name] && here.raised ? here.name : null;
+    if (!isle) { if (V) { clear(); sig = ''; } return; }
+    if (UI.busy || UI.talking) { if (V && V.isle === isle) return; }
+    const s = stamp(isle); if (s === sig && V && V.isle === isle) return; clear(); sig = s; V = build(isle);
+  }
+  function panel() { const isle = here && RANGE[here.name] ? here.name : null; if (!isle) return null; const st = S(isle); if (st.cand) return ['三位新居民今天在岛上散步：找到他们，请一位住下来', 'Three newcomers are out walking on the island today: find them and ask one to stay']; return null; }
+  /* ---------- talking: visitors, keepers at the building site, keepers at their shops ---------- */
+  function face(c) { const p = ME().obj.position, o = c.obj.position; c.obj.rotation.y = Math.atan2(p.x - o.x, p.z - o.z); ME().obj.rotation.y = Math.atan2(o.x - p.x, o.z - p.z); }
+  const back = c => { if (c && c.home) c.obj.rotation.y = c.home[2]; };
+  const goodsLine = kp => kp.goods.map(id => GOODS[id].zh).join('、');
+  async function meet(sp0) {
+    const isle = V.isle, kp = keeper(isle, sp0.kind, sp0.k), w = who(isle, sp0.kind, sp0.k), K = KIND[sp0.kind]; NAMES[w] = kp.n; face(sp0.c);
+    for (;;) {
+      const c = await talk(w, [[`你好！我是${kp.n[0]}。${kp.hi[0]}`, `Hello! I am ${kp.n[1]}. ${kp.hi[1]}`], [`我想在这个岛上开一家${K[0]}。我只在岛上待今天一天。`, `I would like to open a ${K[1]} on this island. I am only here for today.`]], [['请你住下来！', 'Please stay with us!'], ['你卖什么？', 'What do you sell?'], ['我再想想', 'Let me think']]);
+      if (c === 1) { await talk(w, [[`我的店里有：${goodsLine(kp)}。`, `In my shop there will be: ${kp.goods.map(id => GOODS[id].en).join(', ')}.`], [kp.sell[0], kp.sell[1]]]); continue; }
+      if (c !== 0) { back(sp0.c); return; }
+      const sw = !!S(isle).swap, c2 = await talk(w, [[`真的请${kp.n[0]}住下来吗？另外两位今天就会坐船离开。`, `Shall ${kp.n[1]} really stay? The other two will leave by boat today.`]], [[`是的，请${kp.n[0]}住下来`, 'Yes, please stay'], ['再看看别人', 'Let me see the others']]);
+      if (c2 !== 0) { back(sp0.c); return; }
+      const sh = settle(isle, sp0.i); if (!sh) return; try { Sfx.play('found'); sp0.c.once('Cheer'); } catch (e) { }
+      await talk(w, [['太好了！谢谢你！', 'Wonderful! Thank you!'], sw ? ['我明天就搬进来，后天店就开门。', 'I will move in tomorrow, and the shop opens the day after.'] : [`我的${K[0]}要盖七天。每天做「今日挑战」，可以快一天！`, `My ${K[1]} takes seven days to build. Do the daily challenge and it is a day sooner each time!`]]);
+      sig = ''; tt = 9; return;
+    }
+  }
+  async function siteTalk(sp0) { const isle = V.isle, sh = S(isle).shops[sp0.kind], kp = keeper(isle, sp0.kind, sh.k), w = who(isle, sp0.kind, sh.k), d = left(sh); NAMES[w] = kp.n; face(sp0.c);
+    await talk(w, [[d <= 1 ? `我的${KIND[sp0.kind][0]}明天就开门了！` : `我的${KIND[sp0.kind][0]}还在盖，还有${d}天。`, d <= 1 ? `My ${KIND[sp0.kind][1]} opens tomorrow!` : `My ${KIND[sp0.kind][1]} is still being built: ${d} more days.`], ['每天做「今日挑战」，可以快一天。', 'Do the daily challenge and it is a day sooner each time.'], [`开门以后，我卖${goodsLine(kp)}。`, `When it opens I will sell: ${kp.goods.map(id => GOODS[id].en).join(', ')}.`]]); back(sp0.c); }
+  async function chat(sp0) { const isle = V.isle, sh = S(isle).shops[sp0.kind], kp = keeper(isle, sp0.kind, sh.k), w = who(isle, sp0.kind, sh.k); NAMES[w] = kp.n; face(sp0.c); const l = kp.chat[Math.floor(Math.random() * kp.chat.length)];
+    const c = await talk(w, [l], [['进店看看', 'Look in the shop'], ['再见', 'Goodbye']]); back(sp0.c); if (c === 0) enter(isle, sp0.kind); }
+  /* ---------- the shop: the keeper's goods; a question right is 5% off ---------- */
+  function iconOf(it) {
+    if (it.kind === 'clothes' && it.part !== 'hat') return `<div style="width:54px;height:54px;margin:5px auto;border-radius:${it.part === 'shirt' ? '14px 14px 8px 8px' : '6px'};background:${it.col};border:3px solid #FFF6E2;box-shadow:0 2px 0 rgba(0,0,0,.15)"></div>`;
+    return `<div style="font-size:40px;line-height:64px;height:64px">${it.icon}</div>`;
+  }
+  function enter(isle, kind) {
+    const sh = S(isle).shops[kind]; if (!sh || left(sh) > 0) return; const kp = keeper(isle, kind, sh.k), K = KIND[kind], o = own();
+    $('albumTitle').innerHTML = `${K[0]}<small class="en-only">${K[1]}</small>`;
+    $('albumNote').innerHTML = `店主：${kp.n[0]}　★ ${G.stars}　答对一题，便宜 5%<span class="en-only"> · Keeper: ${kp.n[1]} · each right answer takes 5% off</span>`;
+    const g = $('albumGrid'); g.innerHTML = '';
+    kp.goods.forEach(id => { const it = GOODS[id], got = has(id), cut = o.cut[id] || 0, d = document.createElement('div'); d.className = 'cell' + (got ? ' got' : '');
+      d.innerHTML = `${iconOf(it)}<div class="n">${it.zh}</div><div class="c">${got ? '已经买了 ✓' : (cut ? `★ ${price(it)}（原价 ${it.p}）` : '★ ' + it.p)}</div>`;
+      d.onclick = () => { closeVeil('albumVeil'); buy(isle, kind, it); }; g.appendChild(d); });
+    const out = document.createElement('div'); out.className = 'cell'; out.style.cssText = 'grid-column:1/-1;padding:10px;margin-top:10px;border-top:2px dashed rgba(0,0,0,.12)'; out.innerHTML = `<div class="n">请${kp.n[0]}搬走，换新居民</div><div class="c">要先通过考试<span class="en-only"> · Ask the keeper to move out (an exam first)</span></div>`;
+    out.onclick = () => { closeVeil('albumVeil'); evict(isle, kind); }; g.appendChild(out);
+    $('albumVeil').classList.remove('hidden'); UI.busy = true;
+  }
+  async function buy(isle, kind, it) {
+    const sh = S(isle).shops[kind], kp = keeper(isle, kind, sh.k), w = who(isle, kind, sh.k), o = own(); NAMES[w] = kp.n; const name = `一${it.mw}${it.zh}`;
+    if (has(it.id)) { await talk(w, [[`这${it.mw}${it.zh}你已经有了。`, `You already have this ${it.en}.`], [USE[it.kind][0], USE[it.kind][1]]]); return enter(isle, kind); }
+    let c = await talk(w, [[`这是${name}，${it.p}颗星星。`, `This is a ${it.en}: ${it.p} stars.`], o.cut[it.id] ? [`你答对过${o.cut[it.id]}题，现在只要${price(it)}颗星星。`, `You got ${o.cut[it.id]} right before, so now it is only ${price(it)} stars.`] : ['先回答我的问题吧！答对一题，便宜百分之五。', 'Answer my questions first! Every right answer takes 5% off.']],
+      [[o.cut[it.id] ? '再回答一次，更便宜' : '回答问题', o.cut[it.id] ? 'Answer again for a lower price' : 'Answer the questions'], [`买下（★ ${price(it)}）`, `Buy (★ ${price(it)})`], ['不买了', 'Not now']]);
+    if (c === 0) { const qs = Learn.shopQs(sh.ls && sh.ls.length ? sh.ls : doneL(isle), ASK);
+      if (!qs.length) await talk(w, [['今天没有问题，你直接买吧！', 'No questions today; just buy it!']]);
+      else { const right = await Learn.run(kp.n[0] + '的问题', qs); if (right > (o.cut[it.id] || 0)) { o.cut[it.id] = right; saveG(); }
+        c = await talk(w, [[`你答对了${right}题！${right ? `便宜百分之${Math.min(10, o.cut[it.id]) * 5}，` : ''}现在${name}要${price(it)}颗星星。`, `You got ${right} right! ${right ? Math.min(10, o.cut[it.id]) * 5 + '% off: ' : ''}the ${it.en} is now ${price(it)} stars.`]], [[`买下（★ ${price(it)}）`, `Buy (★ ${price(it)})`], ['不买了', 'Not now']]); c = c === 0 ? 1 : 2; } }
+    if (c === 1) { const p = price(it);
+      if (G.stars < p) { await talk(w, [[`星星不够，还差${p - G.stars}颗。`, `Not enough stars: ${p - G.stars} more to go.`], ['再上课、做「今日挑战」，就有星星了。便宜的价钱我帮你记着！', 'More lessons and the daily challenge bring stars. I will keep your lower price for you!']]); }
+      else { o.seq = (o.seq || 1) + 1; o.got[it.id] = o.seq; setStars(G.stars - p); apply(it); saveG(); try { Sfx.play('found'); } catch (e) { } await talk(w, [[`谢谢！${name}是你的了。`, `Thank you! The ${it.en} is yours.`], [USE[it.kind][0], USE[it.kind][1]]]); } }
+    enter(isle, kind);
+  }
+  const USE = { clothes: ['已经帮你穿上了。在背包里可以换。', 'You are wearing it now. Change it in your bag.'], furniture: ['它会摆在你每个岛的家里。', 'It will stand in your home on every island.'], flower: ['它会摆在你每个岛的家里。', 'It will stand in your home on every island.'], pet: ['它会一直跟着你。在背包里可以换别的宠物。', 'It will follow you everywhere. Choose another pet in your bag.'], build: ['它会摆在你家门口。', 'It will stand outside your front door.'] };
+  function apply(it) { const o = own(); if (it.kind === 'clothes') { o.on[it.part] = it.id; try { Shop.wear(); } catch (e) { } } else if (it.kind === 'pet') { o.pet = it.id; } else { try { if (here) Shop.place(here.name); } catch (e) { } yardSig = ''; } }
+  async function evict(isle, kind) {
+    const st = S(isle), sh = st.shops[kind], kp = keeper(isle, kind, sh.k), w = who(isle, kind, sh.k); NAMES[w] = kp.n;
+    const c = await talk(w, [['你想请我搬走，换一位新居民吗？', 'Would you like me to move out, so that someone new can come?'], [`那要先通过考试：${EXAM}个问题，答对${PASS}个。`, `There is an exam first: ${EXAM} questions, ${PASS} of them right.`]], [['开始考试', 'Start the exam'], ['不换了', 'No, stay']]);
+    if (c !== 0) return enter(isle, kind);
+    const qs = Learn.shopQs(sh.ls && sh.ls.length ? sh.ls : doneL(isle), EXAM), need = Math.min(PASS, Math.ceil(qs.length * .8)), right = qs.length ? await Learn.run('搬家考试', qs) : 0;
+    if (!qs.length || right < need) { await talk(w, [[`答对了${right}题，要答对${need}题才行。复习一下再来吧！`, `${right} right; it takes ${need}. Go over the lessons and try again!`]]); return enter(isle, kind); }
+    const c2 = await talk(w, [['考试通过了！', 'You passed the exam!'], ['我走了以后，会有三位新居民来，你再选一位。买过的东西都留着。', 'When I have gone, three newcomers will come and you choose again. Everything you bought stays yours.']], [['是的，再见', 'Yes, goodbye'], ['不，请留下', 'No, please stay']]);
+    if (c2 !== 0) return enter(isle, kind);
+    st.swap = [kind, sh.k, sh.ls]; delete st.shops[kind]; saveG(); sig = ''; tt = 9; showToast(`${kp.n[0]}搬走了。三位新居民马上就来！`, `${kp.n[1]} has moved out. Three newcomers are on their way!`, 3600);
+  }
+  function nearby(add) {
+    if (!V || !here || V.isle !== here.name) return;
+    V.spots.forEach(s => {
+      if (s.t === 'visitor') add(s.x, s.z, 2.2, '认识' + keeper(V.isle, s.kind, s.k).n[0], 'Meet', () => meet(s), 2);
+      else if (s.t === 'site') add(s.x, s.z, 2.3, '说话', 'Talk', () => siteTalk(s));
+      else if (s.t === 'keeper') add(s.x, s.z, 2.1, '说话', 'Talk', () => chat(s));
+      else if (s.t === 'door') add(s.x, s.z, 2.2, '进' + KIND[s.kind][0], 'Go in', () => { if (Life.phase() === 'night') { showToast('店关门了，店主睡觉了。明天再来吧！', 'The shop is shut and the keeper is asleep. Come again tomorrow!'); return; } enter(V.isle, s.kind); Voice.speak('欢迎光临！'); });
+    });
+  }
+  /* ---------- what was bought, in use ---------- */
+  const clothes = () => Object.values(GOODS).filter(it => it.kind === 'clothes');
+  const hat = (kind, h, col) => { if (HAT[kind]) HAT[kind](h, col); };
+  const mine = kinds => Object.values(GOODS).filter(it => kinds.indexOf(it.kind) >= 0 && has(it.id)).sort((a, b) => own().got[a.id] - own().got[b.id]);
+  /* in a home: things for the floor along the front edge and the side walls, pots along the back wall and by the door */
+  function furnish(sp, g) {
+    const b = sp.box, o = own(), free = (x, z, r) => !sp.solids.some(([a, c, e, f]) => x + r > a && x - r < e && z + r > c && z - r < f);
+    const F = [], P = [], rug = o.got.rug ? [b[0] + 1.1, b[3] - 5.1, b[0] + 4.1, b[3] - 3.1] : null, clear = (x, z) => !rug || !(x > rug[0] && x < rug[2] && z > rug[1] && z < rug[3]);
+    [1.7, .25, -1.2, -2.65].forEach(z => { F.push([b[0] + .85, z, .9]); F.push([b[2] - .85, z, -.9]); }); [-1.2, -2.65, .25, 1.7].forEach(z => { F.push([b[0] + 2.3, z, .5]); F.push([b[2] - 2.3, z, -.5]); });   /* down the two side walls first, then a second column inside them; the middle of the room stays clear */
+    for (let x = b[0] + 1; x <= b[2] - 1; x += .95) P.push([x, b[1] + .75, 0]);
+    const put = (list, slots, r, make) => { let i = 0; list.forEach(it => { if (o.off[it.id]) return; while (i < slots.length && !(free(slots[i][0], slots[i][1], r) && clear(slots[i][0], slots[i][1]))) i++; if (i >= slots.length) return; const [x, z, ry] = slots[i++], q = new THREE.Group(); q.position.set(x, 0, z); q.rotation.y = ry; g.add(q); make(it, q); }); };
+    put(mine(['furniture']), F, .5, (it, q) => HOME[it.m](q)); put(mine(['flower']), P, .28, (it, q) => { q.scale.setScalar(1.25); POT[it.m](q); });
+  }
+  /* outside the front door of the home on every island */
+  const DOORS = { town: () => [SP.town.homeDoor.x, SP.town.homeDoor.z], isle1: () => [-20, 13], isle3: () => [-14.3, 26.2], isle4: () => [8.5, 21.2] };
+  let yard = null, yardSig = ''; const yardSlots = {};
+  function yardTick(dt) {
+    if (yard && yard.spin.length) yard.spin.forEach(w => { w.rotation.z -= dt * 2.4; });
+    const name = here && DOORS[here.name] ? here.name : null, list = name ? mine(['build']).filter(it => !own().off[it.id]) : [], s = name ? name + '|' + list.map(it => it.id).join(',') : '';
+    if (s === yardSig) return; yardSig = s; if (yard) { const sp = SP[yard.name]; if (sp) sp.scene.remove(yard.g); yard = null; } if (!name || !list.length) return;
+    const sp = SP[name], [dx, dz] = DOORS[name](), g = new THREE.Group(); g.userData.fx = true; g.userData.yard = true; sp.scene.add(g); yard = { name, g, spin: [] };
+    /* places on the grass near the door, nearest first, clear of the path to the door, of flower beds, water and anything solid, and of each other */
+    const lawn = (x, z) => { if (name === 'town') return true; try { const h = groundAt(sp, x, z); return h > .015 && h < .052; } catch (e) { return true; } };
+    const fits = (x, z) => { const y = sp.floor(x, z); for (let i = 0; i < 8; i++) { const a = i * .785, px = x + Math.cos(a) * .8, pz = z + Math.sin(a) * .8; if (blockedIn(sp, px, pz) || FX.wet(px, pz) || Math.abs(sp.floor(px, pz) - y) > .04) return false; } if (!lawn(x, z)) return false; for (let i = 0; i < 4; i++) if (!lawn(x + Math.cos(i * 1.571 + .4) * .8, z + Math.sin(i * 1.571 + .4) * .8)) return false; return true; };
+    let slots = yardSlots[name]; if (!slots) { slots = yardSlots[name] = []; const cands = []; for (let a = -10; a <= 10; a += .7) for (let c = .2; c <= 9; c += .7) if (Math.abs(a) > 1.7) cands.push([dx + a, dz + c, Math.hypot(a, c * 1.2)]);
+    cands.sort((p, q) => p[2] - q[2]); for (let i = 0, tried = 0; i < cands.length && slots.length < 12 && tried < 420; i++) { const c = cands[i]; if (slots.some(q => Math.hypot(q[0] - c[0], q[1] - c[1]) < 1.75)) continue; tried++; if (fits(c[0], c[1])) slots.push(c); } }   /* looked for once on each island; the ground does not change */
+    list.forEach((it, i) => { if (i >= slots.length) return; const [x, z] = slots[i], q = new THREE.Group(); q.position.set(x, sp.floor(x, z), z); q.rotation.y = it.m === 'fence' || it.m === 'bunting' || it.m === 'bench' ? 0 : (x < dx ? .3 : -.3); g.add(q); YARD[it.m](q); if (q.userData.spin) yard.spin.push(q.userData.spin); });
+  }
+  const blockedIn = (sp, x, z) => sp.solids.some(([a, b, c, d]) => x > a && x < c && z > b && z < d);
+  /* the pet that was chosen walks behind you, and waits beside you when you stand still */
+  let pet = null;
+  function petTick(dt) {
+    const id = own().pet, it = id && GOODS[id], ok = !!(it && has(id) && here && here.scene && !UI.ride && (here.sky || /home/.test(here.name)));
+    if (!ok) { if (pet) pet.g.visible = false; return; }
+    if (!pet || pet.id !== id) { if (pet && pet.g.parent) pet.g.parent.remove(pet.g); const g = new THREE.Group(), q = new THREE.Group(); g.userData.fx = true; g.userData.pet = id; q.scale.setScalar(it.s || 1); g.add(q); it.make(q); pet = { id, g, q, legs: q.userData.zooLegs || [], t: 0, space: null }; }
+    const me = ME().obj, p = pet.g.position; if (pet.g.parent !== here.scene) { here.scene.add(pet.g); pet.space = null; }
+    pet.g.visible = me.visible !== false;
+    const tx = me.position.x - Math.sin(me.rotation.y) * 1.15 + Math.cos(me.rotation.y) * .55, tz = me.position.z - Math.cos(me.rotation.y) * 1.15 - Math.sin(me.rotation.y) * .55;
+    let dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+    if (pet.space !== here.name || d > 9) { pet.space = here.name; p.set(tx, 0, tz); d = 0; }
+    let moving = false; if (d > .35) { const v = Math.min(5.2, 1.2 + d * 2.6) * dt, k = Math.min(1, v / d), nx = p.x + dx * k, nz = p.z + dz * k; if (!FX.wet(nx, nz)) { p.x = nx; p.z = nz; moving = true; let a = Math.atan2(dx, dz) - pet.g.rotation.y; a = Math.atan2(Math.sin(a), Math.cos(a)); pet.g.rotation.y += a * Math.min(1, dt * 9); } }
+    else { let a = me.rotation.y - pet.g.rotation.y; a = Math.atan2(Math.sin(a), Math.cos(a)); pet.g.rotation.y += a * Math.min(1, dt * 3); }
+    let y = 0; try { y = here.floor(p.x, p.z); } catch (e) { } p.y += (y - p.y) * Math.min(1, dt * 12);
+    pet.t += dt * (moving ? 11 : 0); const sw = moving ? .55 : 0; pet.legs.forEach(l => { if (!l || !l.p) return; const a = Math.sin(pet.t + (l.ph || 0) * Math.PI) * sw; l.p.rotation.x += (a - l.p.rotation.x) * Math.min(1, dt * 14); if (l.k) l.k.rotation.x += (Math.max(0, -a) * .8 - l.k.rotation.x) * Math.min(1, dt * 14); });
+    pet.q.position.y = moving && it.hop ? Math.abs(Math.sin(pet.t * .5)) * .14 : 0;
+  }
+  /* the pages in the bag for what came from the street: clothes to put on, things to set out or put away, the pet to walk with */
+  function rows(g) {
+    const o = own(), head = (zh, en, note) => { const d = document.createElement('div'); d.style.cssText = 'grid-column:1/-1;text-align:left;padding:12px 6px 2px;font-weight:700;font-size:17px;border-top:2px dashed rgba(0,0,0,.12);margin-top:8px'; d.innerHTML = zh + '<small class="en-only"> ' + en + '</small>' + (note ? '<div style="font-weight:400;font-size:13px;opacity:.75">' + note + '</div>' : ''); g.appendChild(d); };
+    const cell = (it, state, fn) => { const d = document.createElement('div'); d.className = 'cell got'; d.innerHTML = `${iconOf(it)}<div class="n">${it.zh}</div><div class="c">${state}</div>`; d.onclick = () => { fn(); saveG(); try { Voice.speak(it.zh, .7); } catch (e) { } openBag(); }; g.appendChild(d); };
+    const cl = mine(['clothes']), hm = mine(['furniture', 'flower']), yd = mine(['build']), pt = mine(['pet']);
+    if (cl.length) { head('商店街买的衣服', 'Clothes from the shop street', '点一下穿上，再点一下脱掉。<span class="en-only"> Tap to wear, tap again to take off.</span>'); cl.forEach(it => cell(it, o.on[it.part] === it.id ? '穿着 ✓' : '点一下穿上', () => { o.on[it.part] = o.on[it.part] === it.id ? null : it.id; Shop.wear(); })); }
+    if (pt.length) { head('我的宠物', 'My pets', '点一下，它就跟着你。<span class="en-only"> Tap one and it follows you.</span>'); pt.forEach(it => cell(it, o.pet === it.id ? '跟着你 ✓' : '在家休息', () => { o.pet = o.pet === it.id ? null : it.id; })); }
+    if (hm.length) { head('商店街买的家具和花', 'Furniture and flowers from the shop street', '点一下收起来，再点一下摆出来。<span class="en-only"> Tap to put away, tap again to set out.</span>'); hm.forEach(it => cell(it, o.off[it.id] ? '收起来了' : '摆在家里 ✓', () => { if (o.off[it.id]) delete o.off[it.id]; else o.off[it.id] = 1; try { if (here) Shop.place(here.name); } catch (e) { } })); }
+    if (yd.length) { head('家门口的东西', 'Things outside your door', '点一下收起来，再点一下摆出来。<span class="en-only"> Tap to put away, tap again to set out.</span>'); yd.forEach(it => cell(it, o.off[it.id] ? '收起来了' : '摆在门口 ✓', () => { if (o.off[it.id]) delete o.off[it.id]; else o.off[it.id] = 1; yardSig = ''; })); }
+  }
+  return { tick, nearby, panel, practised, rows, furnish, clothes, hat, GOODS, FOLK, KIND, KINDS, RANGE, HAT, POT, HOME, YARD, dbg: { S, draw, settle, left, earned, enter, build, clear, meet, siteTalk, chat, buy, evict, keeper, price, own, state: () => V, reset: () => { sig = ''; tt = 9; } } };
 })();
 /* ---------- Backup code: the whole game in one piece of text ----------
    Progress lives only in this browser. The code made here holds every saved thing (players, stars, lessons, what each
@@ -9095,7 +9580,7 @@ async function sectionDone() {
 }
 function questDone() {
   addFriend('mom', 30); addFriend('dad', 30); setStars(G.stars + 100); markTarget();
-  reward('第一课的任务完成了！', '得到 100 颗小星星，妈妈和爸爸的好感度各 +30。第二批会开放：邀请新邻居、花店、宠物店、衣服店、家具店和建材店。');
+  reward('第一课的任务完成了！', '得到 100 颗小星星，妈妈和爸爸的好感度各 +30。每学完三课，就有新居民想搬来开店！');
 }
 function fly(g, id) {
   const v = g.getWorldPosition(new THREE.Vector3()); v.y += 1; v.project(camera);
@@ -9202,7 +9687,7 @@ function openBag() {
   if (metHome) ITEM_ORDER.forEach(id => { const got = !!G.found[id], it = ITEMS[id], d = document.createElement('div'); d.className = 'cell' + (got ? ' got' : '');
     d.innerHTML = `<img src="${thumb(id)}" alt="" style="width:64px;height:64px;object-fit:contain;${got ? '' : 'filter:brightness(0);opacity:.15'}"><div class="n">${got ? it.zh : '？'}</div><div class="c">${got ? VOCAB[it.zh][0] : ''}</div>`;
     if (got) d.onclick = () => Voice.speak(it.zh, .6); g.appendChild(d); });
-  try { if (here && here.sky) Photo.rows(g); } catch (e) { } Life.bagRows(g); storyRows(g); try { Dex.rows(g); } catch (e) { } try { Errand.rows(g); } catch (e) { } try { Festival.rows(g); } catch (e) { } try { Shop.rows(g); } catch (e) { } Learn.rows(g); try { Backup.rows(g); } catch (e) { }
+  try { if (here && here.sky) Photo.rows(g); } catch (e) { } Life.bagRows(g); storyRows(g); try { Dex.rows(g); } catch (e) { } try { Errand.rows(g); } catch (e) { } try { Festival.rows(g); } catch (e) { } try { Shop.rows(g); } catch (e) { } try { Street.rows(g); } catch (e) { } Learn.rows(g); try { Backup.rows(g); } catch (e) { }
   if (!g.children.length) g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:18px 6px;line-height:1.7">背包还是空的。<br>听完故事、做完活动，就会有东西放进来哦！<span class="en-only"><br>Your bag is empty. Finish stories and activities to fill it!</span></div>';
   $('albumVeil').classList.remove('hidden'); UI.busy = true;
 }
@@ -9235,7 +9720,7 @@ function nearby() {
     add(T.museumDoor.x, T.museumDoor.z, 3, '博物馆', 'Museum', openMuseum);
     Object.entries(T.shops).forEach(([k, s]) => {
       if (k === 'market') { if (G.quest !== 2) add(s.x, s.z, 3, '进超市', 'Go in', () => { if (G.quest < 3) { talk('mom', [['超市要和妈妈一起去哦。先跟我说说话吧！', "Let's go to the supermarket together. Talk to me first!"]]); return; } enterMarket(); }); }
-      else add(s.x, s.z, 3, s.name, s.en, () => showToast(`${s.name}还没开门，第二批开放！`, `The ${s.en} opens in the next update.`));
+      else add(s.x, s.z, 3, s.name, s.en, () => showToast(`${s.name}还在准备，新居民很快就来！`, `The ${s.en} is getting ready; its keeper is on the way.`));
     });
     if (G.quest === 2) { const m = T.shops.market; add(m.x, m.z + 1, 6, '看招牌', 'Look at the sign', () => findThing('chaoshi')); }
     const p = T.pond, dp = Math.hypot(me.x - p.x, me.z - p.z); if (dp < p.r + 2.4) list.push({ d: dp - p.r, zh: '钓鱼', en: 'Fish', fn: startFishing });
@@ -9258,6 +9743,7 @@ function nearby() {
   if (here.name === 'isle4') Isle4.nearby(add);
   if (here.name === 'mirror4') B4b.nearbyHall(add);
   try { Festival.nearby(add); } catch (e) { }
+  try { Street.nearby(add); } catch (e) { }
   if (here.name === 'moon4') B4f.nearbyMoon(add);
   if (here.name === 'home') {
     add(0, 5, 2.4, '出去', 'Go out', () => { const b = UI.back; UI.back = null; if (b) goTo(b.space, b.x, b.z, 0); else goTo('town', SP.town.homeDoor.x, SP.town.homeDoor.z + 1.6, 0); });
@@ -9797,10 +10283,12 @@ const B5 = (() => {
     here_build = sp; W.scene = sp.scene; const S = sp.scene;
     // the stream for Lesson 4: it comes over the cliff on the west side and runs south
     const SX = -36.5, Z0 = -9.5, Z1 = 34; P.stream = { x: SX, z0: Z0, z1: Z1, w: 3.2 };
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(P.stream.w, Z1 - Z0), new THREE.MeshStandardMaterial({ color: lin('#5FAAD8'), roughness: .25, transparent: true, opacity: .92 }));
-    water.rotation.x = -Math.PI / 2; water.position.set(SX, .045, (Z0 + Z1) / 2); S.add(water); FX.water(water);
+    /* the stream keeps its width down to the beach, then opens out over the last few metres and runs into the sea through a proper mouth */
+    const ZF = 27, wideAt = z => P.stream.w * (1 + Math.max(0, (z - ZF) / (Z1 - ZF)) * .95), sg = new THREE.PlaneGeometry(P.stream.w, Z1 - Z0, 1, 44); { const pa = sg.attributes.position; for (let i = 0; i < pa.count; i++) pa.setX(i, pa.getX(i) * wideAt((Z0 + Z1) / 2 - pa.getY(i)) / P.stream.w); }
+    const water = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: lin('#5FAAD8'), roughness: .25, transparent: true, opacity: .92 }));
+    water.rotation.x = -Math.PI / 2; water.position.set(SX, .045, (Z0 + Z1) / 2); S.add(water); FX.water(water); riverMouth(SX, Z1, 0, 1, wideAt(Z1), '#5FAAD8', .045, .03);
     const fall = mk(new THREE.PlaneGeometry(P.stream.w, TOP), new THREE.MeshStandardMaterial({ color: lin('#8FCBEF'), roughness: .2 }), SX, TOP / 2, CLIFF_Z + .32, null, false); FX.water(fall, { flow: 1 });
-    for (let z = Z0 + 1; z < Z1; z += 1.6) [-1, 1].forEach(k => mk(new THREE.DodecahedronGeometry(.32 + Math.random() * .15, 0), '#B9B2A2', SX + k * (P.stream.w / 2 + .25), .15, z + Math.random() * .6));
+    for (let z = Z0 + 1; z < Z1 - 1.5; z += 1.6) [-1, 1].forEach(k => mk(new THREE.DodecahedronGeometry(.32 + Math.random() * .15, 0), '#B9B2A2', SX + k * (wideAt(z) / 2 + .25), .15, z + Math.random() * .6));
     /* the stream has a source now: a spring among rocks on the terrace, a narrow brook widening to the edge, then the fall */
     { const zS = -22, zE = CLIFF_Z + .32, L = zE - zS, wAt = t => 1.3 + (P.stream.w - 1.3) * t, wmat = () => new THREE.MeshStandardMaterial({ color: lin('#5FAAD8'), roughness: .25, transparent: true, opacity: .92 });
       const g = new THREE.PlaneGeometry(1, L, 1, 10), pa = g.attributes.position; for (let i = 0; i < pa.count; i++) pa.setX(i, pa.getX(i) * wAt(.5 - pa.getY(i) / L));
@@ -11215,7 +11703,7 @@ const Isle1 = (() => {
       const m = mk(g, col, 0, 0, 0, null, false); if (water) FX.water(m); return m; };
     const sy = Z.stream[1], brook = [[hx - 4.6, hz + 1.8, 1.5, 1.86], [hx - 5.6, hz + 2.3, 1.7, 1.36], [hx - 6.8, hz + 2.9, 1.9, .74], [hx - 8.3, hz + 3.4, 2.2, .22], [hx - 10.2, sy, 2.7, .07], [Z.stream[0] + 15.6, sy, 3.3, .055], [Z.stream[0] + 14, sy, 3.4, .055]];
     const wx = Z.stream[0] - 15, river = [[wx + 2, sy, 3.4, .055], [wx - .2, sy + .5, 3.5, .055], [wx - 1.6, sy + 3.4, 3.7, .055], [wx - 1.8, sy + 9, 4, .055], [wx - 1.6, sy + 15, 4.4, .055], [wx - 1.8, sy + 21, 4.8, .055], [wx - 3, sy + 25.5, 5.4, .055], [wx - 6, sy + 28.2, 6.2, .04], [wx - 8.75, sy + 29.4, 7, .012]];   /* it ends at the water's edge: the sea itself is the rest */   /* down the west side with lawn on both banks, then one smooth turn west across the beach, opening steadily into the sea */
-    ribbon(river.map(q => [q[0], q[1], q[2] + .9, Math.max(.04, q[3] - .012)]).slice(0, 7), '#E9D9B4', false, false);
+    ribbon(river.map((q, i) => [q[0], q[1], q[2] + .9 + Math.max(0, i - 5) * .5, Math.max(.03, q[3] - .012)]).slice(0, 8), '#E9D9B4', false, false);
     ribbon(river, '#7FC4E8', true, true);
     ribbon(brook, '#7FC4E8', true, false);
     /* the spring: a little pool among stones, high on the slope */
@@ -11227,8 +11715,11 @@ const Isle1 = (() => {
     const flowOn = (pts, secs, alpha, rep) => { const tex = streaks(); tex.repeat.set(1, rep); const m = ribbon(pts.map(q => [q[0], q[1], q[2] * .82, q[3] + .014]), 0, false, false, new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: alpha, depthWrite: false })); gsap.to(tex.offset, { y: -1, duration: secs, repeat: -1, ease: 'none' }); return m; };
     flowOn(brook, 2.2, .75, .22); flowOn([[Z.stream[0] + 15, sy, 3.4, .055], [Z.stream[0], sy, 3.4, .055], [wx, sy, 3.4, .055]], 7, .4, .12); flowOn(river, 9, .42, .1);
     [[hx - 8.9, hz + 3.5, .5], [hx - 9.6, sy + .5, .42], [hx - 9.3, sy - .5, .36], [hx - 10.4, sy + .1, .3]].forEach(([x, z, r]) => { const f = new THREE.Mesh(sph(r, 8), new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: .8 })); f.scale.y = .35; f.position.set(x, .14, z); f.userData.fx = true; W.scene.add(f); gsap.to(f.scale, { x: 1.25, z: 1.25, duration: .7 + r, yoyo: true, repeat: -1, ease: 'sine.inOut' }); });
-    { const fanT = canvasTex(256, 256, c => { const g2 = c.createRadialGradient(128, 128, 8, 128, 128, 126); g2.addColorStop(0, 'rgba(255,255,255,.75)'); g2.addColorStop(.45, 'rgba(200,236,250,.5)'); g2.addColorStop(1, 'rgba(160,220,245,0)'); c.fillStyle = g2; c.fillRect(0, 0, 256, 256); });
-      const fan = new THREE.Mesh(new THREE.CircleGeometry(11, 28), new THREE.MeshBasicMaterial({ map: fanT, transparent: true, depthWrite: false })); fan.rotation.x = -Math.PI / 2; fan.scale.set(.9, .62, 1); fan.position.set(wx - 11.2, -.05, sy + 30.2); fan.userData.fx = true; fan.renderOrder = 1; W.scene.add(fan); gsap.to(fan.scale, { x: 1.02, y: .7, duration: 3.2, yoyo: true, repeat: -1, ease: 'sine.inOut' }); }
+    /* The mouth. The river does not stop at a straight edge: it runs out between two low sand spits and ends in a rounded
+       tongue of its own paler water lying on the sea, which thins away to nothing at its rim; lines of foam keep
+       spreading out from where the two waters meet, and there are stones and reeds on the banks. */
+    /* the mouth: see riverMouth */
+    { const E = river[river.length - 1], P0 = river[river.length - 2], dl = Math.hypot(E[0] - P0[0], E[1] - P0[1]) || 1; riverMouth(E[0], E[1], (E[0] - P0[0]) / dl, (E[1] - P0[1]) / dl, E[2], '#7FC4E8', E[3], -.08); }
     [[wx - 4.3, sy + 6], [wx + .7, sy + 11], [wx - 4.6, sy + 17], [wx + .9, sy + 23]].forEach(([x, z], i) => { const rk = mk(sph(.3 + (i % 2) * .12, 6), '#A8A193', x, .12, z, null, false); rk.scale.y = .6; });
     sign('农场', Z.farm[0] - 5.4, Z.farm[1] + 1.4, '#7DA35A'); sign('小溪', Z.stream[0] + 13, Z.stream[1] + 3, '#4F86C6'); sign('草地', Z.meadow[0] - 6.6, Z.meadow[1] - 5.4, '#5E9A57'); sign('日出山坡', Z.hill[0] + 11, Z.hill[1] + 4.6, '#F28C28', 2.2);
     // trees and flowers
@@ -13330,7 +13821,7 @@ const IHome = (() => {
     add(-3.4, -3, 1.8, '睡一觉', 'Have a sleep', sleep, 0);
     const k = momOf(isle), c = PEOPLE[k]; if (c && c.space === here.name) add(c.obj.position.x, c.obj.position.z, 2.6, '说话', 'Talk', () => talk(k, [['这里是我们的家。累了就睡一觉吧！', 'This is our home. Have a sleep whenever you are tired!']]), 0);
   }
-  return { nearby, due, welcome, DOOR };
+  return { nearby, due, welcome, DOOR, enter };
 })();
 /* =====================================================================
    Book 3 island: a village between hills, a lake and the sea. Built the first time you sail there.
@@ -13384,7 +13875,7 @@ const Isle3 = (() => {
     { const lx = Z.lake[0], lz = Z.lake[1];
       FX.pads(W.scene, lx, lz, 4.4, .125);
       FX.koi(W.scene, lx, lz, 4.3, .13); } sp.solids.push([Z.lake[0] - 5.6, Z.lake[1] - 5.6, Z.lake[0] + 5.6, Z.lake[1] + 5.6]); sign('湖', Z.lake[0] + 7, Z.lake[1] + 2, '#4F86C6');
-    FX.water(plane(4, 60.5, '#6FB7DA', Z.river[0], .1, Z.river[1] - .25)); sp.solids.push([Z.river[0] - 2, -30.5, Z.river[0] + 2, 31]); sp.fallX = [Z.river[0] - 2, Z.river[0] + 2];
+    FX.water(plane(4, 60.5, '#6FB7DA', Z.river[0], .1, Z.river[1] - .25)); sp.solids.push([Z.river[0] - 2, -30.5, Z.river[0] + 2, 31]); riverReach(Z.river[0], 29.9, Z.river[0], 37.4, 4, 6.6, '#6FB7DA', .1, -.08, sp.solids);   /* it used to stop on the lawn, short of the shore */ sp.fallX = [Z.river[0] - 2, Z.river[0] + 2];
     { const fall = mk(new THREE.PlaneGeometry(4, 2.4), new THREE.MeshStandardMaterial({ color: lin('#8FCBEF'), roughness: .2 }), Z.river[0], 1.2, -30.36, null, false); FX.water(fall, { flow: 1 });
       FX.water(plane(4, 3.2, '#6FB7DA', Z.river[0], 2.49, -32.1));
       [[-2.2, -29.8, .45, .15], [2.2, -29.7, .5, .15], [-1.2, -29.9, .3, .12], [-2, -33.6, .5, 2.5], [0, -33.9, .6, 2.5], [2, -33.6, .5, 2.5]].forEach(([dx, z, r, y], i) => { mk(sph(r, 8), i % 2 ? '#9A9A92' : '#8A8E96', Z.river[0] + dx, y, z).scale.y = .7; }); } sign('小河', Z.river[0] - 3.6, -4, '#4F86C6');
@@ -14608,6 +15099,12 @@ const B4c = (() => {
   function build(S) {
     const sx = -24, sz = 26.4; Q.s = { x: sx, z: sz };
     FX.water(mk(new THREE.PlaneGeometry(24, 3), '#6FB7DA', sx, .1, sz, null, false)).rotation.x = -Math.PI / 2; I().solids.push([sx - 12, sz - 1.5, sx + 12, sz + 1.5]);
+    /* the stream used to be a strip cut off at both ends. Now it rises in a spring at the foot of the hill to the east and runs out to the sea in the west. */
+    riverReach(sx - 11.9, sz, sx - 19.4, sz, 3, 5.2, '#6FB7DA', .1, -.08, I().solids);
+    { const ex = sx + 12.4, pool = mk(new THREE.CircleGeometry(1.75, 26), '#6FB7DA', ex, .1, sz, null, false); pool.rotation.x = -Math.PI / 2; FX.water(pool); I().solids.push([ex - 1.8, sz - 1.8, ex + 1.8, sz + 1.8]);
+      for (let k = 0; k < 9; k++) { const a = -1.9 + k * .475; const rk = mk(sph(.42 + (k % 3) * .12, 6), k % 2 ? '#9A948A' : '#B5AFA3', ex + Math.cos(a) * 1.95, .2 + (k % 3) * .06, sz + Math.sin(a) * 1.95, null, false); rk.scale.y = .75; }
+      [[.9, .5, .7], [1.4, -.4, .6], [1.9, .1, .85]].forEach(([a, b, r]) => mk(sph(r, 7), '#8F8A80', ex + a, r * .6, sz + b, null, false).scale.set(1.1, .8, 1));
+      [[-.2, .3, .3], [.2, -.3, .24]].forEach(([a, b, r]) => { const f = new THREE.Mesh(sph(r, 8), new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: .75 })); f.scale.y = .35; f.position.set(ex + .7 + a, .16, sz + b); f.userData.fx = true; W.scene.add(f); gsap.to(f.scale, { x: 1.3, z: 1.3, duration: .8 + r, yoyo: true, repeat: -1, ease: 'sine.inOut' }); }); }
     [[-1.4, -1.2], [1.2, 1.1], [0, 0]].forEach(([dx, dz]) => mk(sph(.25, 8), '#9A9A92', sx + dx * .3, .14, sz + dz, null, false));
     Q.cow = new THREE.Group(); Q.cow.position.set(sx - 3.4, 0, sz - 2.4); Q.cow.rotation.y = -Math.PI / 3; S.add(Q.cow); cow(Q.cow); prop('laoniu', Q.cow);
     const tr = new THREE.Group(); tr.position.set(sx + 6.6, 0, sz - 2.6); S.add(tr); mk(cyl(.2, .3, 2.6, 8), '#8A6A4A', 0, 1.3, 0, tr); mk(sph(1.2, 12), '#5EA94E', 0, 3, 0, tr); I().solids.push([sx + 6.2, sz - 3, sx + 7, sz - 2.2]);   // further east: it used to hide the bench where Grandma's family sits in the sun
