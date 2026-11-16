@@ -10594,7 +10594,7 @@ const Intro = (() => {
   const portrait = vest => `<svg class="face" viewBox="0 0 120 120"><path d="M20 120 Q22 80 60 78 Q98 80 100 120 Z" fill="#A97A50"/><path d="M30 120 Q32 92 50 86 L60 104 L70 86 Q88 92 90 120 Z" fill="${vest}"/>${OTTER_FACE}</svg>`;   // the body rises to meet the head
   const WHO = { bobo: ['波波', 'Bobo', '#4F86C6', portrait('#4F86C6')], lang: ['浪浪', 'Langlang', '#E8843A', portrait('#E8843A')], capt: ['船长', 'Captain', '#F3B23A', CAPT()] };
   const BOAT = `<svg class="boat" viewBox="0 0 340 200"><rect x="160" y="10" width="8" height="120" fill="#8A6A4A"/><path d="M168 18 L168 120 L250 120 Z" fill="#FFFFFF" stroke="#DDD"/><path d="M160 30 L160 120 L96 120 Z" fill="#F6F2E8" stroke="#DDD"/><path d="M30 130 L310 130 L270 180 L70 180 Z" fill="#E8574A"/><rect x="30" y="126" width="280" height="10" rx="4" fill="#FFFFFF"/><circle cx="110" cy="155" r="8" fill="#BFE3F2" stroke="#fff" stroke-width="3"/><circle cx="170" cy="155" r="8" fill="#BFE3F2" stroke="#fff" stroke-width="3"/><circle cx="230" cy="155" r="8" fill="#BFE3F2" stroke="#fff" stroke-width="3"/></svg>`;
-  let root, next = null;
+  let root, next = null, stepN = 0, stepAt = '';
   function css() { if (!document.getElementById('introCss')) { const st = document.createElement('style'); st.id = 'introCss'; st.textContent = CSS; document.head.appendChild(st); } }
   function el() {
     css(); root = document.createElement('section'); root.id = 'intro';
@@ -10603,12 +10603,14 @@ const Intro = (() => {
       <div class="stage" id="introStage"></div><div class="choicesI" id="introChoices"></div>
       <div class="talkI" id="introTalk"><span id="introFace"></span><span class="whoI" id="introWho"></span><div class="sayI" id="introSay" lang="zh-Hans"></div><div class="en-only" id="introEn" style="color:var(--ink-soft);margin-top:4px"></div><span class="moreI">▼</span></div>`;
     document.body.appendChild(root);
+    { const note = document.createElement('div'), my = root; note.style.cssText = 'position:absolute;left:6px;top:4px;z-index:5;font:10px/1.2 monospace;color:#fff;background:rgba(0,0,0,.5);padding:1px 5px;border-radius:5px;pointer-events:none'; root.appendChild(note); stepN = 0; stepAt = 'start'; let taps = 0; root.addEventListener('pointerdown', () => taps++, true);
+      const show = () => { if (!my.isConnected) return; try { const t = my.querySelector('#introTalk'), r = t.getBoundingClientRect(), c = [...my.querySelectorAll('#introChoices button, #introStage button')].length; note.textContent = 'step ' + stepN + ' ' + stepAt + ' | talk ' + Math.round(r.top) + '-' + Math.round(r.bottom) + (my.classList.contains('panel') ? ' panel' : '') + ' | wait ' + (next ? 1 : 0) + ' | btn ' + c + ' | tap ' + taps + ' | ' + innerWidth + 'x' + innerHeight; } catch (e) { note.textContent = 'step ' + stepN + ' ' + stepAt + ' | ' + e.message; } setTimeout(show, 400); }; show(); }
     root.querySelector('#introTalk').onclick = () => { Sfx.init(); if (next) { const f = next; next = null; f(); } };
   }
   const fill = s => s.replace(/\{name\}/g, G.name || '');
   function speaker(who) { root.querySelectorAll('.otter').forEach(o => o.classList.toggle('talking', o.dataset.who === who)); const [zh, en, col, face] = WHO[who]; root.querySelector('#introFace').innerHTML = face; const w = root.querySelector('#introWho'); w.innerHTML = `${zh}<span class="en-only"> ${en}</span>`; w.style.background = col; }
   /* one line; waits for a tap unless something else (a choice, a form) will move things on */
-  const say = (who, zh, en, wait = true) => new Promise(res => { speaker(who); root.querySelector('#introSay').textContent = fill(zh); root.querySelector('#introEn').textContent = fill(en); Voice.speak(fill(zh), .8); root.querySelector('.moreI').style.visibility = wait ? 'visible' : 'hidden'; if (wait) next = res; else res(); });
+  const say = (who, zh, en, wait = true) => new Promise(res => { stepN++; stepAt = 'say'; speaker(who); root.querySelector('#introSay').textContent = fill(zh); root.querySelector('#introEn').textContent = fill(en); Voice.speak(fill(zh), .8); root.querySelector('.moreI').style.visibility = wait ? 'visible' : 'hidden'; if (wait) next = res; else res(); });
   /* a question with answers to tap; returns the index of the answer */
   async function ask(who, zh, en, opts) {
     await say(who, zh, en, false);
@@ -10677,7 +10679,7 @@ const Intro = (() => {
     await say('lang', '祝你一路顺风！', 'Have a wonderful trip!');
     await say('bobo', '一路顺风！', 'Bon voyage!');
     /* aboard: the captain chats, then the child picks the first island */
-    root.querySelector('#sCounter').classList.add('off'); root.querySelector('#sBoat').classList.remove('off'); await ASSETS_READY; Boat3D.start(root.querySelector('#boatCv')); Sfx.play('whoosh'); await wait(700);
+    root.querySelector('#sCounter').classList.add('off'); root.querySelector('#sBoat').classList.remove('off'); stepAt = 'boat: models'; await ASSETS_READY; stepAt = 'boat: scene'; Boat3D.start(root.querySelector('#boatCv')); stepAt = 'boat: built'; Sfx.play('whoosh'); await wait(700); stepAt = 'boat: ready';
     await say('capt', '哈哈，{name}，欢迎上船！我是船长。', 'Ha ha, {name}, welcome aboard! I am the captain.');
     await freeChat('capt', '开船以前，你想跟我聊聊吗？', 'Would you like a chat before we set sail?', [
       ['这条船去哪里？', 'Where does this boat go?', [['我们的船去五座小岛：第一册岛、第二册岛、第三册岛、第四册岛和第五册岛。', 'Our boat goes to five islands: Books 1, 2, 3, 4 and 5.'], ['每座岛的码头都有船，想去别的岛，随时来找船长！', 'Every island has a pier with a boat. Whenever you want another island, come and find the captain!']]],
@@ -10686,8 +10688,8 @@ const Intro = (() => {
     ], ['我想选岛了！', 'I want to choose an island!']);
     say('capt', '那么，你想先去哪一座岛呢？', 'So, which island would you like to visit first?', false); const isle = await chooseIsle();
     await say('capt', '好，去' + isle[1] + '！坐稳了，出发啦！', 'Right, the ' + isle[2] + ' island! Hold on tight — off we go!');
-    Boat3D.sail(); Sfx.play('whoosh'); await wait(3300);   // long enough to sail right up to the island ahead
-    G.where = isle[0]; saveG(); Players.update(); await ASSETS_READY; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    stepAt = 'sail'; Boat3D.sail(); Sfx.play('whoosh'); await wait(3300); stepAt = 'sail: save';   // long enough to sail right up to the island ahead
+    G.where = isle[0]; saveG(); Players.update(); await ASSETS_READY; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); stepAt = 'island';
     startGame({ land: isle[0], first: true, onArrive: () => { Boat3D.stop(); root.remove(); } });
   }
   return { run, css };
