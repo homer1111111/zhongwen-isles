@@ -7196,7 +7196,8 @@ const Heights = (() => {
     [-32, -13, -4.5, 4.5, 13, 32].forEach(x => { if (!(sp.fallX && x > sp.fallX[0] - 2 && x < sp.fallX[1] + 2)) roundTree(x, y2, zB + 2.2, .8, '#6DBF5A'); });   /* between the five lots of the shop street and beside the stairs; not where a stream has its spring */
     [-20, -4, 4, 20].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const bz = zA - 3.2; mk(rbox(2.4, .12, .7, .05), '#B98A5A', x, y2 + .55, bz, S); [-1, 1].forEach(q => mk(box(.12, .5, .6), '#8A6A4A', x + q, y2 + .25, bz, S)); Sit.add(sp.name, x - .6, bz, y2 + .61, 0, true); Sit.add(sp.name, x + .6, bz, y2 + .61, 0, true); sp.solids.push([x - 1.25, bz - .38, x + 1.25, bz + .38]);   /* a bench is sat on, not walked through */ flowers(x + (k % 2 ? 2.6 : -2.6), bz - 1.4, y2 + .06, 7, 900 + k, null, 1.6); });
     /* two mats on the terrace for lying back and watching the sky */
-    [-12, 12].forEach((x, k) => { if (s1.some(c => Math.abs(c - x) < 3)) return; const mz = zA - 3.2; mk(box(1.5, .05, 2.3), k ? '#E8574A' : '#4F86C6', x, y2 + .05, mz, S, false); [-.5, 0, .5].forEach(d => mk(box(.16, .052, 2.3), '#FFF6E2', x + d, y2 + .052, mz, S, false)); mk(rbox(.9, .16, .4, .07), '#FFF6E2', x, y2 + .14, mz - .9, S, false); Sit.add(sp.name, x, mz, y2 + .05, 0, true, true); });
+    { const mat = (x, mz, y, k) => { mk(box(1.5, .05, 2.3), k ? '#E8574A' : '#4F86C6', x, y + .05, mz, S, false); [-.5, 0, .5].forEach(d => mk(box(.16, .052, 2.3), '#FFF6E2', x + d, y + .052, mz, S, false)); mk(rbox(.9, .16, .4, .07), '#FFF6E2', x, y + .14, mz - .9, S, false); Sit.add(sp.name, x, mz, y + .05, 0, true, true); };
+      [-19, 19].forEach((x, k) => mat(x, zC + 5, y3, k)); }
     // level 3: the hill with the telescope in the middle, flowers either side
     hill(sp, S, 0, zC + 3.4, 2.6, y3);
     flowers(-14, zC + 4, y3 + .06, 10, 990, null, 1.6); flowers(14, zC + 4, y3 + .06, 10, 991, null, 1.6);
